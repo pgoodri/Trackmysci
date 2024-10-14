@@ -5,7 +5,7 @@
     import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
     import { userStore } from './userStore';
 
-    // Firebase configuration
+    // Firebase Configuration
     const firebaseConfig = {
         apiKey: "AIzaSyCHdf8tVDVOtTazjvC0h1PyKwqNifWfqww",
         authDomain: "trackmysci.firebaseapp.com",
@@ -16,48 +16,44 @@
         measurementId: "G-6JR45C2DBF"
     };
 
-    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
-    let user = "User"; // Default user name
-    let isLoggedIn = false; // Track login state
+    // Variables for User and Literature Management
+    let user = "User";
+    let isLoggedIn = false;
+    let literatureList = [];
+    let title = "";
+    let author = "";
+    let isbn = "";
+    let comment = "";
 
-    // Login function using Google Popup
+    // Google Authentication Functions
     async function login() {
         try {
             const result = await signInWithPopup(auth, provider);
             const loggedInUser = result.user;
-            console.log("Login successful:", loggedInUser);
-
-            user = loggedInUser.displayName || "User"; // Set user name
-            userStore.set(loggedInUser); // Store the user
+            user = loggedInUser.displayName || "User";
+            userStore.set(loggedInUser);
             isLoggedIn = true;
-            navigate('/success'); // Redirect to success page
+            navigate('/success');
         } catch (error) {
             console.error("Login error:", error);
         }
     }
 
-    // Logout function
     function logout() {
-        signOut(auth)
-            .then(() => {
-                console.log("User signed out");
-                user = "User";
-                userStore.set(null);
-                isLoggedIn = false;
-            })
-            .catch((error) => {
-                console.error("Logout error:", error);
-            });
+        signOut(auth).then(() => {
+            user = "User";
+            userStore.set(null);
+            isLoggedIn = false;
+        }).catch(error => console.error("Logout error:", error));
     }
 
-    // Monitor authentication state changes
     onAuthStateChanged(auth, (authUser) => {
         if (authUser) {
-            user = authUser.displayName || "User"; // Update user name
+            user = authUser.displayName || "User";
             userStore.set(authUser);
             isLoggedIn = true;
         } else {
@@ -66,38 +62,64 @@
             isLoggedIn = false;
         }
     });
+
+    // Function to Add New Literature Entry
+    function addLiterature() {
+        if (title && author && isbn) {
+            literatureList = [...literatureList, { title, author, isbn, comment }];
+            title = author = isbn = comment = ""; // Reset fields
+        } else {
+            alert("Please fill in all required fields (Title, Author, ISBN).");
+        }
+    }
 </script>
 
 <Router>
     <div class="container">
-        <!-- Greeting -->
-        <div class="greeting">Hello, {user}!</div>
-
-        <!-- Login and Logout buttons -->
-        <div class="buttons">
-            {#if isLoggedIn}
-                <button on:click={logout}>Logout</button>
-            {:else}
-                <button on:click={login}>Login</button>
-                <button>Sign Up</button> <!-- Placeholder Signup -->
-            {/if}
-        </div>
-
-        <!-- Oval elements and rectangle -->
-        <div class="oval-container">
-            <div class="ovals">
-                <div class="oval"></div>
-                <div class="oval"></div>
-                <div class="oval"></div>
-                <div class="oval"></div>
-                <div class="oval"></div>
+        {#if isLoggedIn}
+            <div class="header">
+                <div class="greeting">Welcome, {user}!</div>
+                <div class="buttons">
+                    <button on:click={logout}>Logout</button>
+                </div>
             </div>
 
-            <!-- Rectangle with rounded edges -->
-            <div class="rectangle">
-                Welcome to TrackMySci!
+            <div class="main-content">
+                <!-- Left: Literature Form -->
+                <div class="form-section">
+                    <h2>Add Scientific Literature</h2>
+                    <input type="text" bind:value={title} placeholder="Title" />
+                    <input type="text" bind:value={author} placeholder="Author" />
+                    <input type="text" bind:value={isbn} placeholder="ISBN" />
+                    <textarea bind:value={comment} placeholder="Comment"></textarea>
+                    <button on:click={addLiterature}>Add Literature</button>
+
+                    <div class="literature-list">
+                        {#each literatureList as lit (lit.isbn)}
+                            <div class="oval">
+                                <strong>{lit.title}</strong> by {lit.author} <br />
+                                <em>ISBN: {lit.isbn}</em> <br />
+                                <p>{lit.comment}</p>
+                            </div>
+                        {/each}
+                    </div>
+                </div>
+
+                <!-- Right: Graph Placeholders -->
+                <div class="rectangle">
+                    <h2>Your Reading Statistics</h2>
+                    <div class="chart-placeholder">Graph 1 (Pie)</div>
+                    <div class="chart-placeholder">Graph 2 (Bar)</div>
+                    <div class="chart-placeholder">Streak Graph</div>
+                </div>
             </div>
-        </div>
+        {:else}
+            <div class="welcome-message">
+                <h1>Welcome to Track My Sci!</h1>
+                <p>A place to track your scientific reading.</p>
+                <button on:click={login}>Login with Google</button>
+            </div>
+        {/if}
     </div>
 
     <Route path="/success" component={Success} />
@@ -109,70 +131,102 @@
         flex-direction: column;
         padding: 20px;
         font-family: Arial, sans-serif;
-        position: relative;
         height: 100vh;
+        justify-content: center;
+        align-items: center;
+        background: linear-gradient(135deg, #ff7e5f, #feb47b);
+        color: white;
+    }
+
+    .header {
+        position: absolute;
+        top: 20px;
+        width: 100%;
+        display: flex;
+        justify-content: space-between;
     }
 
     .greeting {
         font-size: 24px;
-        font-weight: bold;
-        position: absolute;
-        top: 20px;
-        left: 20px;
-    }
-
-    .buttons {
-        position: absolute;
-        top: 20px;
-        right: 20px;
+        margin-left: 20px;
     }
 
     .buttons button {
         padding: 10px 20px;
-        font-size: 16px;
+        background-color: #007bff;
         border: none;
         border-radius: 5px;
-        cursor: pointer;
-        background-color: #007bff;
         color: white;
-        margin-left: 10px;
+        cursor: pointer;
+        margin-right: 20px;
     }
 
     .buttons button:hover {
         background-color: #0056b3;
     }
 
-    .oval-container {
-        margin-top: 80px;
+    .main-content {
         display: flex;
-        flex-direction: row;
-        gap: 20px;
         width: 100%;
+        gap: 20px;
     }
 
-    .ovals {
+    .form-section {
+        width: 50%;
+        background-color: rgba(255, 255, 255, 0.8);
+        border-radius: 10px;
+        padding: 20px;
         display: flex;
         flex-direction: column;
-        gap: 20px;
-        width: 50%;
+        gap: 10px;
+        color: black;
+    }
+
+    input, textarea {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+    }
+
+    textarea {
+        height: 80px;
+        resize: none;
+    }
+
+    .literature-list {
+        margin-top: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
     }
 
     .oval {
-        height: 100px;
         background-color: lightgray;
         border-radius: 20px;
+        padding: 10px;
         text-align: center;
-        line-height: 100px;
     }
 
     .rectangle {
-        background-color: lightcoral;
         width: 50%;
+        background-color: rgba(255, 255, 255, 0.8);
         border-radius: 20px;
+        padding: 20px;
+    }
+
+    .chart-placeholder {
+        height: 150px;
+        background-color: lightgray;
+        border-radius: 10px;
         display: flex;
         justify-content: center;
         align-items: center;
+        color: black;
+    }
+
+    .welcome-message {
         text-align: center;
-        font-size: 20px;
     }
 </style>
