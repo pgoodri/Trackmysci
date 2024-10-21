@@ -4,6 +4,7 @@
     import { initializeApp } from 'firebase/app';
     import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
     import { userStore } from './userStore';
+    import ISBNLookup from './ISBNLookup.svelte';
 
     // Firebase Configuration
     const firebaseConfig = {
@@ -28,6 +29,7 @@
     let author = "";
     let isbn = "";
     let comment = "";
+    let doi = ""; // New DOI variable
 
     // Google Authentication Functions
     async function login() {
@@ -72,6 +74,26 @@
             alert("Please fill in all required fields (Title, Author, ISBN).");
         }
     }
+
+    // DOI Lookup Function
+    async function fetchDOI() {
+        try {
+            const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`);
+            const data = await response.json();
+            if (data.status === 'ok') {
+                const fetchedData = data.message;
+                title = fetchedData.title[0] || '';
+                author = fetchedData.author.map(a => `${a.given} ${a.family}`).join(', ');
+                isbn = fetchedData.ISBN ? fetchedData.ISBN[0] : ''; // Not all DOIs have ISBNs
+                comment = ''; // Clear comment if needed
+            } else {
+                alert("No article found for this DOI.");
+            }
+        } catch (error) {
+            console.error("Error fetching DOI data:", error);
+            alert("Failed to retrieve DOI information.");
+        }
+    }
 </script>
 
 <Router>
@@ -88,6 +110,11 @@
                 <!-- Left: Literature Form -->
                 <div class="form-section">
                     <h2>Add Scientific Literature</h2>
+
+                    <!-- DOI Lookup -->
+                    <input type="text" bind:value={doi} placeholder="Enter DOI" />
+                    <button on:click={fetchDOI}>Lookup DOI</button> <!-- New DOI Lookup Button -->
+
                     <input type="text" bind:value={title} placeholder="Title" />
                     <input type="text" bind:value={author} placeholder="Author" />
                     <input type="text" bind:value={isbn} placeholder="ISBN" />
@@ -124,6 +151,7 @@
 
     <Route path="/success" component={Success} />
 </Router>
+
 
 <style>
     .container {
@@ -230,3 +258,4 @@
         text-align: center;
     }
 </style>
+
