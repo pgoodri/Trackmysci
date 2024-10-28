@@ -4,6 +4,7 @@
     import { initializeApp } from 'firebase/app';
     import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
     import { userStore } from './userStore';
+    import { getFirestore, collection, getDocs, addDoc, doc } from 'firebase/firestore';
 
     // Firebase Configuration
     const firebaseConfig = {
@@ -20,6 +21,20 @@
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
+    // Configure Firestore
+    const db = getFirestore(app);
+    const colRef = collection(db, 'user')
+    getDocs(colRef).then((snapshot) => {
+        let user = []
+        snapshot.docs.forEach((doc) => {
+            user.push({ ...doc.data(), id: doc.id })
+        })
+        console.log(user)
+    }).catch((error) => { 
+        console.log(error.message)
+    });
+
+
     // Variables for User and Literature Management
     let user = "User";
     let isLoggedIn = false;
@@ -31,17 +46,39 @@
 
     // Google Authentication Functions
     async function login() {
-        try {
-            const result = await signInWithPopup(auth, provider);
-            const loggedInUser = result.user;
-            user = loggedInUser.displayName || "User";
-            userStore.set(loggedInUser);
-            isLoggedIn = true;
-            navigate('/success');
-        } catch (error) {
-            console.error("Login error:", error);
+    try {
+        const result = await signInWithPopup(auth, provider);
+        const loggedInUser = result.user;
+        user = loggedInUser.displayName || "User";
+        userStore.set(loggedInUser);
+        isLoggedIn = true;
+
+        // Define the reference to the users collection
+        const usersCollectionRef = collection(db, 'user');
+
+        // Check if the user exists in Firestore
+        const userDocRef = doc(usersCollectionRef, loggedInUser.uid);
+        const userDoc = await getDoc(userDocRef);
+
+        if (!userDoc.exists()) {
+            // User does not exist, so add them to Firestore
+            await addDoc(usersCollectionRef, {
+                uid: loggedInUser.uid,
+                name: loggedInUser.displayName,
+                email: loggedInUser.email,
+                photoURL: loggedInUser.photoURL,
+                createdAt: new Date() // Optional: add creation date
+            });
+            console.log("New user added to Firestore!");
+        } else {
+            console.log("User already exists in Firestore.");
         }
+
+        navigate('/success');
+    } catch (error) {
+        console.error("Login error:", error);
     }
+}
 
     function logout() {
         signOut(auth).then(() => {
