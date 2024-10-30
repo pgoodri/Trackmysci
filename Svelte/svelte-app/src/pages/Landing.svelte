@@ -18,7 +18,6 @@
     .landing-page {
         text-align: center;
         margin-top: 100px;
-        background: linear-gradient(135deg, #ff7e5f, #feb47b);
     }
 
     button {

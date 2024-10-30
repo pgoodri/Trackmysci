@@ -7,7 +7,7 @@
 
     // Redirect to `/landing` on initial load
     onMount(() => {
-        navigate('/landing');
+        navigate('/login');
     });
 </script>
 

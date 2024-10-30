@@ -1,3 +1,4 @@
+import './global.css';
 import App from './App.svelte';
 import { Router } from 'svelte-routing';
 

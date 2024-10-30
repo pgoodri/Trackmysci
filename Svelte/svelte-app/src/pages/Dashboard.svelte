@@ -46,7 +46,7 @@
         const auth = getAuth();
         signOut(auth).then(() => {
             userStore.set(null);
-            navigate('/landing');
+            navigate('/login');
         });
     }
 </script>
