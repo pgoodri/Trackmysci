@@ -32,7 +32,11 @@
 
     // Dummy function for email login
     function dummyEmailLogin() {
-        alert("Email login is just for looks and is not functional.");
+        alert("Email login is not functional yet.");
+    }
+
+    function goToSignup() {
+        navigate('/signup');
     }
 </script>
 
@@ -57,6 +61,11 @@
                 <input type="password" placeholder="Password"/>
                 <button class="email-signin-button" on:click={dummyEmailLogin}>Sign in with Email</button>
             </div>
+
+            <p class="signup-prompt">
+                Don't have an account? <button class="signup-link" on:click={goToSignup}>Sign up</button>
+            </p>
+
         </div>
     </div>
 </div>
@@ -175,5 +184,24 @@
 
     .email-signin-button:hover {
         background-color: #0056b3;
+    }
+
+    .signup-prompt {
+        font-size: 0.9rem;
+        align-items: center;
+        text-align: center;
+    }
+
+    .signup-link {
+        background: none;
+        border: none;
+        color: #007bff;
+        cursor: pointer;
+        font-size: 0.9rem;
+        padding: 0;
+    }
+
+    .signup-link:hover {
+        color: #0056b3;
     }
 </style>

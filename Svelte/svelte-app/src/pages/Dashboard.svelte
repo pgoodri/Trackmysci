@@ -2,6 +2,13 @@
     import { getAuth, signOut } from 'firebase/auth';
     import { userStore } from '../userStore';
     import { navigate } from 'svelte-routing';
+    import { onMount } from 'svelte';
+
+    // Subscribe to the userStore to get the logged-in user's details
+    let user;
+    userStore.subscribe(value => {
+        user = value;
+    });
 
     // Variables for literature management
     let title = "";
@@ -53,7 +60,9 @@
 
 <div class="container">
     <div class="header">
-        <div class="greeting">Welcome to your Dashboard!</div>
+        <div class="greeting">
+            Welcome, {user?.displayName || "User"}!
+        </div>
         <div class="buttons">
             <button on:click={logout}>Logout</button>
         </div>
