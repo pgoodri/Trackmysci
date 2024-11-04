@@ -4,7 +4,7 @@
     import Login from './pages/Login.svelte';
     import Dashboard from './pages/Dashboard.svelte';
 
-    // Redirect to `/landing` on initial load
+    // Redirect to `/login` on initial load
     onMount(() => {
         navigate('/login');
     });
