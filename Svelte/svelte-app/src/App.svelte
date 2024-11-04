@@ -1,9 +1,10 @@
 <script>
     import { Router, Route, navigate } from 'svelte-routing';
-    import Success from './Success.svelte';
+    import Dashboard from './Dashboard.svelte';
     import { initializeApp } from 'firebase/app';
     import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
     import { userStore } from './userStore';
+    import Library from './Library.svelte';
 
     // Firebase Configuration
     const firebaseConfig = {
@@ -37,7 +38,7 @@
             user = loggedInUser.displayName || "User";
             userStore.set(loggedInUser);
             isLoggedIn = true;
-            navigate('/success');
+            navigate('/dashboard');
         } catch (error) {
             console.error("Login error:", error);
         }
@@ -67,11 +68,14 @@
     function addLiterature() {
         if (title && author && isbn) {
             literatureList = [...literatureList, { title, author, isbn, comment }];
+            localStorage.setItem('literatureList', JSON.stringify(literatureList));
             title = author = isbn = comment = ""; // Reset fields
+            navigate('/library'); // Navigate to Library page
         } else {
             alert("Please fill in all required fields (Title, Author, ISBN).");
         }
     }
+
 </script>
 
 <Router>
@@ -122,7 +126,11 @@
         {/if}
     </div>
 
-    <Route path="/success" component={Success} />
+    <Router>
+        <Route path="/" component={Dashboard} />
+        <Route path="/library" component={Library} />
+    </Router>
+    
 </Router>
 
 <style>
