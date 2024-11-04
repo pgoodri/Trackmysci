@@ -72,14 +72,12 @@
 
 <style>
 
-    /* Overall Page Layout */
     .login-page {
         display: flex;
         height: 100vh;
         font-family: Arial, sans-serif;
     }
 
-    /* Left Side: Welcome Section */
     .welcome-section {
         flex: 1;
         background: linear-gradient(135deg, #ff7e5f, #feb47b);
@@ -103,7 +101,6 @@
         line-height: 1.5;
     }
 
-    /* Right Side: Login Section */
     .login-section {
         flex: 1;
         display: flex;
@@ -205,3 +202,4 @@
         color: #0056b3;
     }
 </style>
+
