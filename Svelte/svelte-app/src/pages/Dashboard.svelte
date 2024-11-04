@@ -16,13 +16,20 @@
     let isbn = "";
     let comment = "";
     let doi = ""; // DOI variable
-    let literatureList = [];
+    let literatureList = JSON.parse(localStorage.getItem('literatureList') || "[]");
 
     // Function to add new literature entry
     function addLiterature() {
         if (title && author && isbn) {
-            literatureList = [...literatureList, { title, author, isbn, comment }];
+            const newEntry = { title, author, isbn, comment };
+            literatureList = [...literatureList, newEntry];
+            
+            // Save updated literatureList to localStorage
+            localStorage.setItem('literatureList', JSON.stringify(literatureList));
+            
             title = author = isbn = comment = "";  // Reset fields
+            
+
         } else {
             alert("Please fill in all required fields (Title, Author, ISBN).");
         }
