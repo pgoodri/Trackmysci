@@ -109,6 +109,20 @@
             alert("Please fill in all required fields (Title, Author, ISBN).");
         }
     }
+
+    async function addSampleData() {
+        try {
+            const docRef = await addDoc(collection(db, "samples"), {
+                title: title,
+                author: author,
+                year: isbn,
+                description: comment
+            });
+            console.log("Document written with ID: ", docRef.id);
+        } catch (error) {
+            console.error("Error adding document: ", error);
+        }
+    }
 </script>
 
 <Router>
@@ -129,7 +143,7 @@
                     <input type="text" bind:value={author} placeholder="Author" />
                     <input type="text" bind:value={isbn} placeholder="ISBN" />
                     <textarea bind:value={comment} placeholder="Comment"></textarea>
-                    <button on:click={addLiterature}>Add Literature</button>
+                    <button on:click={addSampleData}>Add Literature</button>
 
                     <div class="literature-list">
                         {#each literatureList as lit (lit.isbn)}
@@ -158,6 +172,8 @@
             </div>
         {/if}
     </div>
+    
+    <button on:click={addSampleData}>Add Sample Data</button>
 
     <Route path="/success" component={Success} />
 </Router>
