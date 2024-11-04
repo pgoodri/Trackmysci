@@ -4,7 +4,7 @@
     import { initializeApp } from 'firebase/app';
     import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
     import { userStore } from './userStore';
-    import { getFirestore, collection, getDocs, addDoc, doc } from 'firebase/firestore';
+    import { getFirestore, collection, getDocs, addDoc, setDoc, doc } from 'firebase/firestore';
 
     // Firebase Configuration
     const firebaseConfig = {
@@ -112,13 +112,19 @@
 
     async function addSampleData() {
         try {
-            const docRef = await addDoc(collection(db, "samples"), {
+            const docRef = await addDoc(collection(db, user), {
                 title: title,
                 author: author,
                 year: isbn,
                 description: comment
             });
             console.log("Document written with ID: ", docRef.id);
+
+             // Clear the input fields after adding the document
+            title = "";
+            author = "";
+            isbn = "";
+            comment = "";
         } catch (error) {
             console.error("Error adding document: ", error);
         }
