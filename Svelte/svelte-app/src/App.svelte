@@ -21,6 +21,20 @@
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
+    // Configure Firestore
+    const db = getFirestore(app);
+    const colRef = collection(db, 'user')
+    getDocs(colRef).then((snapshot) => {
+        let user = []
+        snapshot.docs.forEach((doc) => {
+            user.push({ ...doc.data(), id: doc.id })
+        })
+        console.log(user)
+    }).catch((error) => { 
+        console.log(error.message)
+    });
+
+
     // Variables for User and Literature Management
     let user = "User";
     let isLoggedIn = false;
