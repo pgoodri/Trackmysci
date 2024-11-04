@@ -1,7 +1,6 @@
 <script>
     import { Router, Route, navigate } from 'svelte-routing';
     import { onMount } from 'svelte';
-    import Landing from './pages/Landing.svelte';
     import Login from './pages/Login.svelte';
     import Dashboard from './pages/Dashboard.svelte';
 
@@ -14,7 +13,6 @@
 
 <Router>
     <div class="page-container">
-        <Route path="/landing" component={Landing} />
         <Route path="/login" component={Login} />
         <Route path="/dashboard" component={Dashboard} />
     </div>
