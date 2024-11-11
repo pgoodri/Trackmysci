@@ -14,8 +14,9 @@
     let author = "";
     let isbn = "";
     let comment = "";
-    let doi = "";
     let literatureList = JSON.parse(localStorage.getItem('literatureList') || "[]");
+    let searchResults = [];  // Holds search suggestions
+    let showResults = false; // Toggles the display of suggestions
 
     // Add literature function
     function addLiterature() {
@@ -38,22 +39,29 @@
 
     function resetFields() {
         title = author = isbn = comment = "";
+        searchResults = [];
+        showResults = false;
     }
 
-    // Unified Search Function
+    // Unified Search Function with Suggested Search
     async function searchLiterature() {
-        // Detect input type
+        showResults = false;
+        searchResults = [];
+
         if (/^10\.\d{4,9}\/[-._;()\/:A-Za-z0-9]+$/.test(searchQuery)) {
-            // It's a DOI
             await fetchDOI();
         } else if (/^(97(8|9))?\d{9}(\d|X)$/.test(searchQuery)) {
-            // It's an ISBN
             isbn = searchQuery;
             await fetchISBN();
         } else {
-            // Assume it's a title
             title = searchQuery;
             await fetchTitle();
+        }
+
+        if (searchResults.length > 0) {
+            showResults = true;
+        } else {
+            alert("No results found.");
         }
     }
 
@@ -63,12 +71,11 @@
             const data = await response.json();
             if (data.status === 'ok') {
                 const fetchedData = data.message;
-                title = fetchedData.title[0] || '';
-                author = fetchedData.author.map(a => `${a.given} ${a.family}`).join(', ');
-                isbn = fetchedData.ISBN ? fetchedData.ISBN[0] : '';
-                comment = '';
-            } else {
-                alert("No article found for this DOI.");
+                searchResults = [{
+                    title: fetchedData.title[0] || '',
+                    author: fetchedData.author.map(a => `${a.given} ${a.family}`).join(', '),
+                    isbn: fetchedData.ISBN ? fetchedData.ISBN[0] : '',
+                }];
             }
         } catch (error) {
             console.error("Error fetching DOI data:", error);
@@ -81,12 +88,14 @@
             const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
             const data = await response.json();
             if (data.totalItems > 0) {
-                const book = data.items[0].volumeInfo;
-                title = book.title || '';
-                author = book.authors ? book.authors.join(', ') : '';
-                comment = '';
-            } else {
-                alert("No book found for this ISBN.");
+                searchResults = data.items.map(item => {
+                    const book = item.volumeInfo;
+                    return {
+                        title: book.title || '',
+                        author: book.authors ? book.authors.join(', ') : '',
+                        isbn: isbn,
+                    };
+                });
             }
         } catch (error) {
             console.error("Error fetching ISBN data:", error);
@@ -99,18 +108,28 @@
             const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(title)}`);
             const data = await response.json();
             if (data.totalItems > 0) {
-                const book = data.items[0].volumeInfo;
-                title = book.title || '';
-                author = book.authors ? book.authors.join(', ') : '';
-                isbn = book.industryIdentifiers ? book.industryIdentifiers[0].identifier : '';
-                comment = '';
-            } else {
-                alert("No book found for this title.");
+                searchResults = data.items.map(item => {
+                    const book = item.volumeInfo;
+                    return {
+                        title: book.title || '',
+                        author: book.authors ? book.authors.join(', ') : '',
+                        isbn: book.industryIdentifiers ? book.industryIdentifiers[0].identifier : '',
+                    };
+                });
             }
         } catch (error) {
             console.error("Error fetching title data:", error);
             alert("Failed to retrieve title information.");
         }
+    }
+
+    // Function to handle selection of a search result
+    function selectResult(result) {
+        title = result.title;
+        author = result.author;
+        isbn = result.isbn;
+        comment = '';  // Reset comment field
+        showResults = false;  // Hide suggestions after selection
     }
 
     // Logout function
@@ -139,6 +158,24 @@
             <input type="text" bind:value={searchQuery} placeholder="Enter DOI, ISBN, or Title" />
             <button on:click={searchLiterature}>Search</button>
 
+            {#if showResults}
+                <div class="search-results">
+                    {#each searchResults as result}
+                        <div 
+                            class="result-item" 
+                            tabindex="0"
+                            role="button"
+                            on:click={() => selectResult(result)}
+                            on:keydown={(event) => (event.key === 'Enter' || event.key === ' ') && selectResult(result)}
+                        >
+                            <strong>{result.title}</strong><br />
+                            <small>by {result.author}</small><br />
+                            <em>ISBN: {result.isbn}</em>
+                        </div>
+                    {/each}
+                </div>
+            {/if}
+
             <input type="text" bind:value={title} placeholder="Title" readonly />
             <input type="text" bind:value={author} placeholder="Author" readonly />
             <input type="text" bind:value={isbn} placeholder="ISBN" readonly />
@@ -157,6 +194,7 @@
             </div>
         </section>
 
+        <!-- Statistics Placeholder Section with Graphs -->
         <section class="statistics-section">
             <h2>Your Reading Statistics</h2>
             <div class="chart-placeholder">Graph 1 (Pie)</div>
@@ -296,5 +334,27 @@
         justify-content: center;
         align-items: center;
         color: black;
+    }
+
+    /* Search Results Styles */
+    .search-results {
+        background-color: white;
+        border: 1px solid #ccc;
+        max-height: 200px;
+        overflow-y: auto;
+        width: 100%;
+        margin-top: 10px;
+        padding: 10px;
+        border-radius: 5px;
+    }
+    
+    .result-item {
+        padding: 5px;
+        cursor: pointer;
+        border-bottom: 1px solid #ddd;
+    }
+
+    .result-item:hover {
+        background-color: #f0f0f0;
     }
 </style>
