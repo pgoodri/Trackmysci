@@ -2,15 +2,14 @@
     import { getAuth, signOut } from 'firebase/auth';
     import { userStore } from '../userStore';
     import { navigate } from 'svelte-routing';
-    import { onMount } from 'svelte';
 
-    // Subscribe to user data
     let user;
     userStore.subscribe(value => {
         user = value;
     });
 
     // Literature management variables
+    let searchQuery = "";
     let title = "";
     let author = "";
     let isbn = "";
@@ -20,8 +19,7 @@
 
     // Add literature function
     function addLiterature() {
-    if (title && author && isbn) {
-            // Check for duplicates
+        if (title && author && isbn) {
             const isDuplicate = literatureList.some(lit => lit.isbn === isbn);
 
             if (isDuplicate) {
@@ -31,17 +29,37 @@
                 literatureList = [...literatureList, newEntry];
                 localStorage.setItem('literatureList', JSON.stringify(literatureList));
 
-                title = author = isbn = comment = "";  // Reset fields
+                resetFields();
             }
         } else {
             alert("Please fill in all required fields (Title, Author, ISBN).");
         }
     }
 
-    // DOI Lookup Function
+    function resetFields() {
+        title = author = isbn = comment = "";
+    }
+
+    // Unified Search Function
+    async function searchLiterature() {
+        // Detect input type
+        if (/^10\.\d{4,9}\/[-._;()\/:A-Za-z0-9]+$/.test(searchQuery)) {
+            // It's a DOI
+            await fetchDOI();
+        } else if (/^(97(8|9))?\d{9}(\d|X)$/.test(searchQuery)) {
+            // It's an ISBN
+            isbn = searchQuery;
+            await fetchISBN();
+        } else {
+            // Assume it's a title
+            title = searchQuery;
+            await fetchTitle();
+        }
+    }
+
     async function fetchDOI() {
         try {
-            const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(doi)}`);
+            const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(searchQuery)}`);
             const data = await response.json();
             if (data.status === 'ok') {
                 const fetchedData = data.message;
@@ -58,6 +76,43 @@
         }
     }
 
+    async function fetchISBN() {
+        try {
+            const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+            const data = await response.json();
+            if (data.totalItems > 0) {
+                const book = data.items[0].volumeInfo;
+                title = book.title || '';
+                author = book.authors ? book.authors.join(', ') : '';
+                comment = '';
+            } else {
+                alert("No book found for this ISBN.");
+            }
+        } catch (error) {
+            console.error("Error fetching ISBN data:", error);
+            alert("Failed to retrieve ISBN information.");
+        }
+    }
+
+    async function fetchTitle() {
+        try {
+            const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(title)}`);
+            const data = await response.json();
+            if (data.totalItems > 0) {
+                const book = data.items[0].volumeInfo;
+                title = book.title || '';
+                author = book.authors ? book.authors.join(', ') : '';
+                isbn = book.industryIdentifiers ? book.industryIdentifiers[0].identifier : '';
+                comment = '';
+            } else {
+                alert("No book found for this title.");
+            }
+        } catch (error) {
+            console.error("Error fetching title data:", error);
+            alert("Failed to retrieve title information.");
+        }
+    }
+
     // Logout function
     function logout() {
         const auth = getAuth();
@@ -69,7 +124,6 @@
 </script>
 
 <div class="dashboard-container">
-    <!-- Header Section with User Info and Navigation Buttons -->
     <header class="header">
         <span class="greeting">Welcome, {user?.displayName || "User"}!</span>
         <div class="nav-buttons">
@@ -78,22 +132,20 @@
         </div>
     </header>
 
-    <!-- Main Dashboard Content -->
     <main class="main-content">
-        <!-- Literature Entry Form Section -->
         <section class="literature-form-section">
             <h2>Add Scientific Literature</h2>
 
-            <input type="text" bind:value={doi} placeholder="Enter DOI" />
-            <button on:click={fetchDOI}>Lookup DOI</button>
+            <input type="text" bind:value={searchQuery} placeholder="Enter DOI, ISBN, or Title" />
+            <button on:click={searchLiterature}>Search</button>
 
-            <input type="text" bind:value={title} placeholder="Title" />
-            <input type="text" bind:value={author} placeholder="Author" />
-            <input type="text" bind:value={isbn} placeholder="ISBN" />
+            <input type="text" bind:value={title} placeholder="Title" readonly />
+            <input type="text" bind:value={author} placeholder="Author" readonly />
+            <input type="text" bind:value={isbn} placeholder="ISBN" readonly />
             <textarea bind:value={comment} placeholder="Comment"></textarea>
             <button on:click={addLiterature}>Add Literature</button>
+            <button on:click={resetFields}>Clear</button>
 
-            <!-- Display Added Literature List -->
             <div class="literature-list">
                 {#each literatureList as lit (lit.isbn)}
                     <div class="literature-item">
@@ -105,7 +157,6 @@
             </div>
         </section>
 
-        <!-- Statistics Placeholder Section -->
         <section class="statistics-section">
             <h2>Your Reading Statistics</h2>
             <div class="chart-placeholder">Graph 1 (Pie)</div>
