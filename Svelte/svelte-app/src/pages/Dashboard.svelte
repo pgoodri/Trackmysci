@@ -20,12 +20,19 @@
 
     // Add literature function
     function addLiterature() {
-        if (title && author && isbn) {
-            const newEntry = { title, author, isbn, comment };
-            literatureList = [...literatureList, newEntry];
-            localStorage.setItem('literatureList', JSON.stringify(literatureList));
+    if (title && author && isbn) {
+            // Check for duplicates
+            const isDuplicate = literatureList.some(lit => lit.isbn === isbn);
 
-            title = author = isbn = comment = "";  // Reset fields
+            if (isDuplicate) {
+                alert("This literature entry already exists.");
+            } else {
+                const newEntry = { title, author, isbn, comment };
+                literatureList = [...literatureList, newEntry];
+                localStorage.setItem('literatureList', JSON.stringify(literatureList));
+
+                title = author = isbn = comment = "";  // Reset fields
+            }
         } else {
             alert("Please fill in all required fields (Title, Author, ISBN).");
         }
