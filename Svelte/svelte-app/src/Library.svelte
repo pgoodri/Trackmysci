@@ -8,6 +8,12 @@
         const storedData = localStorage.getItem('literatureList');
         literatureList = storedData ? JSON.parse(storedData) : [];
     });
+
+    // Function to remove literature by ISBN (or other unique identifier)
+    function removeLiterature(isbn) {
+        literatureList = literatureList.filter(item => item.isbn !== isbn);
+        localStorage.setItem('literatureList', JSON.stringify(literatureList));
+    }
 </script>
 
 <div class="library-container">
@@ -18,6 +24,7 @@
     {:else}
         {#each literatureList as lit (lit.isbn)}
             <div class="literature-entry">
+                <button class="remove-btn" on:click={() => removeLiterature(lit.isbn)}>✕</button>
                 <strong>{lit.title}</strong> by {lit.author} <br />
                 <em>ISBN: {lit.isbn}</em> <br />
                 <p>{lit.comment}</p>
@@ -33,9 +40,27 @@
     }
 
     .literature-entry {
+        position: relative;
         background-color: lightgray;
         margin-bottom: 10px;
         padding: 10px;
         border-radius: 5px;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .remove-btn {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        background: transparent;
+        border: none;
+        font-size: 1.2rem;
+        color: darkred;
+        cursor: pointer;
+    }
+
+    .remove-btn:hover {
+        color: red;
     }
 </style>
