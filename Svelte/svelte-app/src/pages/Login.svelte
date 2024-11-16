@@ -50,7 +50,7 @@
     <!-- Right Side: Login Form -->
     <div class="login-section">
         <div class="login-box">
-            <button class="google-signin-button" on:click={login}>
+            <button class="google-signin-button" onclick={login}>
                 <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" alt="Google logo" />
                 <span>Continue with Google</span>
             </button>
@@ -59,11 +59,11 @@
             <div class="email-signin">
                 <input type="email" placeholder="Email"/>
                 <input type="password" placeholder="Password"/>
-                <button class="email-signin-button" on:click={dummyEmailLogin}>Sign in with Email</button>
+                <button class="email-signin-button" onclick={dummyEmailLogin}>Sign in with Email</button>
             </div>
 
             <p class="signup-prompt">
-                Don't have an account? <button class="signup-link" on:click={goToSignup}>Sign up</button>
+                Don't have an account? <button class="signup-link" onclick={goToSignup}>Sign up</button>
             </p>
 
         </div>

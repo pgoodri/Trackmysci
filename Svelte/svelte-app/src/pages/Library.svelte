@@ -1,6 +1,6 @@
 <script>
     import { onMount } from 'svelte';
-    let literatureList = [];
+    let literatureList = $state([]);
 
     // Load literature list from localStorage on mount
     onMount(() => {
@@ -23,7 +23,7 @@
     {:else}
         {#each literatureList as lit (lit.isbn)}
             <div class="literature-entry">
-                <button class="remove-btn" on:click={() => removeLiterature(lit.isbn)}>✕</button>
+                <button class="remove-btn" onclick={() => removeLiterature(lit.isbn)}>✕</button>
                 <strong>{lit.title}</strong> by {lit.author} <br />
                 <em>ISBN: {lit.isbn}</em> <br />
                 <p>{lit.comment}</p>

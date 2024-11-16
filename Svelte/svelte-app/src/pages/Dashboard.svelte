@@ -3,20 +3,20 @@
     import { userStore } from '../userStore';
     import { navigate } from 'svelte-routing';
 
-    let user;
+    let user = $state();
     userStore.subscribe(value => {
         user = value;
     });
 
     // Literature management variables
-    let searchQuery = "";
-    let title = "";
-    let author = "";
-    let isbn = "";
-    let comment = "";
-    let literatureList = JSON.parse(localStorage.getItem('literatureList') || "[]");
-    let searchResults = [];  // Holds search suggestions
-    let showResults = false; // Toggles the display of suggestions
+    let searchQuery = $state("");
+    let title = $state("");
+    let author = $state("");
+    let isbn = $state("");
+    let comment = $state("");
+    let literatureList = $state(JSON.parse(localStorage.getItem('literatureList') || "[]"));
+    let searchResults = $state([]);  // Holds search suggestions
+    let showResults = $state(false); // Toggles the display of suggestions
 
     // Add literature function
     function addLiterature() {
@@ -146,8 +146,8 @@
     <header class="header">
         <span class="greeting">Welcome, {user?.displayName || "User"}!</span>
         <div class="nav-buttons">
-            <button on:click={() => navigate('/library')}>Go to Library</button>
-            <button on:click={logout}>Logout</button>
+            <button onclick={() => navigate('/library')}>Go to Library</button>
+            <button onclick={logout}>Logout</button>
         </div>
     </header>
 
@@ -156,7 +156,7 @@
             <h2>Add Scientific Literature</h2>
 
             <input type="text" bind:value={searchQuery} placeholder="Enter DOI, ISBN, or Title" />
-            <button on:click={searchLiterature}>Search</button>
+            <button onclick={searchLiterature}>Search</button>
 
             {#if showResults}
                 <div class="search-results">
@@ -165,8 +165,8 @@
                             class="result-item" 
                             tabindex="0"
                             role="button"
-                            on:click={() => selectResult(result)}
-                            on:keydown={(event) => (event.key === 'Enter' || event.key === ' ') && selectResult(result)}
+                            onclick={() => selectResult(result)}
+                            onkeydown={(event) => (event.key === 'Enter' || event.key === ' ') && selectResult(result)}
                         >
                             <strong>{result.title}</strong><br />
                             <small>by {result.author}</small><br />
@@ -180,8 +180,8 @@
             <input type="text" bind:value={author} placeholder="Author" readonly />
             <input type="text" bind:value={isbn} placeholder="ISBN" readonly />
             <textarea bind:value={comment} placeholder="Comment"></textarea>
-            <button on:click={addLiterature}>Add Literature</button>
-            <button on:click={resetFields}>Clear</button>
+            <button onclick={addLiterature}>Add Literature</button>
+            <button onclick={resetFields}>Clear</button>
 
             <div class="literature-list">
                 {#each literatureList as lit (lit.isbn)}

@@ -4,13 +4,14 @@
     import Login from './pages/Login.svelte';
     import Dashboard from './pages/Dashboard.svelte';
     import Library from './pages/Library.svelte';
+    import TailwindCSS from './TailwindCSS.svelte';
 
     // Redirect to `/login` on initial load
     onMount(() => {
         navigate('/login');
     });
 </script>
-
+<TailwindCSS />
 
 <Router>
     <div class="page-container">

@@ -1,7 +1,7 @@
 <script>
-    let doi = '';
-    let articleData = null;
-    let errorMessage = '';
+    let doi = $state('');
+    let articleData = $state(null);
+    let errorMessage = $state('');
   
     async function fetchDOIDetails() {
       try {
@@ -24,7 +24,7 @@
   <main>
     <h1>DOI Lookup</h1>
     <input type="text" placeholder="Enter DOI" bind:value={doi} />
-    <button on:click={fetchDOIDetails}>Lookup</button>
+    <button onclick={fetchDOIDetails}>Lookup</button>
   
     {#if errorMessage}
       <p class="error">{errorMessage}</p>
