@@ -69,13 +69,20 @@
         try {
             const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(searchQuery)}`);
             const data = await response.json();
-            if (data.status === 'ok') {
+
+            if (data.status === "ok") {
                 const fetchedData = data.message;
-                searchResults = [{
-                    title: fetchedData.title[0] || '',
-                    author: fetchedData.author.map(a => `${a.given} ${a.family}`).join(', '),
-                    isbn: fetchedData.ISBN ? fetchedData.ISBN[0] : '',
-                }];
+                searchResults = [
+                    {
+                        title: fetchedData.title ? fetchedData.title[0] : "Unknown Title",
+                        author: fetchedData.author
+                            ? fetchedData.author.map(a => `${a.given} ${a.family}`).join(", ")
+                            : "Unknown Author",
+                        isbn: fetchedData.ISBN ? fetchedData.ISBN[0] : "No ISBN",
+                    },
+                ];
+            } else {
+                searchResults = [];
             }
         } catch (error) {
             console.error("Error fetching DOI data:", error);
@@ -85,17 +92,20 @@
 
     async function fetchISBN() {
         try {
-            const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=isbn:${isbn}`);
+            const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
             const data = await response.json();
-            if (data.totalItems > 0) {
-                searchResults = data.items.map(item => {
-                    const book = item.volumeInfo;
-                    return {
-                        title: book.title || '',
-                        author: book.authors ? book.authors.join(', ') : '',
+
+            if (data[`ISBN:${isbn}`]) {
+                const bookData = data[`ISBN:${isbn}`];
+                searchResults = [
+                    {
+                        title: bookData.title || "Unknown Title",
+                        author: bookData.authors ? bookData.authors.map(a => a.name).join(", ") : "Unknown Author",
                         isbn: isbn,
-                    };
-                });
+                    },
+                ];
+            } else {
+                searchResults = [];
             }
         } catch (error) {
             console.error("Error fetching ISBN data:", error);
@@ -105,17 +115,17 @@
 
     async function fetchTitle() {
         try {
-            const response = await fetch(`https://www.googleapis.com/books/v1/volumes?q=intitle:${encodeURIComponent(title)}`);
+            const response = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(title)}`);
             const data = await response.json();
-            if (data.totalItems > 0) {
-                searchResults = data.items.map(item => {
-                    const book = item.volumeInfo;
-                    return {
-                        title: book.title || '',
-                        author: book.authors ? book.authors.join(', ') : '',
-                        isbn: book.industryIdentifiers ? book.industryIdentifiers[0].identifier : '',
-                    };
-                });
+
+            if (data.docs && data.docs.length > 0) {
+                searchResults = data.docs.slice(0, 10).map(doc => ({
+                    title: doc.title || "Unknown Title",
+                    author: doc.author_name ? doc.author_name.join(", ") : "Unknown Author",
+                    isbn: doc.isbn ? doc.isbn[0] : "No ISBN",
+                }));
+            } else {
+                searchResults = [];
             }
         } catch (error) {
             console.error("Error fetching title data:", error);

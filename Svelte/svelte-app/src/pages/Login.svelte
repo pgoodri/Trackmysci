@@ -3,7 +3,7 @@
     import { initializeApp } from 'firebase/app';
     import { userStore } from '../userStore';
     import { navigate } from 'svelte-routing';  // Import navigate for routing
-
+    
     // Initialize Firebase
     const firebaseConfig = {
         apiKey: "AIzaSyCHdf8tVDVOtTazjvC0h1PyKwqNifWfqww",
