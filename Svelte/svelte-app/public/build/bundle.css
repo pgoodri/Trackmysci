@@ -260,7 +260,7 @@ body {
 
     .chart-placeholder.svelte-1gogwdi {
         height: 150px;
-        background-color: lightgray;
+        background-color: lightneutral;
         border-radius: 8px;
         display: flex;
         justify-content: center;
@@ -298,7 +298,7 @@ body {
 
     .literature-entry.svelte-fkpmxe {
         position: relative;
-        background-color: lightgray;
+        background-color: lightneutral;
         margin-bottom: 10px;
         padding: 10px;
         border-radius: 5px;

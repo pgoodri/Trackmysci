@@ -347,7 +347,7 @@
 
     .chart-placeholder {
         height: 150px;
-        background-color: lightgray;
+        background-color: lightneutral;
         border-radius: 8px;
         display: flex;
         justify-content: center;
