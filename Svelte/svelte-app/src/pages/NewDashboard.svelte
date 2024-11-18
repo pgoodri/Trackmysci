@@ -229,7 +229,7 @@
     <!-- Main Content -->
     <div class="flex flex-1">
         <section class="w-1/2 py-12 pl-12 pr-6">
-            <h2 class="text-xl font-semibold mb-4 flex justify-between items-center">
+            <h2 class="text-xl font-semibold mb-4 flex justify-between items-center text-neutral-700">
                 Recently Accessed
                 <Dialog.Root bind:open>
                     <Dialog.Trigger>
@@ -254,7 +254,7 @@
                                                         searchLiterature();
                                                     }
                                                 }}
-                                                class="w-full pl-4 pr-10 py-4 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
+                                                class="w-full pl-4 pr-10 py-4 text-neutral-700 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
                                                 placeholder="Search by DOI, ISBN, or Title"
                                                 autocomplete="off"
                                             />
@@ -268,7 +268,7 @@
                 
                                     <!-- Search Results -->
                                     {#if showResults}
-                                    <div class="mt-2 space-y-2 max-h-48 overflow-y-auto border border-neutral-300 rounded p-2">
+                                    <div class="mt-2 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2">
                                         {#each searchResults as result}
                                         <button
                                             type="button"
@@ -285,53 +285,56 @@
                 
                                     <!-- Form Fields -->
                                     <div class="flex flex-col gap-4 mt-4">
-                                        <div class="flex items-center">
-                                            <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title*</label>
+                                        <div class="flex flex-col">
+                                            <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title *</label>
                                             <input
                                                 id="title"
                                                 type="text"
                                                 bind:value={title}
-                                                class="flex-1 p-1 border border-neutral-300 shadow-sm rounded-md autocomplete=off"
+                                                class="flex-1 p-1 border border-neutral-300 shadow-sm rounded-md text-neutral-700 "
+                                                autocomplete="off"
                                             />
                                         </div>
-                                        <div class="flex items-center">
-                                            <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author*</label>
+                                        <div class="flex flex-col">
+                                            <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author *</label>
                                             <input
                                                 id="author"
                                                 type="text"
                                                 bind:value={author}
-                                                class="flex-1 p-1 border rounded-md border-neutral-300 shadow-sm autocomplete=off"
+                                                class="flex-1 p-1 border border-neutral-300 shadow-sm rounded-md text-neutral-700"
+                                                autocomplete="off"
                                             />
                                         </div>
                                         <Separator />
                                         <div class="flex items-center">
-                                            <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI*</label>
+                                            <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI *</label>
                                             <input
                                                 id="isbn-doi"
                                                 type="text"
                                                 bind:value={isbn}
-                                                class="flex-1 p-1 border rounded-md border-neutral-300 shadow-sm autocomplete=off"
+                                                class="flex-1 p-1 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
+                                                autocomplete="off"
                                             />
                                         </div>
                                         <Separator />
                                         <div class="flex gap-4 items-center">
                                             <div class="flex-1">
-                                                <label for="page-start" class="text-sm font-medium text-neutral-700">Page Start*</label>
+                                                <label for="page-start" class="text-sm font-medium text-neutral-700">Page Start *</label>
                                                 <input
                                                     id="page-start"
                                                     type="number"
                                                     bind:value={pageStart}
-                                                    class="w-full p-1 border rounded-md border-neutral-300 shadow-sm autocomplete=off"
+                                                    class="w-full p-1 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
                                                     min="1"
                                                 />
                                             </div>
                                             <div class="flex-1">
-                                                <label for="page-end" class="text-sm font-medium text-neutral-700">Page End*</label>
+                                                <label for="page-end" class="text-sm font-medium text-neutral-700">Page End *</label>
                                                 <input
                                                     id="page-end"
                                                     type="number"
                                                     bind:value={pageEnd}
-                                                    class="w-full p-1 border rounded-md border-neutral-300 shadow-sm "
+                                                    class="w-full p-1 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
                                                     min={pageStart}
                                                 />
                                             </div>
@@ -450,7 +453,7 @@
             {/if}
         </section>
         <section class="w-1/2 py-12 pl-6 pr-12">
-            <h2 class="text-xl font-semibold mb-4">Analytics</h2>
+            <h2 class="text-xl font-semibold mb-4 text-neutral-700">Analytics</h2>
             <div class="space-y-6">
                 <!-- Placeholder Card 1 -->
                 <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
