@@ -1,10 +1,13 @@
 <script>
     import { Router, Route, navigate } from 'svelte-routing';
-    import Success from './Success.svelte';
+    import Dashboard from './Dashboard.svelte';
+    import Library from './Library.svelte';
+    import Login from './Login.svelte';
     import { initializeApp } from 'firebase/app';
     import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
     import { userStore } from './userStore';
     import { getFirestore, collection, getDocs, addDoc, setDoc, doc } from 'firebase/firestore';
+    import { onMount } from 'svelte';
 
     // Firebase Configuration
     const firebaseConfig = {
@@ -129,9 +132,18 @@
             console.error("Error adding document: ", error);
         }
     }
+    // Redirect to `/login` on initial load
+    onMount(() => {
+        navigate('/login');
+    });
 </script>
 
+
 <Router>
+    <div class="page-container">
+        <Route path="/login" component={Login} />
+        <Route path="/dashboard" component={Dashboard} />
+        <Route path="/library" component={Library} />
     <div class="container">
         {#if isLoggedIn}
             <div class="header">
@@ -183,109 +195,3 @@
 
     <Route path="/success" component={Success} />
 </Router>
-
-<style>
-    .container {
-        display: flex;
-        flex-direction: column;
-        padding: 20px;
-        font-family: Arial, sans-serif;
-        height: 100vh;
-        justify-content: center;
-        align-items: center;
-        background: linear-gradient(135deg, #ff7e5f, #feb47b);
-        color: white;
-    }
-
-    .header {
-        position: absolute;
-        top: 20px;
-        width: 100%;
-        display: flex;
-        justify-content: space-between;
-    }
-
-    .greeting {
-        font-size: 24px;
-        margin-left: 20px;
-    }
-
-    .buttons button {
-        padding: 10px 20px;
-        background-color: #007bff;
-        border: none;
-        border-radius: 5px;
-        color: white;
-        cursor: pointer;
-        margin-right: 20px;
-    }
-
-    .buttons button:hover {
-        background-color: #0056b3;
-    }
-
-    .main-content {
-        display: flex;
-        width: 100%;
-        gap: 20px;
-    }
-
-    .form-section {
-        width: 50%;
-        background-color: rgba(255, 255, 255, 0.8);
-        border-radius: 10px;
-        padding: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-        color: black;
-    }
-
-    input, textarea {
-        width: 100%;
-        padding: 10px;
-        margin-bottom: 10px;
-        border-radius: 5px;
-        border: 1px solid #ddd;
-    }
-
-    textarea {
-        height: 80px;
-        resize: none;
-    }
-
-    .literature-list {
-        margin-top: 20px;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-    }
-
-    .oval {
-        background-color: lightgray;
-        border-radius: 20px;
-        padding: 10px;
-        text-align: center;
-    }
-
-    .rectangle {
-        width: 50%;
-        background-color: rgba(255, 255, 255, 0.8);
-        border-radius: 20px;
-        padding: 20px;
-    }
-
-    .chart-placeholder {
-        height: 150px;
-        background-color: lightgray;
-        border-radius: 10px;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        color: black;
-    }
-
-    .welcome-message {
-        text-align: center;
-    }
-</style>
