@@ -24,7 +24,7 @@
             const result = await signInWithPopup(auth, provider);
             userStore.set(result.user);
             console.log("User logged in:", result.user);
-            navigate('/dashboard');
+            navigate('/newdashboard');
         } catch (error) {
             console.error("Login error:", error);
         }

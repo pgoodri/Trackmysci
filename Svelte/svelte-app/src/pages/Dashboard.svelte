@@ -2,7 +2,7 @@
     import { getAuth, signOut } from 'firebase/auth';
     import { userStore } from '../userStore';
     import { navigate } from 'svelte-routing';
-
+    
     let user = $state();
     userStore.subscribe(value => {
         user = value;
@@ -165,7 +165,16 @@
         <section class="literature-form-section">
             <h2>Add Scientific Literature</h2>
 
-            <input type="text" bind:value={searchQuery} placeholder="Enter DOI, ISBN, or Title" />
+            <input
+                type="text"
+                bind:value={searchQuery}
+                placeholder="Enter DOI, ISBN, or Title"
+                onkeydown={(event) => {
+                    if (event.key === "Enter") {
+                        searchLiterature();
+                    }
+                }}
+            />
             <button onclick={searchLiterature}>Search</button>
 
             {#if showResults}

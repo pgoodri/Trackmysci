@@ -6,6 +6,7 @@
     import Dashboard from './pages/Dashboard.svelte';
     import Library from './pages/Library.svelte';
     import TailwindCSS from './TailwindCSS.svelte';
+    import NewDashboard from './pages/NewDashboard.svelte';
     
     // Redirect to `/login` on initial load
     onMount(() => {
@@ -19,5 +20,6 @@
         <Route path="/login" component={Login} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/library" component={Library} />
+        <Route path="/newdashboard" component={NewDashboard} />
     </div>
 </Router>
