@@ -7,6 +7,7 @@
     import { Separator } from "$lib/components/ui/separator"
     import { Progress } from "$lib/components/ui/progress"
     import * as Popover from "$lib/components/ui/popover"
+
     
     let user;
     userStore.subscribe((value) => {
@@ -231,6 +232,14 @@
                     + New Publication
                 </Button>
             </h2>
+
+            {#if literatureList.length === 0}
+            <!-- Message for empty list -->
+            <div class="flex flex-col items-center justify-center text-center text-gray-500 pt-12">
+                <p class="text-lg font-medium">No literature added yet.</p>
+                <p class="text-sm mt-2">Start by adding a new publication to track your progress!</p>
+            </div>
+            {:else}
             <ul class="space-y-3">
                 {#each literatureList as lit, index}
                 <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
@@ -308,7 +317,7 @@
                 </li>
                 {/each}
             </ul>
-            
+            {/if}
         </section>
         <section class="w-1/2 py-12 pl-6 pr-12">
             <h2 class="text-xl font-semibold mb-4">Analytics</h2>
