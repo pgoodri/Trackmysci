@@ -7,8 +7,11 @@
     import { Separator } from "$lib/components/ui/separator"
     import { Progress } from "$lib/components/ui/progress"
     import * as Popover from "$lib/components/ui/popover"
+    import * as Dialog from "$lib/components/ui/dialog"
 
-    
+
+    let open = false;
+
     let user;
     userStore.subscribe((value) => {
         user = value;
@@ -168,7 +171,7 @@
                 currentPage: pageStart,
                 comment,
             };
-
+            open = false; // Close the dialog after adding  
             literatureList = [newEntry, ...literatureList];
             saveToLocalStorage();
 
@@ -228,9 +231,136 @@
         <section class="w-1/2 py-12 pl-12 pr-6">
             <h2 class="text-xl font-semibold mb-4 flex justify-between items-center">
                 Recently Accessed
-                <Button class="bg-blue-600 text-white hover:bg-blue-700" on:click={openModal}>
-                    + New Publication
-                </Button>
+                <Dialog.Root bind:open>
+                    <Dialog.Trigger>
+                    <Button class="bg-blue-600 hover:bg-blue-700">+ New publication</Button>
+                    </Dialog.Trigger>
+                    <Dialog.Content class="w-[90%] max-w-4xl backdrop-blur-none" >
+                        <Dialog.Header>
+                            <Dialog.Title class="text-xl mb-1">Add Literature</Dialog.Title>
+                            <Dialog.Description>
+                                <form on:submit|preventDefault={addLiteratureToLibrary}>
+                                    <!-- Search Bar -->
+                                    <div class="mb-4">
+                                        <div class="relative">
+                                            <label for="searchQuery" class="sr-only">Search Query</label>
+                                            <input
+                                                type="text"
+                                                id="searchQuery"
+                                                bind:value={searchQuery}
+                                                on:keydown={(e) => {
+                                                    if (e.key === "Enter") {
+                                                        e.preventDefault();
+                                                        searchLiterature();
+                                                    }
+                                                }}
+                                                class="w-full pl-4 pr-10 py-4 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
+                                                placeholder="Search by DOI, ISBN, or Title"
+                                                autocomplete="off"
+                                            />
+                                            <div class="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#9ca3af" class="w-6 h-6">
+                                                    <path stroke-linecap="round" stroke-linejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                    </div>
+                
+                                    <!-- Search Results -->
+                                    {#if showResults}
+                                    <div class="mt-2 space-y-2 max-h-48 overflow-y-auto border border-neutral-300 rounded p-2">
+                                        {#each searchResults as result}
+                                        <button
+                                            type="button"
+                                            class="p-3 bg-neutral-100 rounded shadow cursor-pointer hover:bg-neutral-200 text-left w-full"
+                                            on:click={() => selectResult(result)}
+                                        >
+                                            <strong>{result.title}</strong><br />
+                                            <small>Author: {result.author}</small><br />
+                                            <em>ISBN: {result.isbn}</em>
+                                        </button>
+                                        {/each}
+                                    </div>
+                                    {/if}
+                
+                                    <!-- Form Fields -->
+                                    <div class="flex flex-col gap-4 mt-4">
+                                        <div class="flex items-center">
+                                            <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title*</label>
+                                            <input
+                                                id="title"
+                                                type="text"
+                                                bind:value={title}
+                                                class="flex-1 p-1 border border-neutral-300 shadow-sm rounded-md autocomplete=off"
+                                            />
+                                        </div>
+                                        <div class="flex items-center">
+                                            <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author*</label>
+                                            <input
+                                                id="author"
+                                                type="text"
+                                                bind:value={author}
+                                                class="flex-1 p-1 border rounded-md border-neutral-300 shadow-sm autocomplete=off"
+                                            />
+                                        </div>
+                                        <Separator />
+                                        <div class="flex items-center">
+                                            <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI*</label>
+                                            <input
+                                                id="isbn-doi"
+                                                type="text"
+                                                bind:value={isbn}
+                                                class="flex-1 p-1 border rounded-md border-neutral-300 shadow-sm autocomplete=off"
+                                            />
+                                        </div>
+                                        <Separator />
+                                        <div class="flex gap-4 items-center">
+                                            <div class="flex-1">
+                                                <label for="page-start" class="text-sm font-medium text-neutral-700">Page Start*</label>
+                                                <input
+                                                    id="page-start"
+                                                    type="number"
+                                                    bind:value={pageStart}
+                                                    class="w-full p-1 border rounded-md border-neutral-300 shadow-sm autocomplete=off"
+                                                    min="1"
+                                                />
+                                            </div>
+                                            <div class="flex-1">
+                                                <label for="page-end" class="text-sm font-medium text-neutral-700">Page End*</label>
+                                                <input
+                                                    id="page-end"
+                                                    type="number"
+                                                    bind:value={pageEnd}
+                                                    class="w-full p-1 border rounded-md border-neutral-300 shadow-sm "
+                                                    min={pageStart}
+                                                />
+                                            </div>
+                                        </div>
+                                        <Separator />
+                                        <div class="flex items-center">
+                                            <label for="comment" class="w-1/4 text-sm font-medium text-neutral-700">Comment</label>
+                                            <textarea
+                                                id="comment"
+                                                bind:value={comment}
+                                                class="flex-1 p-1 border rounded-md border-neutral-300 shadow-sm"
+                                            ></textarea>
+                                        </div>
+                                    </div>
+                
+                                    <!-- Footer Buttons -->
+                                    <div class="flex justify-end space-x-4 mt-4">
+                                        <Button type="button" on:click={resetFields} class="bg-neutral-200 text-neutral-700 hover:bg-neutral-300">
+                                            Clear
+                                        </Button>
+                                        <Button type="submit" class="bg-blue-600 text-white hover:bg-blue-700">
+                                            Add
+                                        </Button>
+                                    </div>
+                                </form>
+                            </Dialog.Description>
+                        </Dialog.Header>
+                    </Dialog.Content>
+                </Dialog.Root>
             </h2>
 
             {#if literatureList.length === 0}
