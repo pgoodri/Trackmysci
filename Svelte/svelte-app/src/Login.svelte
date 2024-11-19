@@ -1,6 +1,6 @@
 <script>
     import { initializeApp } from 'firebase/app';
-    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
+    import { getAuth, createUserWithEmailAndPassword, sendEmailVerification, signInWithEmailAndPassword, onAuthStateChanged, signOut, sendPasswordResetEmail } from 'firebase/auth';
     import { userStore } from './userStore';
     import Dashboard from './Dashboard.svelte';
     import Library from './Library.svelte';
@@ -17,58 +17,139 @@
         measurementId: "G-6JR45C2DBF"
     };
 
+    // Initialize Firebase
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
-    const provider = new GoogleAuthProvider();
 
-    // Variables for User Authentication
-    let user = "User";
+    // State variables
+    let email = '';
+    let password = '';
     let isLoggedIn = false;
+    let user = null;
+    let errorMessage = '';
+    let resetMessage = '';
 
-    // Google Authentication Functions
-    async function login() {
+    // Function to register
+    async function register() {
+        if (!email.endsWith('@siue.edu')) {
+            errorMessage = 'Only @siue.edu emails are allowed to register.';
+            return;
+        }
+
         try {
-            const result = await signInWithPopup(auth, provider);
-            const loggedInUser = result.user;
-            user = loggedInUser.displayName || "User";
-            userStore.set(loggedInUser);
-            isLoggedIn = true;
-            navigate('/dashboard');
+            const result = await createUserWithEmailAndPassword(auth, email, password);
+            await sendEmailVerification(result.user); // Send verification email
+            alert('Verification email sent! Please verify your account.');
         } catch (error) {
-            console.error("Login error:", error);
+            console.error('Registration error:', error.message);
+            errorMessage = error.message;
         }
     }
 
-    function logout() {
-        signOut(auth).then(() => {
-            user = "User";
-            userStore.set(null);
-            isLoggedIn = false;
-        }).catch(error => console.error("Logout error:", error));
+    // Function to log in
+    async function login() {
+        try {
+            const result = await signInWithEmailAndPassword(auth, email, password);
+
+            // Check if the email is verified
+            if (!result.user.emailVerified) {
+                errorMessage = 'Please verify your email before logging in.';
+                signOut(auth); // Log out the user
+                return;
+            }
+
+            user = result.user;
+            userStore.set(user);
+            isLoggedIn = true;
+            navigate('/dashboard');
+        } catch (error) {
+            console.error('Login error:', error.message);
+            errorMessage = error.message;
+        }
     }
 
+    // Function to send password reset email
+    async function resetPassword() {
+        try {
+            if (!email) {
+                errorMessage = 'Please enter your email to reset your password.';
+                return;
+            }
+            await sendPasswordResetEmail(auth, email);
+            resetMessage = 'Password reset email sent! Please check your inbox.';
+        } catch (error) {
+            console.error('Reset password error:', error.message);
+            resetMessage = error.message;
+        }
+
+        // Clear the message after 5 seconds
+        setTimeout(() => {
+            resetMessage = '';
+        }, 5000);
+    }
+
+    // Function to log out
+    function logout() {
+        signOut(auth)
+            .then(() => {
+                user = null;
+                userStore.set(null);
+                isLoggedIn = false;
+                navigate('/');
+            })
+            .catch((error) => console.error('Logout error:', error));
+    }
+
+    // Track authentication state changes
     onAuthStateChanged(auth, (authUser) => {
         if (authUser) {
-            user = authUser.displayName || "User";
-            userStore.set(authUser);
+            user = authUser;
             isLoggedIn = true;
         } else {
-            user = "User";
-            userStore.set(null);
+            user = null;
             isLoggedIn = false;
         }
     });
 </script>
 
+<div class="container">
+    {#if !isLoggedIn}
+        <div class="welcome-message">
+            <h1>Welcome to Track My Sci!</h1>
+            <p>A place to track your scientific reading.</p>
 
-    <div class="container">
-            <div class="welcome-message">
-                <h1>Welcome to Track My Sci!</h1>
-                <p>A place to track your scientific reading.</p>
-                <button on:click={login}>Login with Google</button>
+            <!-- Error message -->
+            {#if errorMessage}
+                <p class="error">{errorMessage}</p>
+            {/if}
+
+            <!-- Registration Form -->
+            <h3>Register</h3>
+            <input type="email" placeholder="Email (must end with @siue.edu)" bind:value={email} />
+            <input type="password" placeholder="Password" bind:value={password} />
+            <button on:click={register}>Register</button>
+
+            <!-- Login Form -->
+            <h3>Login</h3>
+            <input type="email" placeholder="Email" bind:value={email} />
+            <input type="password" placeholder="Password" bind:value={password} />
+            <div class="button-group">
+                <button on:click={login}>Login</button>
+                <button on:click={resetPassword} class="forgot-password-button">Forgot Password?</button>
             </div>
-    </div>
 
+            <!-- Reset message -->
+            {#if resetMessage}
+                <p class="reset-message">{resetMessage}</p>
+            {/if}
+        </div>
+    {:else}
+        <div class="logged-in">
+            <h1>Welcome, {user.email}!</h1>
+            <button on:click={logout}>Return to Sign In</button>
+        </div>
+    {/if}
+</div>
 
 <style>
     .container {
@@ -83,7 +164,51 @@
         color: white;
     }
 
-    .welcome-message {
+    .welcome-message, .logged-in {
         text-align: center;
+    }
+
+    .error {
+        color: red;
+        margin-bottom: 10px;
+    }
+
+    .reset-message {
+        color: green;
+        margin-top: 10px;
+    }
+
+    input {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        border-radius: 5px;
+        border: 1px solid #ddd;
+    }
+
+    .button-group {
+        display: flex;
+        gap: 10px;
+    }
+
+    button {
+        padding: 10px 20px;
+        background-color: #007bff;
+        border: none;
+        border-radius: 5px;
+        color: white;
+        cursor: pointer;
+    }
+
+    button:hover {
+        background-color: #0056b3;
+    }
+
+    .forgot-password-button {
+        background-color: #6c757d;
+    }
+
+    .forgot-password-button:hover {
+        background-color: #5a6268;
     }
 </style>

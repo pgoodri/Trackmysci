@@ -167,7 +167,7 @@
     <!-- Header Section -->
     {#if isLoggedIn}
         <div class="header">
-            <div class="greeting">Welcome, {user}!</div>
+            <div class="greeting">Welcome!</div>
             <div class="nav-buttons">
                 <button on:click={logout}>Logout</button>
                 <button on:click={() => navigate('/library')}>Go to Library</button>
