@@ -9,6 +9,21 @@
     import * as Popover from "$lib/components/ui/popover"
     import * as Dialog from "$lib/components/ui/dialog"
 
+    let tagInput = ""; // Input for new tag
+    let tags = []; // Array of added tags
+
+    // Add a tag
+    function addTag() {
+        if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+            tags = [...tags, tagInput.trim()];
+            tagInput = ""; // Clear input after adding
+        }
+    }
+
+    // Remove a tag
+    function removeTag(index) {
+        tags = tags.filter((_, i) => i !== index);
+    }
 
     let open = false;
 
@@ -42,6 +57,7 @@
     let currentPage = 1;
     let searchResults = [];
     let showResults = false;
+
 
     // Load saved literature from localStorage
     let literatureList = JSON.parse(localStorage.getItem("literatureList") || "[]");
@@ -158,6 +174,7 @@
         pageStart = pageEnd = currentPage = 1;
         searchResults = [];
         showResults = false;
+        tags = [];
     }
 
     function addLiteratureToLibrary() {
@@ -170,7 +187,10 @@
                 pageEnd,
                 currentPage: pageStart,
                 comment,
+                tags,
+                journalLogs: [],
             };
+            resetFields(); // Clear fields after adding
             open = false; // Close the dialog after adding  
             literatureList = [newEntry, ...literatureList];
             saveToLocalStorage();
@@ -210,9 +230,10 @@
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content>
                     <DropdownMenu.Group>
-                        <DropdownMenu.Item on:click={() => navigate("/library")}>Library</DropdownMenu.Item>
+                        <DropdownMenu.Item on:click={() => navigate("/newdashboard")} class = "text-base">Dashboard</DropdownMenu.Item>
+                        <DropdownMenu.Item on:click={() => navigate("/library")} class = "text-base">Library</DropdownMenu.Item>
                         <DropdownMenu.Separator />
-                        <DropdownMenu.Item on:click={logout} class="text-red-500">Logout</DropdownMenu.Item>
+                        <DropdownMenu.Item on:click={logout} class="text-red-500 text-base">Logout</DropdownMenu.Item>
                     </DropdownMenu.Group>
                 </DropdownMenu.Content>
             </DropdownMenu.Root>
@@ -235,9 +256,9 @@
                     <Dialog.Trigger>
                     <Button class="bg-blue-600 hover:bg-blue-700">+ New publication</Button>
                     </Dialog.Trigger>
-                    <Dialog.Content class="w-[90%] max-w-4xl backdrop-blur-none" >
+                    <Dialog.Content class="w-[90%] max-w-4xl" >
                         <Dialog.Header>
-                            <Dialog.Title class="text-xl mb-1">Add Literature</Dialog.Title>
+                            <Dialog.Title class="text-xl mb-1 ">Add Literature</Dialog.Title>
                             <Dialog.Description>
                                 <form on:submit|preventDefault={addLiteratureToLibrary}>
                                     <!-- Search Bar -->
@@ -268,7 +289,7 @@
                 
                                     <!-- Search Results -->
                                     {#if showResults}
-                                    <div class="mt-2 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2">
+                                    <div class=" absolute z-50 mt-2 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2">
                                         {#each searchResults as result}
                                         <button
                                             type="button"
@@ -291,7 +312,7 @@
                                                 id="title"
                                                 type="text"
                                                 bind:value={title}
-                                                class="flex-1 p-1 border border-neutral-300 shadow-sm rounded-md text-neutral-700 "
+                                                class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700 "
                                                 autocomplete="off"
                                             />
                                         </div>
@@ -301,7 +322,7 @@
                                                 id="author"
                                                 type="text"
                                                 bind:value={author}
-                                                class="flex-1 p-1 border border-neutral-300 shadow-sm rounded-md text-neutral-700"
+                                                class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700"
                                                 autocomplete="off"
                                             />
                                         </div>
@@ -312,7 +333,7 @@
                                                 id="isbn-doi"
                                                 type="text"
                                                 bind:value={isbn}
-                                                class="flex-1 p-1 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
+                                                class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
                                                 autocomplete="off"
                                             />
                                         </div>
@@ -324,7 +345,7 @@
                                                     id="page-start"
                                                     type="number"
                                                     bind:value={pageStart}
-                                                    class="w-full p-1 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
+                                                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
                                                     min="1"
                                                 />
                                             </div>
@@ -334,21 +355,64 @@
                                                     id="page-end"
                                                     type="number"
                                                     bind:value={pageEnd}
-                                                    class="w-full p-1 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
+                                                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
                                                     min={pageStart}
                                                 />
                                             </div>
                                         </div>
+
+                                        <Separator />
+                                        <!-- Tag Input Section -->
+                                        <div class="mb-4">
+                                            <label for="tag-input" class="text-sm font-medium text-neutral-700">Tags</label>
+                                            <div class="flex items-center mt-2">
+                                                <input
+                                                    id="tag-input"
+                                                    type="text"
+                                                    bind:value={tagInput}
+                                                    class="flex-1 p-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
+                                                    placeholder="Type a tag and press Enter"
+                                                    on:keydown={(e) => {
+                                                        if (e.key === "Enter") {
+                                                            e.preventDefault();
+                                                            addTag();
+                                                        }
+                                                    }}
+                                                />
+                                                <Button type="button" class="ml-2 bg-blue-500 hover:bg-blue-600" on:click={addTag}>Add Tag</Button>
+                                            </div>
+                                            <!-- Display Tags -->
+                                            <div class="flex flex-wrap gap-2 mt-3">
+                                                {#each tags as tag, index}
+                                                <div class="flex items-center bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                                                    <span>{tag}</span>
+                                                    <button
+                                                        type="button"
+                                                        class="ml-2 text-blue-500 hover:text-blue-700"
+                                                        on:click={() => removeTag(index)}
+                                                    >
+                                                        &times;
+                                                    </button>
+                                                </div>
+                                                {/each}
+                                            </div>
+                                        </div>
+
                                         <Separator />
                                         <div class="flex items-center">
                                             <label for="comment" class="w-1/4 text-sm font-medium text-neutral-700">Comment</label>
                                             <textarea
                                                 id="comment"
                                                 bind:value={comment}
-                                                class="flex-1 p-1 border rounded-md border-neutral-300 shadow-sm"
+                                                class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm"
                                             ></textarea>
                                         </div>
+
+
+                                        
                                     </div>
+
+                                    
                 
                                     <!-- Footer Buttons -->
                                     <div class="flex justify-end space-x-4 mt-4">
@@ -373,12 +437,22 @@
                 <p class="text-sm mt-2">Start by adding a new publication to track your progress!</p>
             </div>
             {:else}
+            
             <ul class="space-y-3">
                 {#each literatureList as lit, index}
                 <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
                     <strong>{lit.title}</strong><br />
                     <small>{lit.author}</small><br />
-            
+                    <!-- Tags Section -->
+                    {#if lit.tags?.length > 0}
+                    <div class="flex flex-wrap gap-2 mt-3">
+                        {#each lit.tags as tag}
+                        <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                            {tag}
+                        </span>
+                        {/each}
+                    </div>
+                    {/if}
                     <!-- Progress Section -->
                     <div class="mt-1 flex items-center gap-3">
 
@@ -412,8 +486,8 @@
                         <!-- Popover for Updating Progress -->
                         <Popover.Root>
                             <Popover.Trigger>
-                                <button
-                                    class="p-0 mt-4 mb-0 border-none bg-transparent hover:text-blue-600"
+                                <Button
+                                    class="p-0 mt-4 mb-0 shadow-none bg-transparent hover:bg-transparent text-neutral-500 hover:text-orange-600"
                                     aria-label="Update Progress"
                                 >
                                     <svg
@@ -425,7 +499,7 @@
                                         <path d="M21.731 2.269a2.625 2.625 0 0 0-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 0 0 0-3.712ZM19.513 8.199l-3.712-3.712-8.4 8.4a5.25 5.25 0 0 0-1.32 2.214l-.8 2.685a.75.75 0 0 0 .933.933l2.685-.8a5.25 5.25 0 0 0 2.214-1.32l8.4-8.4Z" />
                                         <path d="M5.25 5.25a3 3 0 0 0-3 3v10.5a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3V13.5a.75.75 0 0 0-1.5 0v5.25a1.5 1.5 0 0 1-1.5 1.5H5.25a1.5 1.5 0 0 1-1.5-1.5V8.25a1.5 1.5 0 0 1 1.5-1.5h5.25a.75.75 0 0 0 0-1.5H5.25Z" />
                                     </svg>
-                                </button>
+                                </Button>
                             </Popover.Trigger>
                             
                         <Popover.Content class="p-4 bg-white shadow-lg border rounded-md w-64">

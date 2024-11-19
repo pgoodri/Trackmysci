@@ -32,6 +32,7 @@
     "axios": "^1.7.7",
     "firebase": "^10.14.1",
     "sirv-cli": "^2.0.0",
+    "svelte-portal": "^2.2.1",
     "svelte-radix": "^2.0.1",
     "svelte-routing": "^2.13.0"
   }
