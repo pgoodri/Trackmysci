@@ -77,7 +77,7 @@
             console.log("User already exists in Firestore.");
         }
 
-        navigate('/success');
+        
     } catch (error) {
         console.error("Login error:", error);
     }
@@ -193,5 +193,5 @@
     
     <button on:click={addSampleData}>Add Sample Data</button>
 
-    <Route path="/success" component={Success} />
+
 </Router>

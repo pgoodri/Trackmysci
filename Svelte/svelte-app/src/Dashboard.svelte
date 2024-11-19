@@ -3,6 +3,7 @@
     import { userStore } from './userStore';
     import { getAuth, signOut } from 'firebase/auth';
     import { onMount } from 'svelte';
+    import {firebaseConfig} from './firebaseConfig';
 
     let user = "User";
     let isLoggedIn = false;
@@ -17,7 +18,9 @@
     let searchResults = [];  // Holds search suggestions
     let showResults = false; // Toggles the display of suggestions
 
-    const auth = getAuth();
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
+    const provider = new GoogleAuthProvider();
 
     // Check if the user is logged in and update the greeting
     onMount(() => {

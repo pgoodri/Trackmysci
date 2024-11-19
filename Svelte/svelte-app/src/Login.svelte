@@ -5,17 +5,7 @@
     import Dashboard from './Dashboard.svelte';
     import Library from './Library.svelte';
     import { Router, Route, navigate } from 'svelte-routing';
-
-    // Firebase Configuration
-    const firebaseConfig = {
-        apiKey: "AIzaSyCHdf8tVDVOtTazjvC0h1PyKwqNifWfqww",
-        authDomain: "trackmysci.firebaseapp.com",
-        projectId: "trackmysci",
-        storageBucket: "trackmysci.appspot.com",
-        messagingSenderId: "94634841161",
-        appId: "1:94634841161:web:ded58b1dc49db1f1dc1b98",
-        measurementId: "G-6JR45C2DBF"
-    };
+    import { firebaseConfig } from './firebaseConfig';
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
