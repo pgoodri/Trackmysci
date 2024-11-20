@@ -4,19 +4,21 @@
     import Dashboard from './Dashboard.svelte';
     import Library from './Library.svelte';
     import Login from './Login.svelte';
+    import Signup from './Signup.svelte';
     import { initializeApp } from 'firebase/app';
     import { onMount } from 'svelte';
     
     // Redirect to `/login` on initial load
     onMount(() => {
-        navigate('/login');
+        navigate('/signup');
     });
 </script>
 
 
 <Router>
     <div class="page-container">
-        <Route path="/" component={Login} />
+        <Route path="/" component={Signup} />
+        <Route path="/signup" component={Signup} />
         <Route path="/login" component={Login} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/library" component={Library} />
