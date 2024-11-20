@@ -1,7 +1,12 @@
 <script>
     import { navigate } from "svelte-routing";
     import { initializeApp } from "firebase/app";
-    import { getAuth, signInWithEmailAndPassword, signOut } from "firebase/auth";
+    import {
+        getAuth,
+        signInWithEmailAndPassword,
+        signOut,
+        sendEmailVerification,
+    } from "firebase/auth";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
@@ -36,8 +41,13 @@
         try {
             const result = await signInWithEmailAndPassword(auth, email, password);
 
-            // Example: Log user details to console
-            console.log("User signed in:", result.user);
+            // Check if the email is verified
+            if (!result.user.emailVerified) {
+                errorMessage = "Please verify your email before logging in.";
+                await sendEmailVerification(result.user); // Resend verification email
+                signOut(auth); // Log out the user
+                return;
+            }
 
             // Navigate to the dashboard or another page
             navigate("/dashboard");
@@ -110,19 +120,19 @@
             <!-- Sign-Up Redirect -->
             <div class="mt-4 text-center text-sm">
                 Don&apos;t have an account?
-                <a href="/signup" class="underline"> Sign up </a>
+                <button
+                    type="button"
+                    class="underline cursor-pointer text-blue-500"
+                    on:click={() => navigate('/signup')}
+                >
+                    Sign up
+                </button>
             </div>
         </div>
     </div>
 
     <!-- Right Section: Image -->
     <div class="bg-muted hidden lg:block">
-        <img
-            src="/images/placeholder.svg"
-            alt="placeholder"
-            width="1920"
-            height="1080"
-            class="h-full w-full object-cover dark:brightness-[0.2] dark:grayscale"
-        />
+
     </div>
 </div>
