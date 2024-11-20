@@ -103,35 +103,6 @@
         }
     });
 
-    // Function to Add New Literature Entry
-    function addLiterature() {
-        if (title && author && isbn) {
-            literatureList = [...literatureList, { title, author, isbn, comment }];
-            title = author = isbn = comment = ""; // Reset fields
-        } else {
-            alert("Please fill in all required fields (Title, Author, ISBN).");
-        }
-    }
-
-    async function addSampleData() {
-        try {
-            const docRef = await addDoc(collection(db, user), {
-                title: title,
-                author: author,
-                year: isbn,
-                description: comment
-            });
-            console.log("Document written with ID: ", docRef.id);
-
-             // Clear the input fields after adding the document
-            title = "";
-            author = "";
-            isbn = "";
-            comment = "";
-        } catch (error) {
-            console.error("Error adding document: ", error);
-        }
-    }
     // Redirect to `/login` on initial load
     onMount(() => {
         navigate('/login');
