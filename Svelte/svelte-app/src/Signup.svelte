@@ -140,6 +140,17 @@
 
             <!-- Submit Button -->
             <Button type="submit" class="w-full">Create an account</Button>
+
+            <div class="mt-4 text-center text-sm">
+                Already have an account?
+                <button
+                    type="button"
+                    class="underline cursor-pointer text-blue-500"
+                    on:click={() => navigate('/login')}
+                >
+                    Login
+                </button>
+            </div>
         </form>
     </div>
 </div>
