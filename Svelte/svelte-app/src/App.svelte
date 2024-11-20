@@ -4,9 +4,6 @@
     import Library from './Library.svelte';
     import Login from './Login.svelte';
     import { initializeApp } from 'firebase/app';
-    import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from 'firebase/auth';
-    import { userStore } from './userStore';
-    import { getFirestore, collection, getDocs, addDoc, setDoc, doc } from 'firebase/firestore';
     import { onMount } from 'svelte';
 
     // Redirect to `/login` on initial load
@@ -14,6 +11,7 @@
         navigate('/login');
     });
 </script>
+
 
 <Router>
     <div class="page-container">
