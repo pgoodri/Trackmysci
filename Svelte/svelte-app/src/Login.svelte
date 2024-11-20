@@ -79,7 +79,7 @@
             resetMessage = 'Password reset email sent! Please check your inbox.';
         } catch (error) {
             console.error('Reset password error:', error.message);
-            resetMessage = error.message;
+            resetMessage = error.mes
         }
 
         // Clear the message after 5 seconds

@@ -1,11 +1,12 @@
 <script>
+    import "./app.css";
     import { Router, Route, navigate } from 'svelte-routing';
     import Dashboard from './Dashboard.svelte';
     import Library from './Library.svelte';
     import Login from './Login.svelte';
     import { initializeApp } from 'firebase/app';
     import { onMount } from 'svelte';
-
+    
     // Redirect to `/login` on initial load
     onMount(() => {
         navigate('/login');

@@ -1,6 +1,6 @@
 <script>
     import { getAuth, signOut } from "firebase/auth";
-    import { userStore } from "./userStore";
+    import { userStore } from "../userStore";
     import { navigate } from "svelte-routing";
     import { Button } from "$lib/components/ui/button";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
