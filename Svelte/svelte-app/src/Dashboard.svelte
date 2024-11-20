@@ -22,6 +22,19 @@
     const auth = getAuth(app);
     const provider = new GoogleAuthProvider();
 
+    // Configure Firestore
+    const db = getFirestore(app);
+    const colRef = collection(db, 'user')
+    getDocs(colRef).then((snapshot) => {
+        let user = []
+        snapshot.docs.forEach((doc) => {
+            user.push({ ...doc.data(), id: doc.id })
+        })
+        console.log(user)
+    }).catch((error) => { 
+        console.log(error.message)
+    });
+
     // Check if the user is logged in and update the greeting
     onMount(() => {
         const savedLiteratureList = localStorage.getItem('literatureList');
@@ -162,6 +175,26 @@
         isbn = result.isbn;
         comment = '';  // Reset comment field
         showResults = false;  // Hide suggestions after selection
+    }
+
+    async function addSampleData() {
+        try {
+            const docRef = await addDoc(collection(db, user), {
+                title: title,
+                author: author,
+                year: isbn,
+                description: comment
+            });
+            console.log("Document written with ID: ", docRef.id);
+
+             // Clear the input fields after adding the document
+            title = "";
+            author = "";
+            isbn = "";
+            comment = "";
+        } catch (error) {
+            console.error("Error adding document: ", error);
+        }
     }
 
 </script>
