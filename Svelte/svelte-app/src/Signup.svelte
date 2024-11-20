@@ -129,7 +129,7 @@
             <!-- Email -->
             <div class="grid gap-2">
                 <Label for="email">Email</Label>
-                <Input id="email" type="email" placeholder="johnsmith@siue.com" bind:value={email} required />
+                <Input id="email" type="email" placeholder="mdas@siue.com" bind:value={email} required />
             </div>
 
             <!-- Password -->
