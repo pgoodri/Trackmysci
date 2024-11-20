@@ -9,6 +9,17 @@
     import * as Popover from "$lib/components/ui/popover"
     import * as Dialog from "$lib/components/ui/dialog"
 
+    // Literature management variables
+    let searchQuery = "";
+    let title = "";
+    let author = "";
+    let isbn = "";
+    let comment = "";
+    let pageStart = 1;
+    let pageEnd = 1;
+    let currentPage = 1;
+    let searchResults = [];
+    let showResults = false;
     let tagInput = ""; // Input for new tag
     let tags = []; // Array of added tags
 
@@ -45,18 +56,6 @@
         trackingPageOpen = false;
         resetFields(); // Clear modal fields on close
     }
-
-    // Literature management variables
-    let searchQuery = "";
-    let title = "";
-    let author = "";
-    let isbn = "";
-    let comment = "";
-    let pageStart = 1;
-    let pageEnd = 1;
-    let currentPage = 1;
-    let searchResults = [];
-    let showResults = false;
 
 
     // Load saved literature from localStorage
@@ -230,7 +229,7 @@
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content>
                     <DropdownMenu.Group>
-                        <DropdownMenu.Item on:click={() => navigate("/newdashboard")} class = "text-base">Dashboard</DropdownMenu.Item>
+                        <DropdownMenu.Item on:click={() => navigate("/dashboard")} class = "text-base">Dashboard</DropdownMenu.Item>
                         <DropdownMenu.Item on:click={() => navigate("/library")} class = "text-base">Library</DropdownMenu.Item>
                         <DropdownMenu.Separator />
                         <DropdownMenu.Item on:click={logout} class="text-red-500 text-base">Logout</DropdownMenu.Item>

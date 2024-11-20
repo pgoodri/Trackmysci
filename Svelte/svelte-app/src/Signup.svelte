@@ -104,7 +104,7 @@
     }
 </script>
 
-<div class="flex items-center justify-center min-h-screen bg-gray-100">
+<div class="flex items-center justify-center min-h-screen bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500">
     <div class="w-full max-w-md bg-white p-6 rounded-lg shadow-md">
         <h1 class="text-xl font-bold mb-4">Sign Up</h1>
         <p class="text-gray-700 mb-6">Enter your information to create an account.</p>
