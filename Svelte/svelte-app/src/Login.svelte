@@ -22,12 +22,12 @@
     const auth = getAuth(app);
 
     // State variables
-    let email = '';
-    let password = '';
-    let isLoggedIn = false;
-    let user = null;
-    let errorMessage = '';
-    let resetMessage = '';
+    let email = $state('');
+    let password = $state('');
+    let isLoggedIn = $state(false);
+    let user = $state(null);
+    let errorMessage = $state('');
+    let resetMessage = $state('');
 
     // Function to register
     async function register() {
@@ -127,15 +127,15 @@
             <h3>Register</h3>
             <input type="email" placeholder="Email (must end with @siue.edu)" bind:value={email} />
             <input type="password" placeholder="Password" bind:value={password} />
-            <button on:click={register}>Register</button>
+            <button onclick={register}>Register</button>
 
             <!-- Login Form -->
             <h3>Login</h3>
             <input type="email" placeholder="Email" bind:value={email} />
             <input type="password" placeholder="Password" bind:value={password} />
             <div class="button-group">
-                <button on:click={login}>Login</button>
-                <button on:click={resetPassword} class="forgot-password-button">Forgot Password?</button>
+                <button onclick={login}>Login</button>
+                <button onclick={resetPassword} class="forgot-password-button">Forgot Password?</button>
             </div>
 
             <!-- Reset message -->
@@ -146,7 +146,7 @@
     {:else}
         <div class="logged-in">
             <h1>Welcome, {user.email}!</h1>
-            <button on:click={logout}>Return to Sign In</button>
+            <button onclick={logout}>Return to Sign In</button>
         </div>
     {/if}
 </div>

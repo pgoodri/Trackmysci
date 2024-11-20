@@ -2,7 +2,7 @@
     import { onMount } from 'svelte';
     import { userStore } from './userStore';
 
-    let literatureList = []; // Will receive literature data from navigation or store
+    let literatureList = $state([]); // Will receive literature data from navigation or store
 
     onMount(() => {
         const storedData = localStorage.getItem('literatureList');
@@ -24,7 +24,7 @@
     {:else}
         {#each literatureList as lit (lit.isbn)}
             <div class="literature-entry">
-                <button class="remove-btn" on:click={() => removeLiterature(lit.isbn)}>✕</button>
+                <button class="remove-btn" onclick={() => removeLiterature(lit.isbn)}>✕</button>
                 <strong>{lit.title}</strong> by {lit.author} <br />
                 <em>ISBN: {lit.isbn}</em> <br />
                 <p>{lit.comment}</p>
