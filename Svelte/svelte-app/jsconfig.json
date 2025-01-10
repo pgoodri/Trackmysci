@@ -4,5 +4,5 @@
       "$lib/*": ["./src/lib/*"]
      }
     },
-    "exclude": ["node_modules", "dist", ".svelte-kit", "build"]
+    "exclude": ["node_modules", "dist", ".svelte-kit", "build", ".vite"]
    }
