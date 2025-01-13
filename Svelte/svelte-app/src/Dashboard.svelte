@@ -8,7 +8,39 @@
     import { Progress } from "$lib/components/ui/progress"
     import * as Popover from "$lib/components/ui/popover"
     import * as Dialog from "$lib/components/ui/dialog"
+    import { doc, getDoc } from 'firebase/firestore';
+    import { db } from './firebase';
 
+    let user = null;
+    let firstName = "";
+    let isLoading = true;
+
+    // Subscribe to the user store to get the logged-in user
+    $: userStore.subscribe((value) => {
+        user = value;
+        if (user) {
+        fetchUserData(user.uid);
+        }
+    });
+
+    // Fetch the user's Firestore document
+    async function fetchUserData(userId) {
+        try {
+        const docRef = doc(db, "users", userId); // Path to the user's document
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+            const userData = docSnap.data();
+            firstName = userData.firstName || "Guest"; // Use "Guest" as fallback
+        } else {
+            console.error("No such document!");
+        }
+        } catch (error) {
+        console.error("Error fetching user data:", error);
+        } finally {
+        isLoading = false;
+        }
+    }
+  
     // Literature management variables
     let searchQuery = "";
     let title = "";
@@ -22,6 +54,22 @@
     let showResults = false;
     let tagInput = ""; // Input for new tag
     let tags = []; // Array of added tags
+
+    async function savePublicationToFirestore(publication) {
+    if (!user) {
+        alert("You must be logged in to save publications.");
+        return;
+    }
+
+    try {
+        const userPublicationsRef = collection(db, "users", user.uid, "publications");
+        await addDoc(userPublicationsRef, publication);
+        alert("Publication saved successfully!");
+    } catch (error) {
+        console.error("Error saving publication:", error);
+        alert("Failed to save publication. Please try again.");
+    }
+    }
 
     // Add a tag
     function addTag() {
@@ -37,11 +85,6 @@
     }
 
     let open = false;
-
-    let user;
-    userStore.subscribe((value) => {
-        user = value;
-    });
 
     // Modal states
     let modalOpen = false;
@@ -177,28 +220,34 @@
     }
 
     function addLiteratureToLibrary() {
-        if (title && author && isbn && pageStart && pageEnd && pageEnd >= pageStart) {
-            const newEntry = {
-                title,
-                author,
-                isbn,
-                pageStart,
-                pageEnd,
-                currentPage: pageStart,
-                comment,
-                tags,
-                journalLogs: [],
-            };
-            resetFields(); // Clear fields after adding
-            open = false; // Close the dialog after adding  
-            literatureList = [newEntry, ...literatureList];
-            saveToLocalStorage();
+  if (title && author && isbn && pageStart && pageEnd && pageEnd >= pageStart) {
+    const newEntry = {
+      title,
+      author,
+      isbn,
+      pageStart,
+      pageEnd,
+      currentPage: pageStart,
+      comment,
+      tags,
+      journalLogs: [],
+      createdAt: new Date().toISOString(), // Optional: Add a timestamp
+    };
 
-            trackingPageOpen = true; // Move to tracking step
-        } else {
-            alert("Please fill in all required fields before adding.");
-        }
-    }
+    // Save the publication to Firestore
+    savePublicationToFirestore(newEntry);
+
+    resetFields(); // Clear fields after adding
+    open = false; // Close the dialog after adding  
+    literatureList = [newEntry, ...literatureList];
+    saveToLocalStorage();
+
+    trackingPageOpen = true; // Move to tracking step
+  } else {
+    alert("Please fill in all required fields before adding.");
+  }
+}
+
 
     function logout() {
         const auth = getAuth();
@@ -242,7 +291,7 @@
     <!-- Welcome Message -->
     <div class="pt-12 px-12">
         <h2 class="text-4xl font-bold text-neutral-800">
-            Welcome, {user?.displayName?.split(" ")[0] || "Guest"} 👋
+            Welcome, {firstName} 👋
         </h2>
     </div>
 
