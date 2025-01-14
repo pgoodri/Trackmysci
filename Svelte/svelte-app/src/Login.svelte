@@ -1,6 +1,7 @@
 <script>
     import { initializeApp } from "firebase/app";
     import {getAuth,signInWithEmailAndPassword,sendPasswordResetEmail,} from "firebase/auth";
+    import { getFirestore, doc, getDoc } from "firebase/firestore"; // Import Firestore functions
     import { navigate } from "svelte-routing";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
@@ -19,6 +20,7 @@
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const db = getFirestore(app); // Initialize Firestore
 
     // State variables
     let email = "";
@@ -36,6 +38,18 @@
 
         try {
             const result = await signInWithEmailAndPassword(auth, email, password);
+
+            // Fetch additional user data from Firestore after successful login
+            const userDocRef = doc(db, "users", result.user.uid); // Assuming a "users" collection in Firestore
+            const userDoc = await getDoc(userDocRef);
+
+            if (userDoc.exists()) {
+                // Optionally, store user data in a store or pass it directly to the dashboard
+                console.log("User data:", userDoc.data());
+            } else {
+                console.log("No such user data in Firestore.");
+            }
+
             navigate("/dashboard");
         } catch (error) {
             console.error("Login error:", error.message);

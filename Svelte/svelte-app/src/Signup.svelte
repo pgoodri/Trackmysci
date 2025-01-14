@@ -6,6 +6,7 @@
     import { Input } from "$lib/components/ui/input/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
+    import { getFirestore, doc, setDoc } from "firebase/firestore";
 
     // Firebase Configuration
     const firebaseConfig = {
@@ -18,9 +19,10 @@
         measurementId: "G-6JR45C2DBF",
     };
 
-    // Initialize Firebase
+    // Initialize Firebase and Firestore
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const firestore = getFirestore(app);
 
     // Form State
     let firstName = "";
@@ -54,6 +56,13 @@
             await updateProfile(result.user, {
                 displayName: `${firstName} ${lastName}`,
             });
+
+            // Store additional user data in Firestore 
+            await setDoc(doc(firestore, "users", result.user.uid), {
+                firstName: firstName,
+                lastName: lastName,
+                email: email,
+            })
 
             // Send a verification email
             await sendEmailVerification(result.user);

@@ -8,6 +8,11 @@
     import { Progress } from "$lib/components/ui/progress"
     import * as Popover from "$lib/components/ui/popover"
     import * as Dialog from "$lib/components/ui/dialog"
+    import { getFirestore, doc, getDoc } from "firebase/firestore";
+
+    // Firebase and Firestore initialization
+    const auth = getAuth();
+    const firestore = getFirestore();
 
     // Literature management variables
     let searchQuery = "";
@@ -22,6 +27,21 @@
     let showResults = false;
     let tagInput = ""; // Input for new tag
     let tags = []; // Array of added tags
+
+    let firstName = "";
+    let lastName = "";
+    let errorMessage = "";
+
+    // Get user data from Firestore
+    async function getUserData() {
+        const user = auth.currentUser;
+        if(!user) {
+            naviagte("/lo   gin");
+            return;
+        }
+
+        // CURRENTLY WORKING HERE.
+    }
 
     // Add a tag
     function addTag() {
