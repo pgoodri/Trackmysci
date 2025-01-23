@@ -5,12 +5,6 @@
 
     let literatureList = [];
 
-    // Load literature list from localStorage on mount
-    onMount(() => {
-        const storedData = localStorage.getItem('literatureList');
-        literatureList = storedData ? JSON.parse(storedData) : [];
-    });
-
     // Function to remove literature by ISBN (or other unique identifier)
     function removeLiterature(isbn) {
         literatureList = literatureList.filter(item => item.isbn !== isbn);
