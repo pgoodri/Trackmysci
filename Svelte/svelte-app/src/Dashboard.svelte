@@ -8,11 +8,8 @@
     import { Progress } from "$lib/components/ui/progress"
     import * as Popover from "$lib/components/ui/popover"
     import * as Dialog from "$lib/components/ui/dialog"
-    import { getFirestore, doc, getDoc } from "firebase/firestore";
-
-    // Firebase and Firestore initialization
-    const auth = getAuth();
-    const firestore = getFirestore();
+    import { getFirestore, doc, getDoc, setDoc, collection, addDoc } from "firebase/firestore";
+    import { onAuthStateChanged } from "firebase/auth";
 
     // Literature management variables
     let searchQuery = "";
@@ -28,20 +25,50 @@
     let tagInput = ""; // Input for new tag
     let tags = []; // Array of added tags
 
-    let firstName = "";
+    let firstName = "Guest";
     let lastName = "";
     let errorMessage = "";
 
-    // Get user data from Firestore
-    async function getUserData() {
-        const user = auth.currentUser;
-        if(!user) {
-            naviagte("/lo   gin");
-            return;
-        }
+    // Firebase and Firestore initialization
+    const auth = getAuth();
+    const firestore = getFirestore();
 
-        // CURRENTLY WORKING HERE.
+    // Get user data from Firestore
+    async function fetchUserData() {
+    const user = auth.currentUser;
+    if (!user) {
+        console.error("No authenticated user found.");
+        return;
     }
+
+    try {
+        // Fetch the user's Firestore document
+        const userDoc = await getDoc(doc(firestore, "users", user.uid));
+        if (userDoc.exists()) {
+            const userData = userDoc.data();
+            firstName = userData.firstName || "Guest";
+            lastName = userData.lastName || "";
+        } else {
+            console.warn("User document not found in Firestore.");
+        }
+    } catch (error) {
+        console.error("Error fetching user data:", error.message);
+    }
+    }
+
+    onAuthStateChanged(auth, (user) => {
+        if (user) {
+            fetchUserData();
+        } else {
+            console.warn("No user is currently authenticated.");
+        }
+    });
+
+    // Call function to get user data when the component is mounted
+    import { onMount } from "svelte";
+    onMount(() => {
+        getUserData();
+    });
 
     // Add a tag
     function addTag() {
@@ -262,7 +289,7 @@
     <!-- Welcome Message -->
     <div class="pt-12 px-12">
         <h2 class="text-4xl font-bold text-neutral-800">
-            Welcome, {user?.displayName?.split(" ")[0] || "Guest"} 👋
+            Welcome, {firstName} 👋
         </h2>
     </div>
 
