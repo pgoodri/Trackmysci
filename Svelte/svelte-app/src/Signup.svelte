@@ -64,6 +64,14 @@
                 email: email,
             })
 
+            // Create an initial document inside the "notes" sub-collection
+            const userNotesRef = doc(collection(firestore, "users", userId, "notes")); // Reference to sub-collection
+            await setDoc(userNotesRef, {
+                title: "Welcome Note",
+                content: "This is your first note!",
+                createdAt: new Date(),
+            });
+
             // Send a verification email
             await sendEmailVerification(result.user);
 

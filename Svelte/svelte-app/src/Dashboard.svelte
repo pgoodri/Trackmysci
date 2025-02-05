@@ -35,25 +35,25 @@
 
     // Get user data from Firestore
     async function fetchUserData() {
-    const user = auth.currentUser;
-    if (!user) {
-        console.error("No authenticated user found.");
-        return;
-    }
-
-    try {
-        // Fetch the user's Firestore document
-        const userDoc = await getDoc(doc(firestore, "users", user.uid));
-        if (userDoc.exists()) {
-            const userData = userDoc.data();
-            firstName = userData.firstName || "Guest";
-            lastName = userData.lastName || "";
-        } else {
-            console.warn("User document not found in Firestore.");
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
         }
-    } catch (error) {
-        console.error("Error fetching user data:", error.message);
-    }
+
+        try {
+            // Fetch the user's Firestore document
+            const userDoc = await getDoc(doc(firestore, "users", user.uid));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                firstName = userData.firstName || "Guest";
+                lastName = userData.lastName || "";
+            } else {
+                console.warn("User document not found in Firestore.");
+            }
+        } catch (error) {
+            console.error("Error fetching user data:", error.message);
+        }
     }
 
     onAuthStateChanged(auth, (user) => {

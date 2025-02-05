@@ -38,14 +38,17 @@
 
         try {
             const result = await signInWithEmailAndPassword(auth, email, password);
+            const userID = result.user.uid;
 
             // Fetch additional user data from Firestore after successful login
-            const userDocRef = doc(db, "users", result.user.uid); // Assuming a "users" collection in Firestore
+            const userDocRef = doc(db, "users", userID); // Assuming a "users" collection in Firestore
             const userDoc = await getDoc(userDocRef);
 
             if (userDoc.exists()) {
                 // Optionally, store user data in a store or pass it directly to the dashboard
                 console.log("User data:", userDoc.data());
+
+                
             } else {
                 console.log("No such user data in Firestore.");
             }
