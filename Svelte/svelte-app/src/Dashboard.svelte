@@ -162,47 +162,100 @@
     }
 
     async function fetchISBN() {
-        try {
-            const response = await fetch(`https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`);
-            const data = await response.json();
+    try {
+        const response = await fetch(
+            `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`
+        );
+        const data = await response.json();
 
-            if (data[`ISBN:${isbn}`]) {
-                const bookData = data[`ISBN:${isbn}`];
-                searchResults = [
-                    {
-                        title: bookData.title || "Unknown Title",
-                        author: bookData.authors ? bookData.authors.map((a) => a.name).join(", ") : "Unknown Author",
-                        isbn: isbn,
-                    },
-                ];
-            } else {
-                searchResults = [];
-            }
-        } catch (error) {
-            console.error("Error fetching ISBN data:", error);
-            alert("Failed to retrieve ISBN information.");
+        console.log("Raw API Response:", data); 
+
+        if (data[`ISBN:${isbn}`]) {
+            const bookData = data[`ISBN:${isbn}`];
+
+            console.log("Book Data:", bookData); 
+
+            searchResults = [
+                {
+                    title: bookData.title || "Unknown Title",
+                    author: bookData.authors
+                        ? bookData.authors.map((a) => a.name).join(", ")
+                        : "Unknown Author",
+                    isbn: isbn,
+                },
+            ];
+        } else {
+            console.warn("No ISBN data found in response.");
+            searchResults = [];
         }
+    } catch (error) {
+        console.error("Error fetching ISBN data:", error);
+        alert("Failed to retrieve ISBN information.");
     }
+}
 
-    async function fetchTitle() {
-        try {
-            const response = await fetch(`https://openlibrary.org/search.json?title=${encodeURIComponent(title)}`);
-            const data = await response.json();
 
-            if (data.docs && data.docs.length > 0) {
-                searchResults = data.docs.slice(0, 10).map((doc) => ({
-                    title: doc.title || "Unknown Title",
-                    author: doc.author_name ? doc.author_name.join(", ") : "Unknown Author",
-                    isbn: doc.isbn ? doc.isbn[0] : "No ISBN",
-                }));
-            } else {
-                searchResults = [];
-            }
-        } catch (error) {
-            console.error("Error fetching title data:", error);
-            alert("Failed to retrieve title information.");
+async function fetchTitle() {
+    try {
+        console.log("Fetching Title:", title);
+
+        const response = await fetch(
+            `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}`
+        );
+        const data = await response.json();
+
+        console.log("Full API Response:", data);
+
+        if (data.docs && data.docs.length > 0) {
+            searchResults = await Promise.all(
+                data.docs.slice(0, 10).map(async (doc) => {
+                    console.log("Processing book:", doc);
+
+                    let isbn = doc.isbn ? doc.isbn[0] : null;
+
+                    // If no ISBN, try fetching editions to get ISBN
+                    if (!isbn && doc.key) {
+                        isbn = await fetchISBNFromEditions(doc.key);
+                    }
+
+                    return {
+                        title: doc.title || "Unknown Title",
+                        author: doc.author_name ? doc.author_name.join(", ") : "Unknown Author",
+                        isbn: isbn || "No ISBN",
+                    };
+                })
+            );
+
+            console.log("Final Search Results:", searchResults);
+        } else {
+            console.warn("No title data found.");
+            searchResults = [];
         }
+    } catch (error) {
+        console.error("Error fetching title data:", error);
+        alert("Failed to retrieve title information.");
     }
+}
+
+// Fetch ISBN from Editions API if missing
+async function fetchISBNFromEditions(workKey) {
+    try {
+        console.log("Fetching ISBN from editions:", workKey);
+        
+        const response = await fetch(`https://openlibrary.org${workKey}/editions.json`);
+        const data = await response.json();
+
+        console.log("Editions Data:", data);
+
+        // Extract ISBN from the first edition
+        return data.entries?.[0]?.isbn_13?.[0] ||
+               data.entries?.[0]?.isbn_10?.[0] ||
+               null;
+    } catch (error) {
+        console.error("Error fetching ISBN from editions:", error);
+        return null;
+    }
+}
 
     function selectResult(result) {
         title = result.title;
