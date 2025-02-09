@@ -11,6 +11,10 @@
     import { auth, firestore } from "./firebase";
     import { signOut } from "firebase/auth";
     import { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, updateDoc } from "firebase/firestore";
+    import SimpleChart from "./SimpleChart.svelte";
+    import Chart from "chart.js/auto";
+    import { onMount } from "svelte";
+
 
 
     // Literature management variables
@@ -552,6 +556,55 @@
             navigate("/login");
         });
     }
+
+//     onMount(() => {
+//     const pieData = {
+//       labels: ['Fiction', 'Non-Fiction', 'Science', 'History', 'Fantasy'],
+//       datasets: [{
+//         data: [25, 30, 15, 10, 20],
+//         backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'],
+//       }],
+//     };
+
+//     const doughnutData = {
+//       labels: ['Read', 'Remaining'],
+//       datasets: [{
+//         data: [60, 40],
+//         backgroundColor: ['#36A2EB', '#CCCCCC'],
+//       }],
+//     };
+
+//     const lineData = {
+//       labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+//       datasets: [{
+//         label: 'Pages Read',
+//         data: [10, 50, 30, 70, 90, 40, 80],
+//         borderColor: '#4BC0C0',
+//         fill: false,
+//       }],
+//     };
+
+//     // Pie chart
+//     const pieCtx = document.getElementById('pieChart').getContext('2d');
+//     new Chart(pieCtx, {
+//       type: 'pie',
+//       data: pieData,
+//     });
+
+//     // Doughnut chart
+//     const doughnutCtx = document.getElementById('doughnutChart').getContext('2d');
+//     new Chart(doughnutCtx, {
+//       type: 'doughnut',
+//       data: doughnutData,
+//     });
+
+//     // Line chart
+//     const lineCtx = document.getElementById('lineChart').getContext('2d');
+//     new Chart(lineCtx, {
+//       type: 'line',
+//       data: lineData,
+//     });
+//   });
 </script>
 
 {#if !authReady}
@@ -794,25 +847,25 @@
                 <h2 class="text-xl font-semibold mb-4 text-neutral-700">Analytics</h2>
                 <div class="space-y-6">
                     <!-- Placeholder Card 1 -->
-                    <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
+                    <!-- <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
                         <div class="h-40 rounded flex items-center justify-center">
                             <span class="text-neutral-400">Placeholder for Graph 1</span>
                         </div>
-                    </div>
+                    </div> -->
                     <!-- Placeholder Card 2 -->
-                    <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
+                    <!-- <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
                         <div class="h-40  rounded flex items-center justify-center">
                             <span class="text-neutral-400">Placeholder for Graph 2</span>
                         </div>
-                    </div>
+                    </div> -->
                     <!-- Placeholder Card 3 -->
-                    <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
+                    <!-- <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
                         <div class="h-40 rounded flex items-center justify-center">
                             <span class="text-neutral-400">Placeholder for Graph 3</span>
                         </div>
-                    </div>
+                    </div>  -->
                     
-                    <div class="chart-container" style="width: 30%; margin: 10px; display: inline-block;">
+                    <!-- <div class="chart-container" style="width: 30%; margin: 10px; display: inline-block;">
                         <h3 class="chart-title">Genre Distribution</h3>
                         <canvas id="pieChart"></canvas>
                     </div>
@@ -823,7 +876,8 @@
                     <div class="chart-container" style="width: 60%; margin: 10px; display: inline-block;">
                         <h3 class="chart-title">Reading Activity</h3>
                         <canvas id="lineChart"></canvas>
-                    </div>
+                    </div> -->
+                    <SimpleChart />
                 </div>
             </section>
         </div>
@@ -935,3 +989,17 @@
         {/if}
     </div>
 {/if}
+
+<style>        
+.chart-container {
+    padding: 20px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.chart-title {
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+</style>
