@@ -1,7 +1,7 @@
 <script>
-    import { onMount } from 'svelte';
     import { Button } from "$lib/components/ui/button";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+    import { auth, firestore } from "./firebase";
 
     let literatureList = [];
 
