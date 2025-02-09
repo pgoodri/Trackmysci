@@ -811,6 +811,19 @@
                             <span class="text-neutral-400">Placeholder for Graph 3</span>
                         </div>
                     </div>
+                    
+                    <div class="chart-container" style="width: 30%; margin: 10px; display: inline-block;">
+                        <h3 class="chart-title">Genre Distribution</h3>
+                        <canvas id="pieChart"></canvas>
+                    </div>
+                    <div class="chart-container" style="width: 30%; margin: 10px; display: inline-block;">
+                        <h3 class="chart-title">Reading Progress</h3>
+                        <canvas id="doughnutChart"></canvas>
+                    </div>
+                    <div class="chart-container" style="width: 60%; margin: 10px; display: inline-block;">
+                        <h3 class="chart-title">Reading Activity</h3>
+                        <canvas id="lineChart"></canvas>
+                    </div>
                 </div>
             </section>
         </div>
