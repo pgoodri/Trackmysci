@@ -557,6 +557,34 @@
         });
     }
 
+    function handleSelection(value) {
+        switch (value) {
+            case "option1":
+                functionOne();
+                break;
+            case "option2":
+                functionTwo();
+                break;
+            case "option3":
+                functionThree();
+                break;
+            default:
+                console.log("No valid option selected");
+        }
+    }
+
+    function functionOne() {
+        console.log("Function One executed");
+    }
+
+    function functionTwo() {
+        console.log("Function Two executed");
+    }
+
+    function functionThree() {
+        console.log("Function Three executed");
+    }
+
 //     onMount(() => {
 //     const pieData = {
 //       labels: ['Fiction', 'Non-Fiction', 'Science', 'History', 'Fantasy'],
@@ -845,39 +873,17 @@
             </section>
             <section class="w-1/2 py-12 pl-6 pr-12">
                 <h2 class="text-xl font-semibold mb-4 text-neutral-700">Analytics</h2>
-                <div class="space-y-6">
-                    <!-- Placeholder Card 1 -->
-                    <!-- <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
-                        <div class="h-40 rounded flex items-center justify-center">
-                            <span class="text-neutral-400">Placeholder for Graph 1</span>
-                        </div>
-                    </div> -->
-                    <!-- Placeholder Card 2 -->
-                    <!-- <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
-                        <div class="h-40  rounded flex items-center justify-center">
-                            <span class="text-neutral-400">Placeholder for Graph 2</span>
-                        </div>
-                    </div> -->
-                    <!-- Placeholder Card 3 -->
-                    <!-- <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
-                        <div class="h-40 rounded flex items-center justify-center">
-                            <span class="text-neutral-400">Placeholder for Graph 3</span>
-                        </div>
-                    </div>  -->
+                <!-- <div class="space-y-6">
                     
-                    <!-- <div class="chart-container" style="width: 30%; margin: 10px; display: inline-block;">
-                        <h3 class="chart-title">Genre Distribution</h3>
-                        <canvas id="pieChart"></canvas>
-                    </div>
-                    <div class="chart-container" style="width: 30%; margin: 10px; display: inline-block;">
-                        <h3 class="chart-title">Reading Progress</h3>
-                        <canvas id="doughnutChart"></canvas>
-                    </div>
-                    <div class="chart-container" style="width: 60%; margin: 10px; display: inline-block;">
-                        <h3 class="chart-title">Reading Activity</h3>
-                        <canvas id="lineChart"></canvas>
-                    </div> -->
                     <SimpleChart />
+                </div> -->
+                <div id="dropdown-container">
+                    <select id="dropdown" onchange="handleSelection(this.value)">
+                        <option value="">Select an option</option>
+                        <option value="option1">Option 1</option>
+                        <option value="option2">Option 2</option>
+                        <option value="option3">Option 3</option>
+                    </select>
                 </div>
             </section>
         </div>
