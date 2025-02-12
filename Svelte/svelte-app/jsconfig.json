@@ -1,8 +1,8 @@
 {
-    "compilerOptions": {
-     "paths": {
+  "compilerOptions": {
+    "paths": {
       "$lib/*": ["./src/lib/*"]
-     }
-    },
-    "exclude": ["node_modules", "dist", ".svelte-kit", "build", ".vite"]
-   }
+    }
+  },
+  "exclude": ["node_modules", "dist", ".svelte-kit", "build", ".vite"]
+}

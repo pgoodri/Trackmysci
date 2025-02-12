@@ -1,28 +1,12 @@
 <script>
-    import { initializeApp } from "firebase/app";
-    import { getAuth, createUserWithEmailAndPassword, sendEmailVerification, updateProfile, signOut } from "firebase/auth";
+    import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, signOut } from "firebase/auth";
     import { navigate } from "svelte-routing";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
     import * as Dialog from "$lib/components/ui/dialog/index.js";
-    import { getFirestore, doc, setDoc } from "firebase/firestore";
-
-    // Firebase Configuration
-    const firebaseConfig = {
-        apiKey: "AIzaSyCHdf8tVDVOtTazjvC0h1PyKwqNifWfqww",
-        authDomain: "trackmysci.firebaseapp.com",
-        projectId: "trackmysci",
-        storageBucket: "trackmysci.appspot.com",
-        messagingSenderId: "94634841161",
-        appId: "1:94634841161:web:ded58b1dc49db1f1dc1b98",
-        measurementId: "G-6JR45C2DBF",
-    };
-
-    // Initialize Firebase and Firestore
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const firestore = getFirestore(app);
+    import { doc, setDoc } from "firebase/firestore";
+    import { auth, firestore } from "./firebase";
 
     // Form State
     let firstName = "";
@@ -111,6 +95,7 @@
             })
             .catch((error) => console.error("Error signing out:", error.message));
     }
+
 </script>
 
 <div class="flex items-center justify-center min-h-screen bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500">

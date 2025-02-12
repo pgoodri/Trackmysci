@@ -1,6 +1,6 @@
 # TrackMySci
 
-TrackMySci is a web application developed for graduate students at Southern Illinois University Edwardsville (SIUe) to track scientific literature they read. With TrackMySci, students can organize their academic readings by adding summaries, ratings, and tags to each piece of literature. 
+TrackMySci is a web application developed for graduate students at Southern Illinois University Edwardsville (SIUe) to track scientific literature they read. With TrackMySci, students can organize their academic readings by adding summaries, ratings, and tags to each piece of literature.
 
 ## Features
 
@@ -12,22 +12,23 @@ TrackMySci is a web application developed for graduate students at Southern Illi
 ## Getting Started
 
 1. **Clone the repository**:
-    ```bash
-    git clone https://github.com/your-username/TrackMySci.git
-    ```
+   ```bash
+   git clone https://github.com/your-username/TrackMySci.git
+   ```
 2. **Navigate to the project directory**:
-    ```bash
-    cd TrackMySci
-    ```
+   ```bash
+   cd TrackMySci
+   ```
 3. **Install dependencies** (if applicable):
-    ```bash
-    npm install
-    ```
+
+   ```bash
+   npm install
+   ```
 
 4. **Start the application**:
-    ```bash
-    npm run dev
-    ```
+   ```bash
+   npm run dev
+   ```
 
 **This application will be deployed to trackmysci.com**
 

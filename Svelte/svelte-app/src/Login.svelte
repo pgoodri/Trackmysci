@@ -1,26 +1,11 @@
 <script>
-    import { initializeApp } from "firebase/app";
-    import {getAuth,signInWithEmailAndPassword,sendPasswordResetEmail,} from "firebase/auth";
-    import { getFirestore, doc, getDoc } from "firebase/firestore"; // Import Firestore functions
     import { navigate } from "svelte-routing";
     import { Button } from "$lib/components/ui/button/index.js";
     import { Input } from "$lib/components/ui/input/index.js";
     import { Label } from "$lib/components/ui/label/index.js";
-
-    // Firebase Configuration
-    const firebaseConfig = {
-        apiKey: "AIzaSyCHdf8tVDVOtTazjvC0h1PyKwqNifWfqww",
-        authDomain: "trackmysci.firebaseapp.com",
-        projectId: "trackmysci",
-        storageBucket: "trackmysci.appspot.com",
-        messagingSenderId: "94634841161",
-        appId: "1:94634841161:web:ded58b1dc49db1f1dc1b98",
-        measurementId: "G-6JR45C2DBF",
-    };
-
-    const app = initializeApp(firebaseConfig);
-    const auth = getAuth(app);
-    const db = getFirestore(app); // Initialize Firestore
+    import { auth, firestore } from "./firebase";
+    import { signInWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
+    import { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs } from "firebase/firestore";
 
     // State variables
     let email = "";
@@ -40,7 +25,7 @@
             const result = await signInWithEmailAndPassword(auth, email, password);
 
             // Fetch additional user data from Firestore after successful login
-            const userDocRef = doc(db, "users", result.user.uid); // Assuming a "users" collection in Firestore
+            const userDocRef = doc(firestore, "users", result.user.uid); // Assuming a "users" collection in Firestore
             const userDoc = await getDoc(userDocRef);
 
             if (userDoc.exists()) {

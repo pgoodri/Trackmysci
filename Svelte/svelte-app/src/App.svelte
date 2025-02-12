@@ -7,11 +7,8 @@
     import Signup from './Signup.svelte';
     import { initializeApp } from 'firebase/app';
     import { onMount } from 'svelte';
+    import { auth, firestore } from "./firebase";
     
-    // Redirect to `/login` on initial load
-    onMount(() => {
-        navigate('/login');
-    });
 </script>
 
 
