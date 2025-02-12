@@ -11,6 +11,8 @@
     import { auth, firestore } from "./firebase";
     import { signOut } from "firebase/auth";
     import { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, updateDoc } from "firebase/firestore";
+    import { MoreVertical, Edit, Trash2, BookOpen, Check } from "lucide-svelte";
+
 
     let newCurrentPage = 0; // Local variable for tracking input page
     let progressComment = ""; // Local variable for comment
@@ -605,7 +607,7 @@
                 <DropdownMenu.Root>
                     <DropdownMenu.Trigger>
                         <button class="border border-neutral-300 py-2 px-4 shadow-sm text-base font-medium rounded hover:bg-neutral-100 flex items-center gap-x-5">
-                            {user?.displayName || "User"}
+                            {firstName + " " + lastName}
                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-neutral-500">
                                 <path fill-rule="evenodd" d="M11.47 4.72a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1-1.06 1.06L12 6.31 8.78 9.53a.75.75 0 0 1-1.06-1.06l3.75-3.75Zm-3.75 9.75a.75.75 0 0 1 1.06 0L12 17.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-3.75 3.75a.75.75 0 0 1-1.06 0l-3.75-3.75a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
                             </svg>
