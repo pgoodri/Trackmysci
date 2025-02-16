@@ -14,6 +14,10 @@
     import SimpleChart from "./SimpleChart.svelte";
     import Chart from "chart.js/auto";
     import { onMount } from "svelte";
+    import TagsChart from "./TagsChart.svelte";
+    import RatingsChart from "./RatingsChart.svelte";
+    import ProgressChart from "./ProgressChart.svelte";
+    import TimelineChart from "./TimelineChart.svelte";
 
 
 
@@ -557,33 +561,36 @@
         });
     }
 
-    function handleSelection(value) {
-        switch (value) {
+    let selectedComponent = TagsChart;
+
+    function handleSelection(event) {
+        const value = event.target.value;
+        console.log("Selected Value:", value);
+
+        switch (value.trim()) {
             case "option1":
-                functionOne();
+                selectedComponent = TagsChart;
                 break;
             case "option2":
-                functionTwo();
-                break;
-            case "option3":
-                functionThree();
+                selectedComponent = RatingsChart; // Replace with another component if needed
                 break;
             default:
                 console.log("No valid option selected");
+                selectedComponent = null;
         }
     }
 
-    function functionOne() {
-        console.log("Function One executed");
-    }
+    // function functionOne() {
+    //     <SimpleChart />
+    // }
 
-    function functionTwo() {
-        console.log("Function Two executed");
-    }
+    // function functionTwo() {
+    //     console.log("Function Two executed");
+    // }
 
-    function functionThree() {
-        console.log("Function Three executed");
-    }
+    // function functionThree() {
+    //     console.log("Function Three executed");
+    // }
 
 //     onMount(() => {
 //     const pieData = {
@@ -877,13 +884,18 @@
                     
                     <SimpleChart />
                 </div> -->
-                <div id="dropdown-container">
-                    <select id="dropdown" onchange="handleSelection(this.value)">
-                        <option value="">Select an option</option>
-                        <option value="option1">Option 1</option>
-                        <option value="option2">Option 2</option>
-                        <option value="option3">Option 3</option>
-                    </select>
+                <div class="chart-container">
+                    <div id="dropdown-container">
+                        <select id="dropdown" on:change={handleSelection}>
+                            <option value="option1">Tags</option>
+                            <option value="option2">Ratings</option>
+                        </select>
+                        {#if selectedComponent}
+                            <svelte:component this={selectedComponent} />
+                        {/if}
+                    </div>
+                    <ProgressChart />
+                    <TimelineChart />
                 </div>
             </section>
         </div>
@@ -1009,3 +1021,4 @@
     margin-bottom: 15px;
 }
 </style>
+
