@@ -12,7 +12,6 @@
     import { signOut } from "firebase/auth";
     import { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, updateDoc } from "firebase/firestore";
     import { MoreVertical, Edit, Trash2, BookOpen, Check, FilePlus2, Gauge, Library, LogOut, SquarePen} from "lucide-svelte";
-    import Navbar from "$lib/components/navbar/Navbar.svelte";
 
 
     let newCurrentPage = 0; // Local variable for tracking input page
