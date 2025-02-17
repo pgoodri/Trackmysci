@@ -11,7 +11,8 @@
     import { auth, firestore } from "./firebase";
     import { signOut } from "firebase/auth";
     import { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, updateDoc } from "firebase/firestore";
-    import { MoreVertical, Edit, Trash2, BookOpen, Check } from "lucide-svelte";
+    import { MoreVertical, Edit, Trash2, BookOpen, Check, FilePlus2, Gauge, Library, LogOut, SquarePen} from "lucide-svelte";
+    import Navbar from "$lib/components/navbar/Navbar.svelte";
 
 
     let newCurrentPage = 0; // Local variable for tracking input page
@@ -615,15 +616,16 @@
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content>
                         <DropdownMenu.Group>
-                            <DropdownMenu.Item on:click={() => navigate("/dashboard")} class="text-base">Dashboard</DropdownMenu.Item>
-                            <DropdownMenu.Item on:click={() => navigate("/library")} class="text-base">Library</DropdownMenu.Item>
+                            <DropdownMenu.Item on:click={() => navigate("/dashboard")} class="text-base"> <Gauge class="w-7 pr-1.5"/> Dashboard</DropdownMenu.Item>
+                            <DropdownMenu.Item on:click={() => navigate("/library")} class="text-base"> <Library class="w-7 pr-1.5"/>Library</DropdownMenu.Item>
                             <DropdownMenu.Separator />
-                            <DropdownMenu.Item on:click={logout} class="text-red-500 text-base">Logout</DropdownMenu.Item>
+                            <DropdownMenu.Item on:click={logout} class="text-red-500 text-base"><LogOut class="w-7 pr-1.5 text-red-500"/>Logout</DropdownMenu.Item>
                         </DropdownMenu.Group>
                     </DropdownMenu.Content>
                 </DropdownMenu.Root>
             </div>
         </nav>
+        
 
         <!-- Welcome Message -->
         <div class="pt-12 px-12">
@@ -637,7 +639,7 @@
                     Recently Accessed
                     <Dialog.Root bind:open>
                         <Dialog.Trigger>
-                            <Button class="bg-blue-600 hover:bg-blue-700">+ New publication</Button>
+                            <Button class="bg-blue-600 hover:bg-blue-700"> <FilePlus2 class="w-7 pr-1.5"/> New publication</Button>
                         </Dialog.Trigger>
                         <Dialog.Content class="w-[90%] max-w-4xl">
                             <Dialog.Header>
@@ -667,7 +669,7 @@
 
                                         <!-- Search Results -->
                                         {#if showResults}
-                                            <div class="absolute z-50 mt-2 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2">
+                                            <div class="absolute mt-0.5 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2 bg-white ">
                                                 {#each searchResults as result}
                                                     <button type="button" class="p-3 bg-neutral-100 rounded shadow cursor-pointer hover:bg-neutral-200 text-left w-full"
                                                         on:click={() => selectResult(result)}>
@@ -824,9 +826,9 @@
                                         lit.progressComment = "";
                                         lit.isUpdating = true;  // Open popover
                                     }}>
-                                        <Button class="p-2 bg-gray-700 text-white hover:bg-gray-800">
-                                            Update Progress
-                                        </Button>
+                                        <button class="pt-6 pb-0 mb-0 bg-transparent text-neutral-900 hover:text-neutral-500 transition-all">
+                                            <SquarePen/>
+                                        </button>
                                     </Popover.Trigger>
                     
                                     <Popover.Content class="p-4 bg-white shadow-lg border rounded-md w-64">

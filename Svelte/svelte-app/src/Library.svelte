@@ -1,53 +1,53 @@
 <script>
+    import { navigate } from "svelte-routing";
+    import { auth } from "./firebase";
+    import { signOut } from "firebase/auth";
+    import { userStore } from "./userStore";
     import { Button } from "$lib/components/ui/button";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-    import { auth, firestore } from "./firebase";
+    import { Gauge, Library, LogOut, MoreVertical } from "lucide-svelte";
 
-    let literatureList = [];
+    let firstName = "Guest";
+    let lastName = "";
+    let user;
 
-    // Function to remove literature by ISBN (or other unique identifier)
-    function removeLiterature(isbn) {
-        literatureList = literatureList.filter(item => item.isbn !== isbn);
-        localStorage.setItem('literatureList', JSON.stringify(literatureList));
+    userStore.subscribe((value) => {
+        user = value;
+        if (user) {
+            firstName = user.firstName || "Guest";
+            lastName = user.lastName || "";
+        }
+    });
+
+    function logout() {
+        signOut(auth).then(() => {
+            userStore.set(null);
+            navigate("/login");
+        });
     }
 </script>
+
 
 <nav class="bg-white border-neutral-400 shadow h-16 flex items-center justify-between px-12 sticky top-0 z-50">
     <h1 class="text-lg font-semibold text-neutral-800">TrackMySci</h1>
     <div class="flex items-center space-x-6">
-
+        <DropdownMenu.Root>
+            <DropdownMenu.Trigger>
+                <button class="border border-neutral-300 py-2 px-4 shadow-sm text-base font-medium rounded hover:bg-neutral-100 flex items-center gap-x-5">
+                    {firstName + " " + lastName}
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-neutral-500">
+                        <path fill-rule="evenodd" d="M11.47 4.72a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1-1.06 1.06L12 6.31 8.78 9.53a.75.75 0 0 1-1.06-1.06l3.75-3.75Zm-3.75 9.75a.75.75 0 0 1 1.06 0L12 17.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-3.75 3.75a.75.75 0 0 1-1.06 0l-3.75-3.75a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content>
+                <DropdownMenu.Group>
+                    <DropdownMenu.Item on:click={() => navigate("/dashboard")} class="text-base"> <Gauge class="w-7 pr-1.5"/> Dashboard</DropdownMenu.Item>
+                    <DropdownMenu.Item on:click={() => navigate("/library")} class="text-base"> <Library class="w-7 pr-1.5"/>Library</DropdownMenu.Item>
+                    <DropdownMenu.Separator />
+                    <DropdownMenu.Item on:click={logout} class="text-red-500 text-base"><LogOut class="w-7 pr-1.5 text-red-500"/>Logout</DropdownMenu.Item>
+                </DropdownMenu.Group>
+            </DropdownMenu.Content>
+        </DropdownMenu.Root>
     </div>
 </nav>
-<div class="p-12 bg-neutral-50 min-h-screen">
-    <h1 class="text-4xl font-bold text-neutral-800 mb-6">Your Library</h1>
-
-    {#if literatureList.length === 0}
-    <div class="flex flex-col items-center justify-center text-center text-neutral-500 pt-12">
-        <p class="text-lg font-medium">No literature added yet.</p>
-        <p class="text-sm mt-2">Start by adding a new publication to track your progress!</p>
-    </div>
-    {:else}
-        <div class="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {#each literatureList as lit (lit.isbn)}
-                <div class="relative p-4 bg-white border border-neutral-200 rounded-lg shadow">
-                    <!-- Remove button -->
-                    <button
-                        class="absolute top-3 right-3 text-red-500 hover:text-red-700 focus:outline-none"
-                        onclick={() => removeLiterature(lit.isbn)}
-                        aria-label="Remove"
-                    >
-                        ✕
-                    </button>
-
-                    <!-- Content -->
-                    <h2 class="text-xl font-semibold text-neutral-800">{lit.title}</h2>
-                    <p class="text-neutral-600">by {lit.author}</p>
-                    <p class="text-sm text-neutral-500 italic mt-2">ISBN: {lit.isbn}</p>
-                    {#if lit.comment}
-                        <p class="text-neutral-700 mt-4">{lit.comment}</p>
-                    {/if}
-                </div>
-            {/each}
-        </div>
-    {/if}
-</div>

@@ -33129,15 +33129,13 @@ function Q1(n, e) {
       ge.docs && ge.docs.length > 0
         ? W(
             f,
-            ge.docs
-              .slice(0, 10)
-              .map((pe) => ({
-                title: pe.title || "Unknown Title",
-                author: pe.author_name
-                  ? pe.author_name.join(", ")
-                  : "Unknown Author",
-                isbn: pe.isbn ? pe.isbn[0] : "No ISBN",
-              })),
+            ge.docs.slice(0, 10).map((pe) => ({
+              title: pe.title || "Unknown Title",
+              author: pe.author_name
+                ? pe.author_name.join(", ")
+                : "Unknown Author",
+              isbn: pe.isbn ? pe.isbn[0] : "No ISBN",
+            })),
           )
         : W(f, []);
     } catch (ee) {
