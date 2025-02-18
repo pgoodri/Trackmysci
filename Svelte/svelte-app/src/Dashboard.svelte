@@ -375,110 +375,145 @@
     }
 
     async function fetchISBN() {
-        try {
-            const response = await fetch(
-                `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`
-            );
-            const data = await response.json();
+    try {
+        console.log("Fetching ISBN:", isbn);
 
-            console.log("Raw API Response:", data); 
+        const response = await fetch(
+            `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`
+        );
+        const data = await response.json();
 
-            if (data[`ISBN:${isbn}`]) {
-                const bookData = data[`ISBN:${isbn}`];
+        console.log("Raw API Response:", data); // Log full response for debugging
 
-                console.log("Book Data:", bookData); 
-
-                searchResults = [
-                    {
-                        title: bookData.title || "Unknown Title",
-                        author: bookData.authors
-                            ? bookData.authors.map((a) => a.name).join(", ")
-                            : "Unknown Author",
-                        isbn: isbn,
-                    },
-                ];
-            } else {
-                console.warn("No ISBN data found in response.");
-                searchResults = [];
-            }
-        } catch (error) {
-            console.error("Error fetching ISBN data:", error);
-            alert("Failed to retrieve ISBN information.");
+        if (!data[`ISBN:${isbn}`]) {
+            console.warn("No ISBN data found in response.");
+            searchResults = [];
+            return;
         }
+
+        const bookData = data[`ISBN:${isbn}`];
+        console.log("Book Data:", bookData); // Log extracted book data
+
+        // Extract the number of pages
+        let pageEnd = bookData.number_of_pages || null;
+
+        // If no direct page count, try to extract from "pagination"
+        if (!pageEnd && bookData.pagination) {
+            pageEnd = parseInt(bookData.pagination.replace(/\D/g, ""), 10) || null;
+        }
+
+        searchResults = [
+            {
+                title: bookData.title || "Unknown Title",
+                author: bookData.authors
+                    ? bookData.authors.map((a) => a.name).join(", ")
+                    : "Unknown Author",
+                isbn: isbn,
+                pageEnd: pageEnd || "Unknown Pages" // Store total pages
+            },
+        ];
+
+        console.log("Final Search Result:", searchResults);
+    } catch (error) {
+        console.error("Error fetching ISBN data:", error);
+        alert("Failed to retrieve ISBN information.");
     }
+}
 
     async function fetchTitle() {
-        try {
-            console.log("Fetching Title:", title);
+    try {
+        console.log("Fetching Title:", title);
 
-            const response = await fetch(
-                `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}`
-            );
-            const data = await response.json();
+        const response = await fetch(
+            `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}`
+        );
+        const data = await response.json();
 
-            console.log("Full API Response:", data);
+        console.log("Full API Response:", data); // Log full response
 
-            if (data.docs && data.docs.length > 0) {
-                searchResults = await Promise.all(
-                    data.docs.slice(0, 10).map(async (doc) => {
-                        console.log("Processing book:", doc);
+        if (!data.docs || data.docs.length === 0) {
+            console.warn("No title data found.");
+            searchResults = [];
+            return;
+        }
 
-                        let isbn = doc.isbn ? doc.isbn[0] : null;
+        searchResults = await Promise.all(
+            data.docs.slice(0, 10).map(async (doc) => {
+                console.log("Processing book:", doc);
 
-                        // If no ISBN, try fetching editions to get ISBN
-                        if (!isbn && doc.key) {
-                            isbn = await fetchISBNFromEditions(doc.key);
-                        }
+                let isbn = doc.isbn ? doc.isbn[0] : null;
+                let pageEnd = null;  // This will hold the total page count
 
-                        return {
-                            title: doc.title || "Unknown Title",
-                            author: doc.author_name ? doc.author_name.join(", ") : "Unknown Author",
-                            isbn: isbn || "No ISBN",
-                        };
-                    })
-                );
+                // If no ISBN, fetch from editions
+                if (!isbn && doc.key) {
+                    const editionData = await fetchISBNFromEditions(doc.key);
+                    isbn = editionData?.isbn || null;
+                    pageEnd = editionData?.pageCount || null;
+                }
 
-                console.log("Final Search Results:", searchResults);
-            } else {
-                console.warn("No title data found.");
-                searchResults = [];
+                return {
+                    title: doc.title || "Unknown Title",
+                    author: doc.author_name ? doc.author_name.join(", ") : "Unknown Author",
+                    isbn: isbn || "No ISBN",
+                    pageEnd: pageEnd || "Unknown Pages" // Store page count
+                };
+            })
+        );
+
+        console.log("Final Search Results:", searchResults);
+    } catch (error) {
+        console.error("Error fetching title data:", error);
+        alert("Failed to retrieve title information.");
+    }
+}
+
+
+async function fetchISBNFromEditions(workKey) {
+    try {
+        console.log("Fetching ISBN and page count from editions for:", workKey);
+
+        const response = await fetch(`https://openlibrary.org${workKey}/editions.json`);
+        const data = await response.json();
+
+        console.log("Editions Data:", data);
+
+        if (data.entries && data.entries.length > 0) {
+            for (const entry of data.entries) {
+                let isbn = entry.isbn_10 ? entry.isbn_10[0] : entry.isbn_13 ? entry.isbn_13[0] : null;
+                let pageCount = entry.number_of_pages || null;
+
+                // If `number_of_pages` is missing, try parsing `pagination`
+                if (!pageCount && entry.pagination) {
+                    pageCount = parseInt(entry.pagination.replace(/\D/g, ""), 10) || null;
+                }
+
+                if (isbn || pageCount) {
+                    return { isbn, pageCount };
+                }
             }
-        } catch (error) {
-            console.error("Error fetching title data:", error);
-            alert("Failed to retrieve title information.");
         }
+
+        console.warn("No ISBN or page count found in editions for:", workKey);
+        return { isbn: null, pageCount: null };
+    } catch (error) {
+        console.error("Error fetching ISBN from editions:", error);
+        return { isbn: null, pageCount: null };
     }
+}
 
-    // Fetch ISBN from Editions API if missing
-    async function fetchISBNFromEditions(workKey) {
-        try {
-            console.log("Fetching ISBN from editions:", workKey);
-            
-            const response = await fetch(`https://openlibrary.org${workKey}/editions.json`);
-            const data = await response.json();
 
-            console.log("Editions Data:", data);
+function selectResult(result) {
+    title = result.title;
+    author = result.author;
+    isbn = result.isbn;
+    pageStart = 1;
+    pageEnd = result.pageEnd !== "Unknown Pages" ? result.pageEnd : 1; // Set to 1 if unknown
+    currentPage = 1;
+    showResults = false;
 
-            // Extract ISBN from the first edition
-            return data.entries?.[0]?.isbn_13?.[0] ||
-                data.entries?.[0]?.isbn_10?.[0] ||
-                null;
-        } catch (error) {
-            console.error("Error fetching ISBN from editions:", error);
-            return null;
-        }
-    }
+    console.log(`Selected book: ${title}, ISBN: ${isbn}, Total Pages: ${pageEnd}`);
+}
 
-    function selectResult(result) {
-        title = result.title;
-        author = result.author;
-        isbn = result.isbn;
-        comment = "";
-        pageStart = 1;
-        pageEnd = 1;
-        currentPage = 1;
-        showResults = false;
-    }
 
     function resetFields() {
         searchQuery = title = author = isbn = comment = "";
@@ -668,7 +703,7 @@
 
                                         <!-- Search Results -->
                                         {#if showResults}
-                                            <div class="absolute mt-0.5 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2 bg-white ">
+                                            <div class="absolute mt-0.5 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2 bg-white">
                                                 {#each searchResults as result}
                                                     <button type="button" class="p-3 bg-neutral-100 rounded shadow cursor-pointer hover:bg-neutral-200 text-left w-full"
                                                         on:click={() => selectResult(result)}>
