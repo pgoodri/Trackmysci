@@ -351,28 +351,31 @@
     }
 
     async function fetchDOI() {
-        try {
-            const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(searchQuery)}`);
-            const data = await response.json();
-            if (data.status === "ok") {
-                const fetchedData = data.message;
-                searchResults = [
-                    {
-                        title: fetchedData.title ? fetchedData.title[0] : "Unknown Title",
-                        author: fetchedData.author
-                            ? fetchedData.author.map((a) => `${a.given} ${a.family}`).join(", ")
-                            : "Unknown Author",
-                        isbn: fetchedData.ISBN ? fetchedData.ISBN[0] : "No ISBN",
-                    },
-                ];
-            } else {
-                searchResults = [];
-            }
-        } catch (error) {
-            console.error("Error fetching DOI data:", error);
-            alert("Failed to retrieve DOI information.");
+    try {
+        const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(searchQuery)}`);
+        const data = await response.json();
+        if (data.status === "ok") {
+            const fetchedData = data.message;
+            searchResults = [
+                {
+                    title: fetchedData.title ? fetchedData.title[0] : "Unknown Title",
+                    author: fetchedData.author
+                        ? fetchedData.author.map((a) => `${a.given} ${a.family}`).join(", ")
+                        : "Unknown Author",
+                    isbn: fetchedData.ISBN ? fetchedData.ISBN[0] : null, 
+                    doi: fetchedData.DOI || null, 
+                },
+            ];
+        } else {
+            searchResults = [];
         }
+    } catch (error) {
+        console.error("Error fetching DOI data:", error);
+        alert("Failed to retrieve DOI information.");
     }
+}
+
+
 
     async function fetchISBN() {
     try {
@@ -703,17 +706,26 @@ function selectResult(result) {
 
                                         <!-- Search Results -->
                                         {#if showResults}
-                                            <div class="absolute mt-0.5 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2 bg-white">
-                                                {#each searchResults as result}
-                                                    <button type="button" class="p-3 bg-neutral-100 rounded shadow cursor-pointer hover:bg-neutral-200 text-left w-full"
-                                                        on:click={() => selectResult(result)}>
-                                                        <strong>{result.title}</strong><br />
-                                                        <small>Author: {result.author}</small><br />
+                                        <div class="absolute mt-0.5 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2 bg-white">
+                                            {#each searchResults as result}
+                                                <button type="button" class="p-3 bg-neutral-100 rounded shadow cursor-pointer hover:bg-neutral-200 text-left w-full"
+                                                    on:click={() => selectResult(result)}>
+                                                    <strong>{result.title}</strong><br />
+                                                    <small>Author: {result.author}</small><br />
+                                                    {#if result.isbn && result.isbn !== "No ISBN"}
                                                         <em>ISBN: {result.isbn}</em>
-                                                    </button>
-                                                {/each}
-                                            </div>
-                                        {/if}
+                                                    {/if}
+                                                    {#if result.doi}
+                                                        <br /><em>DOI: {result.doi}</em>
+                                                    {/if}
+                                                    {#if (!result.isbn || result.isbn === "No ISBN") && !result.doi}
+                                                        <em>No ISBN or DOI available</em>
+                                                    {/if}
+                                                </button>
+                                            {/each}
+                                        </div>
+                                    {/if}
+                                    
 
                                         <!-- Form Fields -->
                                         <div class="flex flex-col gap-4 mt-4">
