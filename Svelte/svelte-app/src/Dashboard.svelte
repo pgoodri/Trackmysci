@@ -12,6 +12,14 @@
     import { signOut } from "firebase/auth";
     import { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, updateDoc } from "firebase/firestore";
     import { MoreVertical, Edit, Trash2, BookOpen, Check, FilePlus2, Gauge, Library, LogOut, SquarePen} from "lucide-svelte";
+    import SimpleChart from "./lib/components/ui/charts/SimpleChart.svelte"  ;
+    import Chart from "chart.js/auto";
+    import { onMount } from "svelte";
+    import TagsChart from "./lib/components/ui/charts/TagsChart.svelte";
+    import RatingsChart from "./lib/components/ui/charts/RatingsChart.svelte";
+    import ProgressChart from "./lib/components/ui/charts/ProgressChart.svelte";
+    import TimelineChart from "./lib/components/ui/charts/TimelineChart.svelte";
+
 
 
     let newCurrentPage = 0; // Local variable for tracking input page
@@ -628,6 +636,86 @@ function selectResult(result) {
             navigate("/login");
         });
     }
+
+    let selectedComponent = TagsChart;
+
+    function handleSelection(event) {
+        const value = event.target.value;
+        console.log("Selected Value:", value);
+
+        switch (value.trim()) {
+            case "option1":
+                selectedComponent = TagsChart;
+                break;
+            case "option2":
+                selectedComponent = RatingsChart; // Replace with another component if needed
+                break;
+            default:
+                console.log("No valid option selected");
+                selectedComponent = null;
+        }
+    }
+
+    // function functionOne() {
+    //     <SimpleChart />
+    // }
+
+    // function functionTwo() {
+    //     console.log("Function Two executed");
+    // }
+
+    // function functionThree() {
+    //     console.log("Function Three executed");
+    // }
+
+//     onMount(() => {
+//     const pieData = {
+//       labels: ['Fiction', 'Non-Fiction', 'Science', 'History', 'Fantasy'],
+//       datasets: [{
+//         data: [25, 30, 15, 10, 20],
+//         backgroundColor: ['#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF'],
+//       }],
+//     };
+
+//     const doughnutData = {
+//       labels: ['Read', 'Remaining'],
+//       datasets: [{
+//         data: [60, 40],
+//         backgroundColor: ['#36A2EB', '#CCCCCC'],
+//       }],
+//     };
+
+//     const lineData = {
+//       labels: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul'],
+//       datasets: [{
+//         label: 'Pages Read',
+//         data: [10, 50, 30, 70, 90, 40, 80],
+//         borderColor: '#4BC0C0',
+//         fill: false,
+//       }],
+//     };
+
+//     // Pie chart
+//     const pieCtx = document.getElementById('pieChart').getContext('2d');
+//     new Chart(pieCtx, {
+//       type: 'pie',
+//       data: pieData,
+//     });
+
+//     // Doughnut chart
+//     const doughnutCtx = document.getElementById('doughnutChart').getContext('2d');
+//     new Chart(doughnutCtx, {
+//       type: 'doughnut',
+//       data: doughnutData,
+//     });
+
+//     // Line chart
+//     const lineCtx = document.getElementById('lineChart').getContext('2d');
+//     new Chart(lineCtx, {
+//       type: 'line',
+//       data: lineData,
+//     });
+//   });
 </script>
 
 {#if !authReady}
@@ -921,29 +1009,32 @@ function selectResult(result) {
                     </ul>
                 {/if}
             </section>
+
+
             <section class="w-1/2 py-12 pl-6 pr-12">
                 <h2 class="text-xl font-semibold mb-4 text-neutral-700">Analytics</h2>
-                <div class="space-y-6">
-                    <!-- Placeholder Card 1 -->
-                    <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
-                        <div class="h-40 rounded flex items-center justify-center">
-                            <span class="text-neutral-400">Placeholder for Graph 1</span>
-                        </div>
+                <!-- <div class="space-y-6">
+                    
+                    <SimpleChart />
+                </div> -->
+                <div class="chart-container">
+                    
+                    <div id="dropdown-container">
+                        <select id="dropdown" on:change={handleSelection}>
+                            <option value="option1">Tags</option>
+                            <option value="option2">Ratings</option>
+                        </select>
+                        {#if selectedComponent}
+                            <svelte:component this={selectedComponent} />
+                        {/if}
                     </div>
-                    <!-- Placeholder Card 2 -->
-                    <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
-                        <div class="h-40  rounded flex items-center justify-center">
-                            <span class="text-neutral-400">Placeholder for Graph 2</span>
-                        </div>
-                    </div>
-                    <!-- Placeholder Card 3 -->
-                    <div class="bg-white border border-neutral-300 rounded-md shadow p-6">
-                        <div class="h-40 rounded flex items-center justify-center">
-                            <span class="text-neutral-400">Placeholder for Graph 3</span>
-                        </div>
-                    </div>
+
+                    <ProgressChart />
+                    <TimelineChart />
                 </div>
             </section>
+
+
         </div>
 
         <!-- Modal -->
@@ -1053,3 +1144,20 @@ function selectResult(result) {
         {/if}
     </div>
 {/if}
+
+<style>  
+
+.chart-container {
+    padding: 20px;
+    background-color: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+.chart-title {
+    text-align: center;
+    font-weight: bold;
+    margin-bottom: 15px;
+}
+
+</style>
+
