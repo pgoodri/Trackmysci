@@ -11,7 +11,7 @@
     import { auth, firestore } from "./firebase";
     import { signOut } from "firebase/auth";
     import { doc, getDoc, setDoc, collection, addDoc, query, where, getDocs, updateDoc } from "firebase/firestore";
-    import { MoreVertical, Edit, Trash2, BookOpen, Check, FilePlus2, Gauge, Library, LogOut, SquarePen} from "lucide-svelte";
+    import { MoreVertical, Edit, Trash2, BookOpen, Check, FilePlus2, Gauge, Library, LogOut, SquarePen, ChevronDown} from "lucide-svelte";
     import SimpleChart from "./lib/components/ui/charts/SimpleChart.svelte"  ;
     import Chart from "chart.js/auto";
     import { onMount } from "svelte";
@@ -19,6 +19,8 @@
     import RatingsChart from "./lib/components/ui/charts/RatingsChart.svelte";
     import ProgressChart from "./lib/components/ui/charts/ProgressChart.svelte";
     import TimelineChart from "./lib/components/ui/charts/TimelineChart.svelte";
+    import PieChart from "./lib/components/ui/charts/PieChart.svelte";
+
 
 
 
@@ -1010,29 +1012,60 @@ function selectResult(result) {
                 {/if}
             </section>
 
-
             <section class="w-1/2 py-12 pl-6 pr-12">
                 <h2 class="text-xl font-semibold mb-4 text-neutral-700">Analytics</h2>
-                <!-- <div class="space-y-6">
-                    
-                    <SimpleChart />
-                </div> -->
-                <div class="chart-container">
-                    
-                    <div id="dropdown-container">
-                        <select id="dropdown" on:change={handleSelection}>
-                            <option value="option1">Tags</option>
-                            <option value="option2">Ratings</option>
-                        </select>
-                        {#if selectedComponent}
-                            <svelte:component this={selectedComponent} />
-                        {/if}
+            
+                <div class="grid grid-cols-5 gap-4">
+                    <!-- Row 1 -->
+                    <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow">
+                        <p class="text-lg font-semibold">Pages Read</p>
+                        <p class="text-sm text-gray-400">Over the past month</p>
+                        
+                        <TimelineChart/>
                     </div>
-
-                    <ProgressChart />
-                    <TimelineChart />
+                    <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
+                        <!-- Header: Title, Subtitle (Left) + Dropdown (Right) -->
+                        <div class="flex items-center justify-between mb-4">
+                            <!-- Left: Title & Subtitle -->
+                            <div>
+                                <p class="text-lg font-semibold">Tags</p>
+                            </div>
+                    
+                            <!-- Right: Dropdown Menu -->
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger>
+                                    <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
+                                        Tags
+                                        <ChevronDown class = "w-4"/>
+                                    </button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Content>
+                                    <DropdownMenu.Group>
+                                        <DropdownMenu.Item on:click={() => navigate("/dashboard")} class="text-base"> Other</DropdownMenu.Item> 
+                                    </DropdownMenu.Group>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Root>
+                        </div>
+                    
+                        <!-- Pie Chart Section -->
+                        <div class="flex-1 flex items-center justify-center">
+                            <PieChart />
+                        </div>
+                    </div>
+                    
+                    <!-- Row 2 -->
+                    <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow">
+                        <p class="text-lg font-semibold">Progress</p>
+                        <p class="text-sm text-gray-400">Recently</p>
+                        <ProgressChart />
+                    </div>
+                    <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow">
+                        <p class="text-lg font-semibold">Chart</p>
+                        <p class="text-sm text-gray-400">Put a chart here.</p>
+                    </div>
                 </div>
             </section>
+            
 
 
         </div>
@@ -1144,20 +1177,4 @@ function selectResult(result) {
         {/if}
     </div>
 {/if}
-
-<style>  
-
-.chart-container {
-    padding: 20px;
-    background-color: white;
-    border-radius: 10px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-.chart-title {
-    text-align: center;
-    font-weight: bold;
-    margin-bottom: 15px;
-}
-
-</style>
 

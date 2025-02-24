@@ -83,6 +83,11 @@
             }]
         },
         options: {
+            plugins: {
+                    legend: {  
+                        display: false, 
+                    },
+                },
             responsive: true,
             scales: {
             x: {
@@ -128,22 +133,5 @@
       }
     });
   </script>
-  
-  <style>
-    .chart-container {
-      width: 80%;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: white;
-      border-radius: 10px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-  
-    canvas {
-      width: 100% !important;
-    }
-  </style>
-  
-<h1>Tags</h1>
 <canvas id="myChart"></canvas>
   
