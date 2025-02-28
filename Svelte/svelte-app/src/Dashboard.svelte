@@ -20,9 +20,22 @@
     import ProgressChart from "./lib/components/ui/charts/ProgressChart.svelte";
     import TimelineChart from "./lib/components/ui/charts/TimelineChart.svelte";
     import PieChart from "./lib/components/ui/charts/PieChart.svelte";
+    import StreakChart from "./lib/components/ui/charts/StreakChart.svelte";
 
+    let currentStreak = 5; // Example, replace with actual streak count logic
 
+    import { writable } from "svelte/store";
 
+    // Stores for selected chart types
+    let selectedPieChart = writable("Tags"); // Default pie chart type
+    let selectedTimeline = writable("30 Days"); // Default timeline range
+    let selectedProgress = writable("All Progress"); // Default progress type
+    let progressPercentage = writable(75); // Example: 75% Progress
+
+    // Options for dropdowns
+    const pieChartOptions = ["Tags", "Ratings", "Authors"];
+    const timelineOptions = ["30 Days", "60 Days", "90 Days"];
+    const progressOptions = ["All Progress", "Most Recent Book Progress"];
 
     let newCurrentPage = 0; // Local variable for tracking input page
     let progressComment = ""; // Local variable for comment
@@ -727,7 +740,7 @@ function selectResult(result) {
     </div>
 {:else}
     <!-- HTML Portion -->
-    <div class="min-h-screen flex flex-col bg-white">
+    <div class="min-h-screen flex flex-col bg-slate-50">
         <!-- Navbar -->
         <nav class="bg-white border-neutral-400 shadow h-16 flex items-center justify-between px-12 sticky top-0 z-50">
             <h1 class="text-lg font-semibold text-neutral-800">TrackMySci</h1>
@@ -761,7 +774,8 @@ function selectResult(result) {
 
         <!-- Main Content -->
         <div class="flex flex-1">
-            <section class="w-1/2 py-12 pl-12 pr-6">
+            <section class="w-1/2 py-12 pl-12 pr-3">
+                <div>
                 <h2 class="text-xl font-semibold mb-4 flex justify-between items-center text-neutral-700">
                     Recently Accessed
                     <Dialog.Root bind:open>
@@ -895,6 +909,7 @@ function selectResult(result) {
                         </Dialog.Content>
                     </Dialog.Root>
                 </h2>
+            </div>
 
                 {#if libraryList.length === 0}
                     <!-- Message for empty list -->
@@ -1012,58 +1027,127 @@ function selectResult(result) {
                 {/if}
             </section>
 
-            <section class="w-1/2 py-12 pl-6 pr-12">
-                <h2 class="text-xl font-semibold mb-4 text-neutral-700">Analytics</h2>
-            
+
+            <section class="w-1/2 py-12 pl-3 pr-12">
+                <div class="h-[36.5px] mb-4 items-center">
+                    <h2 class="text-xl font-semibold mb-4 text-neutral-700">Analytics</h2>
+                </div>
+                
                 <div class="grid grid-cols-5 gap-4">
-                    <!-- Row 1 -->
+                    <!-- Row 1: Timeline & Streak -->
                     <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow">
-                        <p class="text-lg font-semibold">Pages Read</p>
-                        <p class="text-sm text-gray-400">Over the past month</p>
-                        
-                        <TimelineChart/>
-                    </div>
-                    <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
-                        <!-- Header: Title, Subtitle (Left) + Dropdown (Right) -->
                         <div class="flex items-center justify-between mb-4">
-                            <!-- Left: Title & Subtitle -->
                             <div>
-                                <p class="text-lg font-semibold">Tags</p>
+                                <p class="text-lg font-semibold">Pages Read</p>
                             </div>
-                    
-                            <!-- Right: Dropdown Menu -->
+            
+                            <!-- Timeline Dropdown -->
                             <DropdownMenu.Root>
                                 <DropdownMenu.Trigger>
                                     <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
-                                        Tags
-                                        <ChevronDown class = "w-4"/>
+                                        {$selectedTimeline}
+                                        <ChevronDown class="w-4"/>
                                     </button>
                                 </DropdownMenu.Trigger>
                                 <DropdownMenu.Content>
                                     <DropdownMenu.Group>
-                                        <DropdownMenu.Item on:click={() => navigate("/dashboard")} class="text-base"> Other</DropdownMenu.Item> 
+                                        {#each timelineOptions as option}
+                                            <DropdownMenu.Item on:click={() => selectedTimeline.set(option)} class="text-sm">
+                                                {option}
+                                            </DropdownMenu.Item>
+                                        {/each}
                                     </DropdownMenu.Group>
                                 </DropdownMenu.Content>
                             </DropdownMenu.Root>
                         </div>
-                    
-                        <!-- Pie Chart Section -->
+            
                         <div class="flex-1 flex items-center justify-center">
-                            <PieChart />
+                            <TimelineChart selectedRange={$selectedTimeline} />
+                        </div>
+                    </div>
+            
+                    <!-- Streak Counter -->
+                    <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col items-center justify-center">
+                        <p class="text-lg font-semibold text-neutral-800">Current Streak</p>
+                        <p class="text-5xl font-bold text-blue-500 mt-2">{currentStreak}</p>
+                        <p class="text-sm text-gray-500">days in a row</p>
+                    </div>
+            
+                    <!-- Row 2: Progress & Pie Chart -->
+                    <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-lg font-semibold">Distribution</p>
+                            </div>
+            
+                            <!-- Pie Chart Dropdown -->
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger>
+                                    <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
+                                        {$selectedPieChart}
+                                        <ChevronDown class="w-4"/>
+                                    </button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Content>
+                                    <DropdownMenu.Group>
+                                        {#each pieChartOptions as option}
+                                            <DropdownMenu.Item on:click={() => selectedPieChart.set(option)} class="text-sm">
+                                                {option}
+                                            </DropdownMenu.Item>
+                                        {/each}
+                                    </DropdownMenu.Group>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Root>
+                        </div>
+            
+                        <div class="flex-1 flex items-center justify-center max-h-64 w-full">
+                            <PieChart type={$selectedPieChart}  />
                         </div>
                     </div>
                     
-                    <!-- Row 2 -->
-                    <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow">
-                        <p class="text-lg font-semibold">Progress</p>
-                        <p class="text-sm text-gray-400">Recently</p>
-                        <ProgressChart />
+            
+                    
+                    <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
+                        <div class="flex items-center justify-between mb-4">
+                            <div>
+                                <p class="text-lg font-semibold">Progress</p>
+                            </div>
+                    
+                            <!-- Progress Dropdown -->
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger>
+                                    <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
+                                        {$selectedProgress}
+                                        <ChevronDown class="w-4"/>
+                                    </button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Content>
+                                    <DropdownMenu.Group>
+                                        {#each progressOptions as option}
+                                            <DropdownMenu.Item on:click={() => selectedProgress.set(option)} class="text-sm">
+                                                {option}
+                                            </DropdownMenu.Item>
+                                        {/each}
+                                    </DropdownMenu.Group>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Root>
+                        </div>
+
+                        
+                        <!-- Percentage Display -->
+                        <div class="text-center mb-3">
+                            <p class="text-4xl font-bold text-blue-600">{$progressPercentage}%</p>
+                            <p class="text-sm text-gray-500">of total reading completed</p>
+                        </div>
+                    
+                        <!-- Progress Bar -->
+                        <div class="relative w-full h-6 bg-gray-200 rounded-full">
+                            <div class="absolute top-0 left-0 h-6 bg-blue-500 rounded-full transition-all" 
+                                 style="width: {$progressPercentage}%;">
+                            </div>
+                        </div>
+                        
                     </div>
-                    <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow">
-                        <p class="text-lg font-semibold">Chart</p>
-                        <p class="text-sm text-gray-400">Put a chart here.</p>
-                    </div>
-                </div>
             </section>
             
 

@@ -1,42 +1,71 @@
 <script>
-    import { onMount, onDestroy } from "svelte";
-    import { Chart, ArcElement, Tooltip, Legend } from "chart.js";
+    import { onMount, onDestroy, afterUpdate } from "svelte";
+    import { Chart, ArcElement, Title, Tooltip, Legend } from "chart.js";
 
-    Chart.register(ArcElement, Tooltip, Legend);
+    Chart.register(ArcElement, Title, Tooltip, Legend);
 
-    let progressBar;
+    export let selectedView = "All Progress"; // Default progress type
+    let chart;
+    let ctx;
 
-    onMount(() => {
-        const ctx = document.getElementById("progressBar").getContext("2d");
-        progressBar = new Chart(ctx, {
+    // Dummy data for demonstration
+    function getProgressData(view) {
+        if (view === "Most Recent Book Progress") {
+            return { completed: 180, remaining: 120, label: "Most Recent Book" }; // Example: 180 pages read out of 300
+        }
+        return { completed: 600, remaining: 400, label: "Total Progress" }; // Example: 600 pages read out of 1000 total
+    }
+
+    function createChart() {
+        if (!ctx) return;
+
+        const { completed, remaining, label } = getProgressData(selectedView);
+
+        if (chart) {
+            chart.destroy(); // Destroy existing chart to update
+        }
+
+        chart = new Chart(ctx, {
             type: "doughnut",
             data: {
-                labels: ["Progress", "Remaining"],
-                datasets: [
-                    {
-                        data: [70, 30],
-                        backgroundColor: ["#36A2EB", "#CCCCCC"],
-                        hoverBackgroundColor: ["#36A2EB", "#CCCCCC"],
-                    }
-                ]
+                labels: ["Completed", "Remaining"],
+                datasets: [{
+                    data: [completed, remaining],
+                    backgroundColor: ["#36A2EB", "#CCCCCC"], // Blue for progress, Gray for remaining
+                    hoverBackgroundColor: ["#36A2EB", "#AAAAAA"],
+                }]
             },
             options: {
                 responsive: true,
-                cutout: "80%",
+                cutout: "70%", // Creates the donut effect
                 plugins: {
-                    legend: { display: false },
-                    tooltip: { enabled: false }
+                    legend: {
+                        position: "bottom"
+                    },
+                    tooltip: {
+                        enabled: true
+                    },
+                    title: {
+                        display: true,
+                        text: label
+                    }
                 }
             }
         });
-    });
-
-    export function updateProgressBar(progress) {
-        progressBar.data.datasets[0].data = [progress, 100 - progress];
-        progressBar.update();
     }
 
-    onDestroy(() => { if (progressBar) progressBar.destroy(); });
+    onMount(() => {
+        ctx = document.getElementById("progressChart").getContext("2d");
+        createChart();
+    });
+
+    afterUpdate(() => {
+        createChart(); // Update chart when selectedView changes
+    });
+
+    onDestroy(() => {
+        if (chart) chart.destroy();
+    });
 </script>
 
-<canvas id="progressBar"></canvas>
+<canvas id="progressChart"></canvas>
