@@ -1,53 +1,169 @@
 <script>
-    import { navigate } from "svelte-routing";
-    import { auth } from "./firebase";
-    import { signOut } from "firebase/auth";
-    import { userStore } from "./userStore";
-    import { Button } from "$lib/components/ui/button";
+    import { auth, firestore } from "./firebase";
+    import { getDoc, doc, collection, query, where, getDocs, deleteDoc } from "firebase/firestore";
+    import { onAuthStateChanged } from "firebase/auth";
+    import { onMount } from "svelte";
+    import { writable } from "svelte/store";
+    import { LogOut, Gauge, Library, ChevronsUpDown, Edit, Trash2, Ellipsis, SquarePen } from "lucide-svelte";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-    import { Gauge, Library, LogOut, MoreVertical } from "lucide-svelte";
+    import * as Popover from "$lib/components/ui/popover";
+    import { Progress } from "$lib/components/ui/progress";
+    import { signOut } from "firebase/auth";
 
-    let firstName = "Guest";
+    let firstName = "";
     let lastName = "";
-    let user;
+    let authReady = false;
+    let libraryList = [];
 
-    userStore.subscribe((value) => {
-        user = value;
-        if (user) {
-            firstName = user.firstName || "Guest";
-            lastName = user.lastName || "";
+    async function fetchUserData(uid) {
+        try {
+            const userDoc = await getDoc(doc(firestore, "users", uid));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                firstName = userData.firstName || "";
+                lastName = userData.lastName || "";
+            }
+        } catch (error) {
+            console.error("Error fetching user data:", error);
         }
-    });
+    }
+
+    async function loadUserLibrary(uid) {
+        try {
+            const userDocRef = doc(firestore, "users", uid);
+            const libraryRef = collection(userDocRef, "library");
+            const q = query(libraryRef, where("userId", "==", uid));
+            const querySnapshot = await getDocs(q);
+            libraryList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } catch (error) {
+            console.error("Error fetching library:", error.message);
+        }
+    }
+
+    async function deletePublication(entryId) {
+        if (!confirm("Are you sure you want to delete this publication?")) return;
+        try {
+            const user = auth.currentUser;
+            if (!user) {
+                console.error("No authenticated user found.");
+                return;
+            }
+            const userDocRef = doc(firestore, "users", user.uid);
+            const entryDocRef = doc(collection(userDocRef, "library"), entryId);
+            await deleteDoc(entryDocRef);
+            console.log(`Deleted entry ${entryId}`);
+            await loadUserLibrary(user.uid);
+        } catch (error) {
+            console.error("Error deleting entry:", error.message);
+        }
+    }
 
     function logout() {
         signOut(auth).then(() => {
-            userStore.set(null);
-            navigate("/login");
+            window.location.href = "/login";
         });
     }
+
+    onMount(() => {
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                await fetchUserData(user.uid);
+                await loadUserLibrary(user.uid);
+            }
+            authReady = true;
+        });
+    });
 </script>
 
-
-<nav class="bg-white border-neutral-400 shadow h-16 flex items-center justify-between px-12 sticky top-0 z-50">
-    <h1 class="text-lg font-semibold text-neutral-800">TrackMySci</h1>
-    <div class="flex items-center space-x-6">
-        <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-                <button class="border border-neutral-300 py-2 px-4 shadow-sm text-base font-medium rounded hover:bg-neutral-100 flex items-center gap-x-5">
-                    {firstName + " " + lastName}
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-neutral-500">
-                        <path fill-rule="evenodd" d="M11.47 4.72a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1-1.06 1.06L12 6.31 8.78 9.53a.75.75 0 0 1-1.06-1.06l3.75-3.75Zm-3.75 9.75a.75.75 0 0 1 1.06 0L12 17.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-3.75 3.75a.75.75 0 0 1-1.06 0l-3.75-3.75a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-                    </svg>
-                </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content>
-                <DropdownMenu.Group>
-                    <DropdownMenu.Item on:click={() => navigate("/dashboard")} class="text-base"> <Gauge class="w-7 pr-1.5"/> Dashboard</DropdownMenu.Item>
-                    <DropdownMenu.Item on:click={() => navigate("/library")} class="text-base"> <Library class="w-7 pr-1.5"/>Library</DropdownMenu.Item>
-                    <DropdownMenu.Separator />
-                    <DropdownMenu.Item on:click={logout} class="text-red-500 text-base"><LogOut class="w-7 pr-1.5 text-red-500"/>Logout</DropdownMenu.Item>
-                </DropdownMenu.Group>
-            </DropdownMenu.Content>
-        </DropdownMenu.Root>
+{#if !authReady}
+    <div class="flex justify-center items-center h-screen bg-white">
+        <p class="text-neutral-500 text-lg">Loading...</p>
     </div>
-</nav>
+{:else}
+    <div class="min-h-screen flex flex-col bg-stone-50">
+        <!-- NAVBAR -->
+        <nav class="bg-white border-neutral-400 shadow h-16 flex items-center justify-between px-12 sticky top-0 z-50">
+            <h1 class="text-lg font-semibold text-neutral-800">TrackMySci</h1>
+            <div class="flex items-center space-x-6">
+                <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                        <button class="border border-neutral-300 py-2 px-4 shadow-sm text-base font-medium rounded hover:bg-neutral-100 flex items-center gap-x-5">
+                            {firstName} {lastName}
+                            <ChevronsUpDown class="w-4 h-4 text-neutral-800" />
+                        </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content>
+                        <DropdownMenu.Group>
+                            <DropdownMenu.Item on:click={() => window.location.href = "/dashboard"} class="text-base">
+                                <Gauge class="w-7 pr-1.5" /> Dashboard
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item on:click={() => window.location.href = "/library"} class="text-base">
+                                <Library class="w-7 pr-1.5" /> Library
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item on:click={logout} class="text-red-500 text-base">
+                                <LogOut class="w-7 pr-1.5 text-red-500" /> Logout
+                            </DropdownMenu.Item>
+                        </DropdownMenu.Group>
+                    </DropdownMenu.Content>
+                </DropdownMenu.Root>
+            </div>
+        </nav>
+
+        <!-- PAGE CONTENT -->
+        <div class="pt-12 px-12">
+            <h2 class="text-4xl font-bold text-neutral-800">Library</h2>
+        </div>
+
+        <div class="flex flex-1">
+            <section class="w-full py-12 px-12">
+                {#if libraryList.length === 0}
+                    <div class="flex flex-col items-center justify-center text-center text-gray-500 pt-12">
+                        <p class="text-lg font-medium">No papers added yet.</p>
+                        <p class="text-sm mt-2">Start by adding a new paper to track your reading!</p>
+                    </div>
+                {:else}
+                    <ul class="grid grid-cols-3 gap-6">
+                        {#each libraryList as lit}
+                            <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
+                                <div class="flex justify-between">
+                                    <div>
+                                        <strong class="text-lg">{lit.title}</strong>
+                                        <p class="text-sm text-neutral-600">{lit.author}</p>
+                                    </div>
+                                    <DropdownMenu.Root>
+                                        <DropdownMenu.Trigger>
+                                            <button class="p-0.5 text-gray-600 hover:bg-gray-100 rounded-sm">
+                                                <Ellipsis class="w-5 h-5" />
+                                            </button>
+                                        </DropdownMenu.Trigger>
+                                        <DropdownMenu.Content>
+                                            <DropdownMenu.Group>
+                                                <DropdownMenu.Item on:click={() => openEditModal(lit)} class="text-sm">
+                                                    <Edit class="w-4 h-4 mr-2" /> Edit
+                                                </DropdownMenu.Item>
+                                                <DropdownMenu.Item on:click={() => deletePublication(lit.id)} class="text-sm text-red-600">
+                                                    <Trash2 class="w-4 h-4 mr-2" /> Delete
+                                                </DropdownMenu.Item>
+                                            </DropdownMenu.Group>
+                                        </DropdownMenu.Content>
+                                    </DropdownMenu.Root>
+                                </div>
+                                {#if lit.tags?.length > 0}
+                                    <div class="flex flex-wrap gap-2 mt-3">
+                                        {#each lit.tags as tag}
+                                            <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                                        {/each}
+                                    </div>
+                                {/if}
+                                <div class="mt-2">
+                                    <Progress value={Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))} />
+                                </div>
+                            </li>
+                        {/each}
+                    </ul>
+                {/if}
+            </section>
+        </div>
+    </div>
+{/if}

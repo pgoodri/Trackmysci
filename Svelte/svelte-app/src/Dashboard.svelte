@@ -32,6 +32,7 @@
       LogOut,
       SquarePen,
       ChevronDown,
+      ChevronsUpDown,
       Ellipsis
     } from "lucide-svelte";
     import SimpleChart from "./lib/components/ui/charts/SimpleChart.svelte";
@@ -611,9 +612,7 @@
             <DropdownMenu.Trigger>
               <button class="border border-neutral-300 py-2 px-4 shadow-sm text-base font-medium rounded hover:bg-neutral-100 flex items-center gap-x-5">
                 {firstName + " " + lastName}
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-neutral-500">
-                  <path fill-rule="evenodd" d="M11.47 4.72a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1-1.06 1.06L12 6.31 8.78 9.53a.75.75 0 0 1-1.06-1.06l3.75-3.75Zm-3.75 9.75a.75.75 0 0 1 1.06 0L12 17.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-3.75 3.75a.75.75 0 0 1-1.06 0l-3.75-3.75a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-                </svg>
+                <ChevronsUpDown class="w-4 h-4 text-neutral-800" />
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Content>
@@ -673,7 +672,7 @@
                               }}
                               class="w-full pl-4 pr-10 py-4 text-neutral-700 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
                               placeholder="Search by DOI, ISBN, or Title" autocomplete="off" />
-                            <div class="absolute inset-y-0 right-3 flex items-center pointer-events-none">
+                            <div class="absolute inset-y-0 z-1000 right-3 flex items-center pointer-events-none">
                               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#9ca3af" class="w-6 h-6">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197M5.196 5.196a7.5 7.5 0 0 1 10.607 10.607" />
                               </svg>
