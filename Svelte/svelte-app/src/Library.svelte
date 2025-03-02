@@ -123,17 +123,19 @@
                         <p class="text-sm mt-2">Start by adding a new paper to track your reading!</p>
                     </div>
                 {:else}
-                    <ul class="grid grid-cols-3 gap-6">
+                    <!-- Grid layout for 3-column structure -->
+                    <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         {#each libraryList as lit}
-                            <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
-                                <div class="flex justify-between">
-                                    <div>
-                                        <strong class="text-lg">{lit.title}</strong>
-                                        <p class="text-sm text-neutral-600">{lit.author}</p>
-                                    </div>
+                        <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
+                            <div class="flex justify-between">
+                                <div class="cursor-pointer" on:click={() => openEditModal(lit)}>
+                                    <strong>{lit.title}</strong><br />
+                                    <small>{lit.author}</small>
+                                </div>
+                                <div>
                                     <DropdownMenu.Root>
                                         <DropdownMenu.Trigger>
-                                            <button class="p-0.5 text-gray-600 hover:bg-gray-100 rounded-sm">
+                                            <button class="p-0.5 text-gray-800 hover:bg-gray-200 rounded-sm">
                                                 <Ellipsis class="w-5 h-5" />
                                             </button>
                                         </DropdownMenu.Trigger>
@@ -149,17 +151,58 @@
                                         </DropdownMenu.Content>
                                     </DropdownMenu.Root>
                                 </div>
-                                {#if lit.tags?.length > 0}
-                                    <div class="flex flex-wrap gap-2 mt-3">
-                                        {#each lit.tags as tag}
-                                            <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
-                                        {/each}
+                            </div>
+            
+                            {#if lit.tags?.length > 0}
+                                <div class="flex flex-wrap gap-2 mt-3">
+                                    {#each lit.tags as tag}
+                                        <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                                    {/each}
+                                </div>
+                            {/if}
+            
+                            <div class="mt-1 flex items-center gap-3">
+                                <div class="flex-1">
+                                    <div class="flex justify-between text-sm text-neutral-600 mb-1">
+                                        <span>
+                                            {Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))}%
+                                        </span>
                                     </div>
-                                {/if}
-                                <div class="mt-2">
                                     <Progress value={Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))} />
                                 </div>
-                            </li>
+                                <Popover.Root bind:open={lit.isUpdating}>
+                                    <Popover.Trigger on:click={() => {
+                                        lit.newCurrentPage = lit.currentPage || lit.pageStart;
+                                        lit.progressComment = "";
+                                        lit.isUpdating = true;
+                                    }}>
+                                        <button class="pt-6 pb-0 mb-0 bg-transparent text-neutral-900 hover:text-neutral-500 transition-all">
+                                            <SquarePen />
+                                        </button>
+                                    </Popover.Trigger>
+                                    <Popover.Content class="p-4 bg-white shadow-lg border rounded-md w-64">
+                                        <div>
+                                            <label class="text-sm font-medium text-neutral-700 mb-2 block">
+                                                Current Page:
+                                            </label>
+                                            <input type="number" min={lit.pageStart} max={lit.pageEnd} bind:value={lit.newCurrentPage} class="w-full p-1 border rounded border-neutral-300 shadow-sm" />
+                                            <label class="text-sm font-medium text-neutral-700 mt-2 block">
+                                                Comment:
+                                            </label>
+                                            <textarea bind:value={lit.progressComment} class="w-full p-1 border rounded border-neutral-300 shadow-sm" placeholder="Add a note about your reading progress"></textarea>
+                                        </div>
+                                        <div class="flex justify-end mt-4">
+                                            <Button on:click={async () => {
+                                                await updateProgress(lit.id, lit.newCurrentPage, lit.pageStart, lit.progressComment);
+                                                lit.isUpdating = false;
+                                            }} class="bg-blue-600 hover:bg-blue-700 text-white">
+                                                Save
+                                            </Button>
+                                        </div>
+                                    </Popover.Content>
+                                </Popover.Root>
+                            </div>
+                        </li>
                         {/each}
                     </ul>
                 {/if}
