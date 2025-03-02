@@ -14,6 +14,7 @@
     let lastName = "";
     let authReady = false;
     let libraryList = [];
+    let searchQuery = "";
 
     async function fetchUserData(uid) {
         try {
@@ -62,6 +63,13 @@
         signOut(auth).then(() => {
             window.location.href = "/login";
         });
+    }
+
+    function filteredLibrary() {
+        return libraryList.filter(lit =>
+            lit.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            lit.author.toLowerCase().includes(searchQuery.toLowerCase())
+        );
     }
 
     onMount(() => {
@@ -115,20 +123,28 @@
             <h2 class="text-4xl font-bold text-neutral-800">Library</h2>
         </div>
 
+        <div class="px-12 py-6">
+            <input
+                type="text"
+                bind:value={searchQuery}
+                class="w-full p-3 border border-neutral-300 rounded-md shadow-sm text-neutral-700"
+                placeholder="Search by title or author..."
+            />
+        </div>
+
         <div class="flex flex-1">
-            <section class="w-full py-12 px-12">
-                {#if libraryList.length === 0}
+            <section class="w-full  px-12">
+                {#if filteredLibrary().length === 0}
                     <div class="flex flex-col items-center justify-center text-center text-gray-500 pt-12">
-                        <p class="text-lg font-medium">No papers added yet.</p>
-                        <p class="text-sm mt-2">Start by adding a new paper to track your reading!</p>
+                        <p class="text-lg font-medium">No matching papers found.</p>
                     </div>
                 {:else}
                     <!-- Grid layout for 3-column structure -->
                     <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {#each libraryList as lit}
+                        {#each filteredLibrary() as lit}
                         <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
                             <div class="flex justify-between">
-                                <div class="cursor-pointer" on:click={() => openEditModal(lit)}>
+                                <div class="cursor-pointer">
                                     <strong>{lit.title}</strong><br />
                                     <small>{lit.author}</small>
                                 </div>
@@ -141,10 +157,10 @@
                                         </DropdownMenu.Trigger>
                                         <DropdownMenu.Content>
                                             <DropdownMenu.Group>
-                                                <DropdownMenu.Item on:click={() => openEditModal(lit)} class="text-sm">
+                                                <DropdownMenu.Item class="text-sm">
                                                     <Edit class="w-4 h-4 mr-2" /> Edit
                                                 </DropdownMenu.Item>
-                                                <DropdownMenu.Item on:click={() => deletePublication(lit.id)} class="text-sm text-red-600">
+                                                <DropdownMenu.Item class="text-sm text-red-600" on:click={() => deletePublication(lit.id)}>
                                                     <Trash2 class="w-4 h-4 mr-2" /> Delete
                                                 </DropdownMenu.Item>
                                             </DropdownMenu.Group>
@@ -152,7 +168,7 @@
                                     </DropdownMenu.Root>
                                 </div>
                             </div>
-            
+
                             {#if lit.tags?.length > 0}
                                 <div class="flex flex-wrap gap-2 mt-3">
                                     {#each lit.tags as tag}
@@ -160,7 +176,7 @@
                                     {/each}
                                 </div>
                             {/if}
-            
+
                             <div class="mt-1 flex items-center gap-3">
                                 <div class="flex-1">
                                     <div class="flex justify-between text-sm text-neutral-600 mb-1">
@@ -170,37 +186,6 @@
                                     </div>
                                     <Progress value={Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))} />
                                 </div>
-                                <Popover.Root bind:open={lit.isUpdating}>
-                                    <Popover.Trigger on:click={() => {
-                                        lit.newCurrentPage = lit.currentPage || lit.pageStart;
-                                        lit.progressComment = "";
-                                        lit.isUpdating = true;
-                                    }}>
-                                        <button class="pt-6 pb-0 mb-0 bg-transparent text-neutral-900 hover:text-neutral-500 transition-all">
-                                            <SquarePen />
-                                        </button>
-                                    </Popover.Trigger>
-                                    <Popover.Content class="p-4 bg-white shadow-lg border rounded-md w-64">
-                                        <div>
-                                            <label class="text-sm font-medium text-neutral-700 mb-2 block">
-                                                Current Page:
-                                            </label>
-                                            <input type="number" min={lit.pageStart} max={lit.pageEnd} bind:value={lit.newCurrentPage} class="w-full p-1 border rounded border-neutral-300 shadow-sm" />
-                                            <label class="text-sm font-medium text-neutral-700 mt-2 block">
-                                                Comment:
-                                            </label>
-                                            <textarea bind:value={lit.progressComment} class="w-full p-1 border rounded border-neutral-300 shadow-sm" placeholder="Add a note about your reading progress"></textarea>
-                                        </div>
-                                        <div class="flex justify-end mt-4">
-                                            <Button on:click={async () => {
-                                                await updateProgress(lit.id, lit.newCurrentPage, lit.pageStart, lit.progressComment);
-                                                lit.isUpdating = false;
-                                            }} class="bg-blue-600 hover:bg-blue-700 text-white">
-                                                Save
-                                            </Button>
-                                        </div>
-                                    </Popover.Content>
-                                </Popover.Root>
                             </div>
                         </li>
                         {/each}
