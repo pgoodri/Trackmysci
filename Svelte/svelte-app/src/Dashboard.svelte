@@ -19,7 +19,8 @@
       query,
       where,
       getDocs,
-      updateDoc
+      updateDoc,
+      deleteDoc
     } from "firebase/firestore";
     import {
       MoreVertical,
@@ -30,7 +31,8 @@
       Library,
       LogOut,
       SquarePen,
-      ChevronDown
+      ChevronDown,
+      Ellipsis
     } from "lucide-svelte";
     import SimpleChart from "./lib/components/ui/charts/SimpleChart.svelte";
     import Chart from "chart.js/auto";
@@ -563,6 +565,36 @@
         console.log(`Selected book: ${title}, ISBN: ${isbn}, Total Pages: ${pageEnd}`);
     }
 
+    async function deletePublication(publicationId) {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
+        }
+
+        // Ask for confirmation
+        const confirmDelete = confirm("Are you sure you want to delete this publication?");
+        if (!confirmDelete) return;
+
+        try {
+            // Reference the document inside the user's library subcollection
+            const userDocRef = doc(firestore, "users", user.uid);
+            const entryDocRef = doc(userDocRef, "library", publicationId);
+
+            // Delete the document from Firestore
+            await deleteDoc(entryDocRef);
+
+            console.log(`Deleted publication with ID: ${publicationId}`);
+
+            // Refresh the UI by updating the local list
+            libraryList = libraryList.filter(entry => entry.id !== publicationId);
+
+        } catch (error) {
+            console.error("Error deleting publication:", error.message);
+        }
+    }
+
+
   </script>
   
   {#if !authReady}
@@ -570,7 +602,7 @@
       <p>Loading...</p>
     </div>
   {:else}
-    <div class="min-h-screen flex flex-col bg-slate-50">
+    <div class="min-h-screen flex flex-col bg-stone-50">
       <!-- Navbar -->
       <nav class="bg-white border-neutral-400 shadow h-16 flex items-center justify-between px-12 sticky top-0 z-50">
         <h1 class="text-lg font-semibold text-neutral-800">TrackMySci</h1>
@@ -769,8 +801,8 @@
                     <div>
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger>
-                          <button class="p-2 text-gray-600 hover:text-gray-900">
-                            <MoreVertical class="w-5 h-5" />
+                          <button class="p-0.5 text-gray-800 hover:bg-gray-200 rounded-sm">
+                            <Ellipsis class="w-5 h-5" />
                           </button>
                         </DropdownMenu.Trigger>
                         <DropdownMenu.Content>
@@ -779,7 +811,7 @@
                               <Edit class="w-4 h-4 mr-2" /> Edit
                             </DropdownMenu.Item>
                             <DropdownMenu.Item on:click={() => deletePublication(lit.id)} class="text-sm text-red-600">
-                              <Trash2 class="w-4 h-4 mr-2" /> Delete
+                                <Trash2 class="w-4 h-4 mr-2" /> Delete
                             </DropdownMenu.Item>
                           </DropdownMenu.Group>
                         </DropdownMenu.Content>
