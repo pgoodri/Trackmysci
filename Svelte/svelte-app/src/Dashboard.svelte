@@ -33,7 +33,8 @@
       SquarePen,
       ChevronDown,
       ChevronsUpDown,
-      Ellipsis
+      Ellipsis,
+      Filter
     } from "lucide-svelte";
     import SimpleChart from "./lib/components/ui/charts/SimpleChart.svelte";
     import Chart from "chart.js/auto";
@@ -243,7 +244,21 @@
     let trackingPageOpen = false;
     let editMode = false;
     let editingPublication = null;
-  
+
+    let viewingPublication = null;  // Will store the entire publication object
+    let viewModalOpen = false;      // Controls if the "view publication details" modal is open
+
+    
+    function openViewModal(pub) {
+        viewingPublication = pub;
+        viewModalOpen = true;
+    }
+
+    function closeViewModal() {
+        viewingPublication = null;
+        viewModalOpen = false;
+    }
+
     // ----- Modal Helper Functions -----
     // Open modal in "add" mode (for new publication)
     function openAddModal() {
@@ -316,44 +331,61 @@
     }
   
     async function updateProgress(entryId, newCurrentPage, pageStart, comment) {
-      const user = auth.currentUser;
-      if (!user) {
+    const user = auth.currentUser;
+    if (!user) {
         console.error("No authenticated user found.");
         return;
-      }
-      try {
+    }
+
+    try {
         const userDocRef = doc(firestore, "users", user.uid);
         const entryDocRef = doc(collection(userDocRef, "library"), entryId);
         const entryDocSnap = await getDoc(entryDocRef);
+
         let journalLogs = [];
         let previousPage = pageStart;
+
         if (entryDocSnap.exists()) {
-          const entryData = entryDocSnap.data();
-          journalLogs = entryData.journalLogs || [];
-          previousPage = entryData.currentPage || pageStart;
+            const entryData = entryDocSnap.data();
+            journalLogs = entryData.journalLogs || [];
+            previousPage = entryData.currentPage || pageStart;
         }
+
         const pagesRead = Math.max(newCurrentPage - previousPage, 0);
         const logEntry = {
-          dateTitle: new Date().toLocaleDateString(),
-          fromPage: previousPage,
-          toPage: newCurrentPage,
-          pagesRead: pagesRead,
-          comment: comment || "",
-          date: new Date().toISOString()
+            dateTitle: new Date().toLocaleDateString(),
+            fromPage: previousPage,
+            toPage: newCurrentPage,
+            pagesRead: pagesRead,
+            comment: comment || "",
+            date: new Date().toISOString()
         };
+
         journalLogs.push(logEntry);
+
+        // Update Firestore
         await updateDoc(entryDocRef, {
-          currentPage: newCurrentPage,
-          updatedAt: new Date(),
-          pagesRead: pagesRead,
-          journalLogs: journalLogs
+            currentPage: newCurrentPage,
+            updatedAt: new Date(),
+            pagesRead: pagesRead,
+            journalLogs: journalLogs
         });
+
         console.log(`Updated entry ${entryId}: ${previousPage} ➝ ${newCurrentPage}, pages read: ${pagesRead}, comment: ${comment}`);
-        await loadUserLibrary();
-      } catch (error) {
+
+        // Update `viewingPublication` in memory
+        if (viewingPublication && viewingPublication.id === entryId) {
+            viewingPublication.journalLogs = journalLogs;  // Update logs
+            viewingPublication.currentPage = newCurrentPage; // Update page count
+        }
+
+        await loadUserLibrary(); // Refresh the library without requiring a reload
+
+    } catch (error) {
         console.error("Error updating progress:", error.message);
-      }
     }
+}
+
   
     onAuthStateChanged(auth, async (user) => {
       console.log("Auth state changed. User:", user);
@@ -780,6 +812,114 @@
                   </Dialog.Header>
                 </Dialog.Content>
               </Dialog.Root>
+
+
+                <Dialog.Root bind:open={viewModalOpen}>
+                    <Dialog.Content class="min-w-[700px] min-h-[800px] overflow-auto">
+                    <Dialog.Header>
+                        <Dialog.Title>
+                        <!-- If we have a viewingPublication, show its title -->
+                        {viewingPublication ? viewingPublication.title : "Publication Details"}
+                        </Dialog.Title>
+                        <Dialog.Description>
+                        
+                        {#if viewingPublication}
+                            <!-- Show any relevant data that was on the card: -->
+                            <p class="mt-2 text-sm text-neutral-600">
+                            <strong>Author:</strong> {viewingPublication.author}
+                            </p>
+                            
+                            <!-- The same progress bar logic: -->
+                            <div class="mt-1 flex items-center gap-3">
+                                <div class="flex-1">
+                                  <div class="flex justify-between text-sm text-neutral-600 mb-1">
+                                <span>
+                                {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%
+                                </span>
+                            </div>
+                            <Progress value={Math.min(
+                                100,
+                                Math.round(
+                                ((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) /
+                                (viewingPublication.pageEnd - viewingPublication.pageStart) * 100
+                                )
+                            )} />
+                            </div>
+                            <div class="mt-4">
+                                <Popover.Root bind:open={viewingPublication.isUpdating}>
+                                    <Popover.Trigger on:click={() => {
+                                        viewingPublication.newCurrentPage = viewingPublication.currentPage || viewingPublication.pageStart;
+                                        viewingPublication.progressComment = "";
+                                        viewingPublication.isUpdating = true;
+                                    }}>
+                                        <button class="bg-transparent text-neutral-900 hover:text-neutral-500 transition-all">
+                                            <SquarePen />
+                                        </button>
+                                    </Popover.Trigger>
+                                    <Popover.Content class="p-4 bg-white shadow-lg border rounded-md w-64">
+                                        <div>
+                                            <label class="text-sm font-medium text-neutral-700 mb-2 block">
+                                                Current Page:
+                                            </label>
+                                            <input type="number" min={viewingPublication.pageStart} max={viewingPublication.pageEnd} bind:value={viewingPublication.newCurrentPage} class="w-full p-1 border rounded border-neutral-300 shadow-sm" />
+                                            <label class="text-sm font-medium text-neutral-700 mt-2 block">
+                                                Comment:
+                                            </label>
+                                            <textarea bind:value={viewingPublication.progressComment} class="w-full p-1 border rounded border-neutral-300 shadow-sm" placeholder="Add a note about your reading progress"></textarea>
+                                        </div>
+                                        <div class="flex justify-end mt-4">
+                                            <Button on:click={async () => {
+                                                await updateProgress(viewingPublication.id, viewingPublication.newCurrentPage, viewingPublication.pageStart, viewingPublication.progressComment);
+                                                viewingPublication.isUpdating = false;
+                                            }} class="bg-blue-600 hover:bg-blue-700 text-white">
+                                                Save
+                                            </Button>
+                                        </div>
+                                    </Popover.Content>
+                                </Popover.Root>
+                            </div>
+                        </div>
+
+                            <!-- If it has tags, show them: -->
+                            {#if viewingPublication.tags?.length > 0}
+                            <div class="flex flex-wrap gap-2 mt-3">
+                                {#each viewingPublication.tags as tag}
+                                <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                                {/each}
+                            </div>
+                            {/if}
+                
+                            <!-- Show reading logs EXACTLY how you do in the card: -->
+                            <div class="mt-4 p-3 bg-gray-100 border border-gray-300 rounded-md">
+                            <h3 class="font-semibold text-sm mb-2">Reading Log:</h3>
+                            {#if viewingPublication.journalLogs?.length > 0}
+                                <ul class="space-y-2">
+                                {#each viewingPublication.journalLogs as log}
+                                    <li class="p-2 bg-white border rounded-md shadow-sm">
+                                    <strong>{log.dateTitle}</strong>
+                                    <p class="text-sm text-gray-600">From Page {log.fromPage} - To Page {log.toPage}</p>
+                                    <p class="text-xs text-gray-500">Pages Read: {log.pagesRead}</p>
+                                    {#if log.comment}
+                                        <p class="text-xs text-gray-500">"{log.comment}"</p>
+                                    {/if}
+                                    <small class="text-xs text-gray-500">{new Date(log.date).toLocaleString()}</small>
+                                    </li>
+                                {/each}
+                                </ul>
+                            {:else}
+                                <p class="text-sm text-gray-500">No logs yet.</p>
+                            {/if}
+                            </div>
+                
+                        {/if}
+                
+                        </Dialog.Description>
+                    </Dialog.Header>
+                    <Dialog.Footer>
+                    </Dialog.Footer>
+                    </Dialog.Content>
+                </Dialog.Root>
+  
             </h2>
           </div>
   
@@ -791,15 +931,15 @@
           {:else}
             <ul class="space-y-3">
               {#each libraryList as lit}
-                <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
+                <li class="p-4 bg-white border border-neutral-300 rounded-md shadow cursor-pointer" type="button" on:click={() => openViewModal(lit)}>
                   <div class="flex justify-between">
-                    <div class="cursor-pointer" on:click={() => openEditModal(lit)}>
+                    <div>
                       <strong>{lit.title}</strong><br />
                       <small>{lit.author}</small>
                     </div>
                     <div>
                       <DropdownMenu.Root>
-                        <DropdownMenu.Trigger>
+                        <DropdownMenu.Trigger >
                           <button class="p-0.5 text-gray-800 hover:bg-gray-200 rounded-sm">
                             <Ellipsis class="w-5 h-5" />
                           </button>
@@ -892,6 +1032,7 @@
             </ul>
           {/if}
         </section>
+        
   
         <!-- Analytics Section -->
         <section class="w-1/2 py-12 pl-3 pr-12">

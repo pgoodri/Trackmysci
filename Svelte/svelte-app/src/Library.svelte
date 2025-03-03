@@ -9,12 +9,21 @@
     import * as Popover from "$lib/components/ui/popover";
     import { Progress } from "$lib/components/ui/progress";
     import { signOut } from "firebase/auth";
+    import { get } from "svelte/store"; // Ensure this is imported
+
+    import {
+      Filter
+    } from "lucide-svelte";
+    
 
     let firstName = "";
     let lastName = "";
     let authReady = false;
-    let libraryList = [];
+    let libraryList = writable([]);
     let searchQuery = "";
+
+    let selectedTags = writable([]);
+    let uniqueTags = writable([]);
 
     async function fetchUserData(uid) {
         try {
@@ -30,16 +39,55 @@
     }
 
     async function loadUserLibrary(uid) {
-        try {
-            const userDocRef = doc(firestore, "users", uid);
-            const libraryRef = collection(userDocRef, "library");
-            const q = query(libraryRef, where("userId", "==", uid));
-            const querySnapshot = await getDocs(q);
-            libraryList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        } catch (error) {
-            console.error("Error fetching library:", error.message);
-        }
+    try {
+        const userDocRef = doc(firestore, "users", uid);
+        const libraryRef = collection(userDocRef, "library");
+        const q = query(libraryRef, where("userId", "==", uid));
+        const querySnapshot = await getDocs(q);
+
+        // Use set() to update the store reactively
+        const books = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+libraryList.set(books); // ✅ First update the store
+
+extractUniqueTags(); // ✅ Then extract tags
+
+    } catch (error) {
+        console.error("Error fetching library:", error.message);
     }
+}
+
+function extractUniqueTags() {
+    let allTags = new Set();
+    const books = get(libraryList); // ✅ Correctly access the store
+
+    books.forEach(item => {
+        if (item.tags) {
+            item.tags.forEach(tag => allTags.add(tag));
+        }
+    });
+
+    uniqueTags.set([...allTags]); // ✅ Update the store with unique tags
+    console.log("Extracted Tags:", [...allTags]); // Debugging log
+}
+
+
+
+function toggleTag(tag) {
+    selectedTags.update(tags => {
+        let newTags;
+        if (tags.includes(tag)) {
+            newTags = tags.filter(t => t !== tag); // Remove tag if already selected
+        } else {
+            newTags = [...tags, tag]; // Add tag if not selected
+        }
+        console.log("Updated Selected Tags:", newTags); // Debugging log
+        return newTags;
+    });
+
+    filteredLibrary(); // ✅ Force UI update after toggling a tag
+}
+
+
 
     async function deletePublication(entryId) {
         if (!confirm("Are you sure you want to delete this publication?")) return;
@@ -66,11 +114,24 @@
     }
 
     function filteredLibrary() {
-        return libraryList.filter(lit =>
-            lit.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            lit.author.toLowerCase().includes(searchQuery.toLowerCase())
-        );
-    }
+    const selected = get(selectedTags); // Get selected tags
+    const books = get(libraryList); // Get the latest library data
+
+    return books.filter(lit => {
+        const matchesSearch = lit.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              lit.author?.toLowerCase().includes(searchQuery.toLowerCase());
+
+        const tags = lit.tags || []; // Ensure it's always an array
+        const matchesTags = selected.length === 0 || tags.some(tag => selected.includes(tag));
+
+        return matchesSearch && matchesTags;
+    });
+}
+
+
+
+
+
 
     onMount(() => {
         onAuthStateChanged(auth, async (user) => {
@@ -123,25 +184,61 @@
             <h2 class="text-4xl font-bold text-neutral-800">Library</h2>
         </div>
 
-        <div class="px-12 py-6">
+        <!-- Search & Tag Filter Container (Aligned Side by Side) -->
+        <div class="flex items-center px-12 py-4 gap-6">
+        <!-- Search Bar with Icon -->
+        <div class="relative flex-1">
             <input
-                type="text"
-                bind:value={searchQuery}
-                class="w-full p-3 border border-neutral-300 rounded-md shadow-sm text-neutral-700"
-                placeholder="Search by title or author..."
-            />
+            type="text"
+            bind:value={searchQuery}
+            class="w-full p-3 border border-neutral-300 rounded-md shadow-sm text-neutral-700"
+            placeholder="Search by title or author..."
+        />
+        </div>
+
+        <!-- Filter by Tags Section -->
+        <div class="flex flex-col">
+            <!-- Filter by Tags Title -->
+            <div class="flex items-start gap-2 mb-2">
+                <Filter />
+                <span class="text-gray-700 font-semibold text-base">Filter by Tags</span>
+            </div>
+
+            <!-- Tags Displayed Inline -->
+            <div class="flex flex-wrap gap-2 w-[450px]">
+                {#each $uniqueTags as tag}
+                    <button 
+                        class="px-4 py-1.5 text-sm font-medium rounded-full border transition-all shadow-sm"
+                        class:active={$selectedTags.includes(tag)}
+                        on:click={() => toggleTag(tag)}
+                        style="background-color: {$selectedTags.includes(tag) ? '#2563EB' : '#F3F4F6'}; 
+                            color: {$selectedTags.includes(tag) ? 'white' : '#374151'};
+                            font-weight: 500;">
+                        {tag}
+                    </button>
+                {/each}
+            </div>
+        </div>
         </div>
 
         <div class="flex flex-1">
             <section class="w-full  px-12">
                 {#if filteredLibrary().length === 0}
                     <div class="flex flex-col items-center justify-center text-center text-gray-500 pt-12">
-                        <p class="text-lg font-medium">No matching papers found.</p>
+                        <p class="text-lg font-medium">No matching publications found.</p>
                     </div>
                 {:else}
                     <!-- Grid layout for 3-column structure -->
                     <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {#each filteredLibrary() as lit}
+                        {#each $libraryList.filter(lit => {
+                            const matchesSearch = lit.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                                  lit.author?.toLowerCase().includes(searchQuery.toLowerCase());
+                        
+                            const tags = lit.tags || []; // Ensure it's always an array
+                            const matchesTags = $selectedTags.length === 0 || tags.some(tag => $selectedTags.includes(tag));
+                        
+                            return matchesSearch && matchesTags;
+                        }) as lit}
                         <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
                             <div class="flex justify-between">
                                 <div class="cursor-pointer">
