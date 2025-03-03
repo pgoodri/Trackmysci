@@ -225,7 +225,7 @@ function toggleTag(tag) {
             <section class="w-full  px-12">
                 {#if filteredLibrary().length === 0}
                     <div class="flex flex-col items-center justify-center text-center text-gray-500 pt-12">
-                        <p class="text-lg font-medium">No matching publications found.</p>
+                        <p class="text-lg font-medium">No publications found.</p>
                     </div>
                 {:else}
                     <!-- Grid layout for 3-column structure -->
