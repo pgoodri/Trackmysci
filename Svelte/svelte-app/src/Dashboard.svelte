@@ -939,7 +939,7 @@
           {:else}
             <ul class="space-y-3">
               {#each libraryList as lit}
-                <li class="p-4 bg-white border border-neutral-300 rounded-md shadow cursor-pointer" type="button" on:click={(e) => handleCardClick(e, lit)}>
+                <li class="p-4 bg-white border border-neutral-200 rounded-md shadow cursor-pointer hover:border-neutral-300 transition-all ease-in-out" type="button" on:click={(e) => handleCardClick(e, lit)}>
                   <div class="flex justify-between">
                     <div>
                       <strong>{lit.title}</strong><br />
