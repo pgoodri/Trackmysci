@@ -406,7 +406,7 @@
         navigate("/login");
       }
     });
-  
+
     async function updateCharts() {
       const user = auth.currentUser;
       if (!user) {
@@ -624,6 +624,14 @@
 
         } catch (error) {
             console.error("Error deleting publication:", error.message);
+        }
+    }
+
+    function handleCardClick(event, lit) {
+        // Check if the click originated from a button or dropdown/popover trigger
+        const isButtonClick = event.target.closest('button') || event.target.closest('[role="button"]');
+        if (!isButtonClick) {
+            openViewModal(lit);
         }
     }
 
@@ -931,7 +939,7 @@
           {:else}
             <ul class="space-y-3">
               {#each libraryList as lit}
-                <li class="p-4 bg-white border border-neutral-300 rounded-md shadow cursor-pointer" type="button" on:click={() => openViewModal(lit)}>
+                <li class="p-4 bg-white border border-neutral-300 rounded-md shadow cursor-pointer" type="button" on:click={(e) => handleCardClick(e, lit)}>
                   <div class="flex justify-between">
                     <div>
                       <strong>{lit.title}</strong><br />
@@ -940,7 +948,7 @@
                     <div>
                       <DropdownMenu.Root>
                         <DropdownMenu.Trigger >
-                          <button class="p-0.5 text-gray-800 hover:bg-gray-200 rounded-sm">
+                          <button class="p-0.5 text-gray-800 hover:bg-gray-200 rounded-sm" >
                             <Ellipsis class="w-5 h-5" />
                           </button>
                         </DropdownMenu.Trigger>

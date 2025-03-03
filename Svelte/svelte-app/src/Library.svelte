@@ -9,7 +9,7 @@
     import * as Popover from "$lib/components/ui/popover";
     import { Progress } from "$lib/components/ui/progress";
     import { signOut } from "firebase/auth";
-    import { get } from "svelte/store"; // Ensure this is imported
+    import { get } from "svelte/store"; 
 
     import {
       Filter
