@@ -1,53 +1,294 @@
 <script>
-    import { navigate } from "svelte-routing";
-    import { auth } from "./firebase";
-    import { signOut } from "firebase/auth";
-    import { userStore } from "./userStore";
-    import { Button } from "$lib/components/ui/button";
+    import { auth, firestore } from "./firebase";
+    import { getDoc, doc, collection, query, where, getDocs, deleteDoc } from "firebase/firestore";
+    import { onAuthStateChanged } from "firebase/auth";
+    import { onMount } from "svelte";
+    import { writable } from "svelte/store";
+    import { LogOut, Gauge, Library, ChevronsUpDown, Edit, Trash2, Ellipsis, SquarePen } from "lucide-svelte";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-    import { Gauge, Library, LogOut, MoreVertical } from "lucide-svelte";
+    import * as Popover from "$lib/components/ui/popover";
+    import { Progress } from "$lib/components/ui/progress";
+    import { signOut } from "firebase/auth";
+    import { get } from "svelte/store"; 
 
-    let firstName = "Guest";
+    import {
+      Filter
+    } from "lucide-svelte";
+    
+
+    let firstName = "";
     let lastName = "";
-    let user;
+    let authReady = false;
+    let libraryList = writable([]);
+    let searchQuery = "";
 
-    userStore.subscribe((value) => {
-        user = value;
-        if (user) {
-            firstName = user.firstName || "Guest";
-            lastName = user.lastName || "";
+    let selectedTags = writable([]);
+    let uniqueTags = writable([]);
+
+    async function fetchUserData(uid) {
+        try {
+            const userDoc = await getDoc(doc(firestore, "users", uid));
+            if (userDoc.exists()) {
+                const userData = userDoc.data();
+                firstName = userData.firstName || "";
+                lastName = userData.lastName || "";
+            }
+        } catch (error) {
+            console.error("Error fetching user data:", error);
+        }
+    }
+
+    async function loadUserLibrary(uid) {
+    try {
+        const userDocRef = doc(firestore, "users", uid);
+        const libraryRef = collection(userDocRef, "library");
+        const q = query(libraryRef, where("userId", "==", uid));
+        const querySnapshot = await getDocs(q);
+
+        // Use set() to update the store reactively
+        const books = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+libraryList.set(books); // ✅ First update the store
+
+extractUniqueTags(); // ✅ Then extract tags
+
+    } catch (error) {
+        console.error("Error fetching library:", error.message);
+    }
+}
+
+function extractUniqueTags() {
+    let allTags = new Set();
+    const books = get(libraryList); // ✅ Correctly access the store
+
+    books.forEach(item => {
+        if (item.tags) {
+            item.tags.forEach(tag => allTags.add(tag));
         }
     });
 
+    uniqueTags.set([...allTags]); // ✅ Update the store with unique tags
+    console.log("Extracted Tags:", [...allTags]); // Debugging log
+}
+
+
+
+function toggleTag(tag) {
+    selectedTags.update(tags => {
+        let newTags;
+        if (tags.includes(tag)) {
+            newTags = tags.filter(t => t !== tag); // Remove tag if already selected
+        } else {
+            newTags = [...tags, tag]; // Add tag if not selected
+        }
+        console.log("Updated Selected Tags:", newTags); // Debugging log
+        return newTags;
+    });
+
+    filteredLibrary(); // ✅ Force UI update after toggling a tag
+}
+
+
+
+    async function deletePublication(entryId) {
+        if (!confirm("Are you sure you want to delete this publication?")) return;
+        try {
+            const user = auth.currentUser;
+            if (!user) {
+                console.error("No authenticated user found.");
+                return;
+            }
+            const userDocRef = doc(firestore, "users", user.uid);
+            const entryDocRef = doc(collection(userDocRef, "library"), entryId);
+            await deleteDoc(entryDocRef);
+            console.log(`Deleted entry ${entryId}`);
+            await loadUserLibrary(user.uid);
+        } catch (error) {
+            console.error("Error deleting entry:", error.message);
+        }
+    }
+
     function logout() {
         signOut(auth).then(() => {
-            userStore.set(null);
-            navigate("/login");
+            window.location.href = "/login";
         });
     }
+
+    function filteredLibrary() {
+    const selected = get(selectedTags); // Get selected tags
+    const books = get(libraryList); // Get the latest library data
+
+    return books.filter(lit => {
+        const matchesSearch = lit.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                              lit.author?.toLowerCase().includes(searchQuery.toLowerCase());
+
+        const tags = lit.tags || []; // Ensure it's always an array
+        const matchesTags = selected.length === 0 || tags.some(tag => selected.includes(tag));
+
+        return matchesSearch && matchesTags;
+    });
+}
+
+
+
+
+
+
+    onMount(() => {
+        onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                await fetchUserData(user.uid);
+                await loadUserLibrary(user.uid);
+            }
+            authReady = true;
+        });
+    });
 </script>
 
-
-<nav class="bg-white border-neutral-400 shadow h-16 flex items-center justify-between px-12 sticky top-0 z-50">
-    <h1 class="text-lg font-semibold text-neutral-800">TrackMySci</h1>
-    <div class="flex items-center space-x-6">
-        <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-                <button class="border border-neutral-300 py-2 px-4 shadow-sm text-base font-medium rounded hover:bg-neutral-100 flex items-center gap-x-5">
-                    {firstName + " " + lastName}
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 text-neutral-500">
-                        <path fill-rule="evenodd" d="M11.47 4.72a.75.75 0 0 1 1.06 0l3.75 3.75a.75.75 0 0 1-1.06 1.06L12 6.31 8.78 9.53a.75.75 0 0 1-1.06-1.06l3.75-3.75Zm-3.75 9.75a.75.75 0 0 1 1.06 0L12 17.69l3.22-3.22a.75.75 0 1 1 1.06 1.06l-3.75 3.75a.75.75 0 0 1-1.06 0l-3.75-3.75a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd" />
-                    </svg>
-                </button>
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content>
-                <DropdownMenu.Group>
-                    <DropdownMenu.Item on:click={() => navigate("/dashboard")} class="text-base"> <Gauge class="w-7 pr-1.5"/> Dashboard</DropdownMenu.Item>
-                    <DropdownMenu.Item on:click={() => navigate("/library")} class="text-base"> <Library class="w-7 pr-1.5"/>Library</DropdownMenu.Item>
-                    <DropdownMenu.Separator />
-                    <DropdownMenu.Item on:click={logout} class="text-red-500 text-base"><LogOut class="w-7 pr-1.5 text-red-500"/>Logout</DropdownMenu.Item>
-                </DropdownMenu.Group>
-            </DropdownMenu.Content>
-        </DropdownMenu.Root>
+{#if !authReady}
+    <div class="flex justify-center items-center h-screen bg-white">
+        <p class="text-neutral-500 text-lg">Loading...</p>
     </div>
-</nav>
+{:else}
+    <div class="min-h-screen flex flex-col bg-stone-50">
+        <!-- NAVBAR -->
+        <nav class="bg-white border-neutral-400 shadow h-16 flex items-center justify-between px-12 sticky top-0 z-50">
+            <h1 class="text-lg font-semibold text-neutral-800">TrackMySci</h1>
+            <div class="flex items-center space-x-6">
+                <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                        <button class="border border-neutral-300 py-2 px-4 shadow-sm text-base font-medium rounded hover:bg-neutral-100 flex items-center gap-x-5">
+                            {firstName} {lastName}
+                            <ChevronsUpDown class="w-4 h-4 text-neutral-800" />
+                        </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content>
+                        <DropdownMenu.Group>
+                            <DropdownMenu.Item on:click={() => window.location.href = "/dashboard"} class="text-base">
+                                <Gauge class="w-7 pr-1.5" /> Dashboard
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Item on:click={() => window.location.href = "/library"} class="text-base">
+                                <Library class="w-7 pr-1.5" /> Library
+                            </DropdownMenu.Item>
+                            <DropdownMenu.Separator />
+                            <DropdownMenu.Item on:click={logout} class="text-red-500 text-base">
+                                <LogOut class="w-7 pr-1.5 text-red-500" /> Logout
+                            </DropdownMenu.Item>
+                        </DropdownMenu.Group>
+                    </DropdownMenu.Content>
+                </DropdownMenu.Root>
+            </div>
+        </nav>
+
+        <!-- PAGE CONTENT -->
+        <div class="pt-12 px-12">
+            <h2 class="text-4xl font-bold text-neutral-800">Library</h2>
+        </div>
+
+        <!-- Search & Tag Filter Container (Aligned Side by Side) -->
+        <div class="flex items-center px-12 py-4 gap-6">
+        <!-- Search Bar with Icon -->
+        <div class="relative flex-1">
+            <input
+            type="text"
+            bind:value={searchQuery}
+            class="w-full p-3 border border-neutral-300 rounded-md shadow-sm text-neutral-700"
+            placeholder="Search by title or author..."
+        />
+        </div>
+
+        <!-- Filter by Tags Section -->
+        <div class="flex flex-col">
+            <!-- Filter by Tags Title -->
+            <div class="flex items-start gap-2 mb-2">
+                <Filter />
+                <span class="text-gray-700 font-semibold text-base">Filter by Tags</span>
+            </div>
+
+            <!-- Tags Displayed Inline -->
+            <div class="flex flex-wrap gap-2 w-[450px]">
+                {#each $uniqueTags as tag}
+                    <button 
+                        class="px-4 py-1.5 text-sm font-medium rounded-full border transition-all shadow-sm"
+                        class:active={$selectedTags.includes(tag)}
+                        on:click={() => toggleTag(tag)}
+                        style="background-color: {$selectedTags.includes(tag) ? '#2563EB' : '#F3F4F6'}; 
+                            color: {$selectedTags.includes(tag) ? 'white' : '#374151'};
+                            font-weight: 500;">
+                        {tag}
+                    </button>
+                {/each}
+            </div>
+        </div>
+        </div>
+
+        <div class="flex flex-1">
+            <section class="w-full  px-12">
+                {#if filteredLibrary().length === 0}
+                    <div class="flex flex-col items-center justify-center text-center text-gray-500 pt-12">
+                        <p class="text-lg font-medium">No publications found.</p>
+                    </div>
+                {:else}
+                    <!-- Grid layout for 3-column structure -->
+                    <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {#each $libraryList.filter(lit => {
+                            const matchesSearch = lit.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                                  lit.author?.toLowerCase().includes(searchQuery.toLowerCase());
+                        
+                            const tags = lit.tags || []; // Ensure it's always an array
+                            const matchesTags = $selectedTags.length === 0 || tags.some(tag => $selectedTags.includes(tag));
+                        
+                            return matchesSearch && matchesTags;
+                        }) as lit}
+                        <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
+                            <div class="flex justify-between">
+                                <div class="cursor-pointer">
+                                    <strong>{lit.title}</strong><br />
+                                    <small>{lit.author}</small>
+                                </div>
+                                <div>
+                                    <DropdownMenu.Root>
+                                        <DropdownMenu.Trigger>
+                                            <button class="p-0.5 text-gray-800 hover:bg-gray-200 rounded-sm">
+                                                <Ellipsis class="w-5 h-5" />
+                                            </button>
+                                        </DropdownMenu.Trigger>
+                                        <DropdownMenu.Content>
+                                            <DropdownMenu.Group>
+                                                <DropdownMenu.Item class="text-sm">
+                                                    <Edit class="w-4 h-4 mr-2" /> Edit
+                                                </DropdownMenu.Item>
+                                                <DropdownMenu.Item class="text-sm text-red-600" on:click={() => deletePublication(lit.id)}>
+                                                    <Trash2 class="w-4 h-4 mr-2" /> Delete
+                                                </DropdownMenu.Item>
+                                            </DropdownMenu.Group>
+                                        </DropdownMenu.Content>
+                                    </DropdownMenu.Root>
+                                </div>
+                            </div>
+
+                            {#if lit.tags?.length > 0}
+                                <div class="flex flex-wrap gap-2 mt-3">
+                                    {#each lit.tags as tag}
+                                        <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                                    {/each}
+                                </div>
+                            {/if}
+
+                            <div class="mt-1 flex items-center gap-3">
+                                <div class="flex-1">
+                                    <div class="flex justify-between text-sm text-neutral-600 mb-1">
+                                        <span>
+                                            {Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))}%
+                                        </span>
+                                    </div>
+                                    <Progress value={Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))} />
+                                </div>
+                            </div>
+                        </li>
+                        {/each}
+                    </ul>
+                {/if}
+            </section>
+        </div>
+    </div>
+{/if}
