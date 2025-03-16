@@ -1,86 +1,109 @@
 <script>
-    import { onMount, onDestroy, afterUpdate } from "svelte";
-    import { Chart, ArcElement, Title, Tooltip, Legend } from "chart.js";
+import { onMount, onDestroy, afterUpdate } from "svelte";
+import { Chart, ArcElement, Title, Tooltip, Legend } from "chart.js";
+import { auth, firestore } from "/src/firebase";
+import { doc, getDoc } from "firebase/firestore";
 
-    Chart.register(ArcElement, Title, Tooltip, Legend);
+Chart.register(ArcElement, Title, Tooltip, Legend);
 
-    export let type = "Tags"; // Default chart type
+export let type = "Tags"; // Default chart type
+export let chartKey; // Used to force refresh
 
-    let chart;
-    let ctx;
 
-    // Define data for different chart types
-    const chartDataSets = {
-        Tags: {
-            labels: ["Fiction", "Science", "History", "Math", "Technology"],
-            data: [40, 20, 30, 10, 25],
-            colors: ["#FF6384", "#36A2EB", "#FFCE56", "#4CAF50", "#9C27B0"],
-        },
-        Ratings: {
-            labels: ["1 Star", "2 Stars", "3 Stars", "4 Stars", "5 Stars"],
-            data: [5, 10, 25, 40, 20],
-            colors: ["#FF0000", "#FF8000", "#FFFF00", "#80FF00", "#00FF00"],
-        },
-        Authors: {
-            labels: ["Tolkien", "Asimov", "Rowling", "Hemingway", "Orwell"],
-            data: [15, 20, 30, 35, 25],
-            colors: ["#2E86C1", "#A569BD", "#F39C12", "#E74C3C", "#1ABC9C"],
-        }
-    };
+let chart;
+let ctx;
+let chartData = {
+    labels: [],
+    data: [],
+    colors: ["#FF6384", "#36A2EB", "#FFCE56", "#4CAF50", "#9C27B0"]
+};
 
-    function createChart() {
-        if (!ctx) return;
-
-        if (chart) {
-            chart.destroy(); // Destroy existing chart before creating a new one
-        }
-
-        chart = new Chart(ctx, {
-            type: "pie",
-            data: {
-                labels: chartDataSets[type].labels,
-                datasets: [{
-                    data: chartDataSets[type].data,
-                    backgroundColor: chartDataSets[type].colors,
-                    hoverBackgroundColor: chartDataSets[type].colors,
-                }]
-            },
-            options: {
-                responsive: true,
-                plugins: {
-                    legend: {  
-                        display: true,
-                        position: "right",
-                        labels: {
-                            font: { size: 12 },
-                            color: "#333",
-                            padding: 8,
-                            usePointStyle: true,
-                            pointStyle: "circle",
-                            boxWidth: 6,
-                            boxHeight: 6,
-                        }
-                    },
-                    tooltip: {
-                        enabled: true // Allows tooltips on hover
-                    }
-                }
-            }
-        });
+async function fetchChartData() {
+    const user = auth.currentUser;
+    if (!user) {
+        console.error("No authenticated user found.");
+        return;
     }
 
-    onMount(() => {
-        ctx = document.getElementById("pieChart").getContext("2d");
-        createChart();
-    });
+    const userDocRef = doc(firestore, "users", user.uid);
+    const chartTypeDocRef = doc(userDocRef, "charts", type.toLowerCase());
 
-    afterUpdate(() => {
-        createChart(); // Update chart when `type` changes
-    });
+    try {
+        const docSnap = await getDoc(chartTypeDocRef);
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            chartData.labels = Object.keys(data);
+            chartData.data = Object.values(data);
+        } else {
+            console.warn(`No ${type} data found.`);
+            chartData.labels = [];
+            chartData.data = [];
+        }
+    } catch (error) {
+        console.error(`Error fetching ${type} data:`, error);
+    }
+}
 
-    onDestroy(() => {
-        if (chart) chart.destroy();
+async function createChart() {
+    await fetchChartData();
+
+    if (!ctx) return;
+
+    if (chart) {
+        chart.destroy();
+    }
+
+    chart = new Chart(ctx, {
+        type: "pie",
+        data: {
+            labels: chartData.labels,
+            datasets: [{
+                data: chartData.data,
+                backgroundColor: chartData.colors.slice(0, chartData.labels.length),
+                hoverBackgroundColor: chartData.colors.slice(0, chartData.labels.length),
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    display: true,
+                    position: "right",
+                    labels: {
+                        font: { size: 12 },
+                        color: "#333",
+                        padding: 8,
+                        usePointStyle: true,
+                        pointStyle: "circle",
+                        boxWidth: 6,
+                        boxHeight: 6,
+                    }
+                },
+                tooltip: { enabled: true }
+            }
+        }
     });
+}
+
+onMount(() => {
+    ctx = document.getElementById("pieChart").getContext("2d");
+    createChart();
+});
+
+// 🔥 Force chart refresh when `chartKey` changes
+$: if (chartKey) {
+    console.log("🔄 Chart key changed, refreshing PieChart...");
+    createChart();
+}
+
+afterUpdate(() => {
+    createChart();
+});
+
+onDestroy(() => {
+    if (chart) chart.destroy();
+});
 </script>
 
 <canvas id="pieChart"></canvas>
+

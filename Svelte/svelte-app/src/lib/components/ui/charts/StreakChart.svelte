@@ -1,62 +1,43 @@
 <script>
-    import { onMount, onDestroy, afterUpdate } from "svelte";
-    import { Chart, ArcElement, Title, Tooltip } from "chart.js";
+    import { onMount, afterUpdate } from "svelte";
+    import { auth, firestore } from "/src/firebase";
+    import { doc, getDoc, collection } from "firebase/firestore";
+    import { writable } from "svelte/store";
 
-    Chart.register(ArcElement, Title, Tooltip);
+    export let streakCount = writable(0);
 
-    export let streakCount = 5; // Default value (replace with real data)
-    let chart;
-    let ctx;
-
-    function createChart() {
-        if (!ctx) return;
-
-        if (chart) {
-            chart.destroy(); // Destroy existing chart
+    async function fetchStreak() {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("❌ No authenticated user found.");
+            return;
         }
 
-        chart = new Chart(ctx, {
-            type: "doughnut",
-            data: {
-                labels: ["Streak", "Remaining"],
-                datasets: [{
-                    data: [streakCount, 30 - streakCount], // Assume max streak is 30 days
-                    backgroundColor: ["#36A2EB", "#CCCCCC"], // Blue for streak, Gray for remaining
-                    hoverBackgroundColor: ["#36A2EB", "#AAAAAA"],
-                }]
-            },
-            options: {
-                responsive: true,
-                cutout: "80%", // Creates the donut effect
-                plugins: {
-                    tooltip: { enabled: false }, // Disable tooltip
-                    title: {
-                        display: true,
-                        text: "Current Streak"
-                    }
-                }
+        try {
+            const summaryDocRef = doc(collection(firestore, "users", user.uid, "charts"), "summary");
+            const summaryDocSnap = await getDoc(summaryDocRef);
+
+            if (summaryDocSnap.exists()) {
+                const summaryData = summaryDocSnap.data();
+                streakCount.set(summaryData.streak || 0);
             }
-        });
+        } catch (error) {
+            console.error("❌ Error fetching streak data:", error.message);
+        }
     }
 
-    onMount(() => {
-        ctx = document.getElementById("streakChart").getContext("2d");
-        createChart();
+    onMount(async () => {
+        await fetchStreak();
     });
 
-    afterUpdate(() => {
-        createChart(); // Update chart when streakCount changes
-    });
-
-    onDestroy(() => {
-        if (chart) chart.destroy();
+    afterUpdate(async () => {
+        await fetchStreak();
     });
 </script>
 
 <div class="relative flex items-center justify-center h-full">
-    <canvas id="streakChart"></canvas>
     <div class="absolute text-center">
-        <p class="text-4xl font-bold text-blue-500">{streakCount}</p>
+        <p class="text-4xl font-bold text-blue-500">{$streakCount}</p>
         <p class="text-sm text-gray-500">Days</p>
     </div>
 </div>

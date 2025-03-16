@@ -10,6 +10,8 @@
     import { onAuthStateChanged } from "firebase/auth";
     import { auth, firestore } from "./firebase";
     import { signOut } from "firebase/auth";
+    import { writable } from "svelte/store";
+    import { writeBatch } from "firebase/firestore";
     import {
       doc,
       getDoc,
@@ -20,7 +22,9 @@
       where,
       getDocs,
       updateDoc,
-      deleteDoc
+      deleteDoc,
+      orderBy,
+      limit
     } from "firebase/firestore";
     import {
       MoreVertical,
@@ -47,6 +51,9 @@
     import StreakChart from "./lib/components/ui/charts/StreakChart.svelte";
   
     let currentStreak = 5; // Example streak; replace with your logic
+    let chartKey = writable(0); // Used to force chart re-render
+    let chartRefreshKey = writable(0);
+    const batch = writeBatch(firestore);
   
     async function searchLiterature() {
     // Reset previous results
@@ -204,11 +211,10 @@
   }
   
     // Stores for selected chart options
-    import { writable } from "svelte/store";
     let selectedPieChart = writable("Tags");
     let selectedTimeline = writable("30 Days");
     let selectedProgress = writable("All Progress");
-    let progressPercentage = writable(75);
+    let progressPercentage = writable(0); // Initially 0, will update dynamically
   
     const pieChartOptions = ["Tags", "Ratings", "Authors"];
     const timelineOptions = ["30 Days", "60 Days", "90 Days"];
@@ -294,24 +300,48 @@
   
     // ----- Firestore & Auth Functions -----
     async function fetchUserData() {
-      const user = auth.currentUser;
-      if (!user) {
+    const user = auth.currentUser;
+    if (!user) {
         console.error("No authenticated user found.");
         return;
-      }
-      try {
+    }
+    try {
         const userDoc = await getDoc(doc(firestore, "users", user.uid));
         if (userDoc.exists()) {
-          const userData = userDoc.data();
-          firstName = userData.firstName || "Guest";
-          lastName = userData.lastName || "";
-        } else {
-          console.warn("User document not found in Firestore.");
+            const userData = userDoc.data();
+            firstName = userData.firstName || "Guest";
+            lastName = userData.lastName || "";
         }
-      } catch (error) {
+
+        // 🔥 Check Streak Status
+        const summaryDocRef = doc(collection(firestore, "users", user.uid, "charts"), "summary");
+        const summaryDocSnap = await getDoc(summaryDocRef);
+
+        if (summaryDocSnap.exists()) {
+            const summaryData = summaryDocSnap.data();
+            let streak = summaryData.streak || 0;
+            let streakDate = summaryData.streakDate || null;
+            let today = new Date().toISOString().split("T")[0];
+
+            if (streakDate) {
+                const lastLogDate = new Date(streakDate);
+                const timeDiff = Math.floor((new Date(today) - lastLogDate) / (1000 * 60 * 60 * 24));
+
+                if (timeDiff >= 2) {
+                    console.log("⏳ Streak expired. Resetting...");
+                    await setDoc(summaryDocRef, { streak: 0, streakDate: null }, { merge: true });
+                    streak = 0;
+                }
+            }
+            currentStreak = streak;
+            console.log(`🔥 Current streak: ${streak} days`);
+        }
+
+    } catch (error) {
         console.error("Error fetching user data:", error.message);
-      }
     }
+}
+
   
     async function loadUserLibrary() {
       const user = auth.currentUser;
@@ -340,10 +370,17 @@
     try {
         const userDocRef = doc(firestore, "users", user.uid);
         const entryDocRef = doc(collection(userDocRef, "library"), entryId);
+        const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
+
         const entryDocSnap = await getDoc(entryDocRef);
+        const summaryDocSnap = await getDoc(summaryDocRef);
 
         let journalLogs = [];
         let previousPage = pageStart;
+        let streak = 0;
+        let streakDate = null;
+        let today = new Date().toISOString().split("T")[0]; // Get current date (YYYY-MM-DD)
+        let readingLog = [];
 
         if (entryDocSnap.exists()) {
             const entryData = entryDocSnap.data();
@@ -351,6 +388,14 @@
             previousPage = entryData.currentPage || pageStart;
         }
 
+        if (summaryDocSnap.exists()) {
+            const summaryData = summaryDocSnap.data();
+            streak = summaryData.streak || 0;
+            streakDate = summaryData.streakDate || null;
+            readingLog = summaryData.readingLog || [];
+        }
+
+        // ✅ Calculate Pages Read
         const pagesRead = Math.max(newCurrentPage - previousPage, 0);
         const logEntry = {
             dateTitle: new Date().toLocaleDateString(),
@@ -363,7 +408,40 @@
 
         journalLogs.push(logEntry);
 
-        // Update Firestore
+        // 🔥 **Streak Logic**
+        if (!streakDate) {
+            streak = 1;
+            streakDate = today;
+        } else {
+            const lastLogDate = new Date(streakDate);
+            const timeDiff = Math.floor((new Date(today) - lastLogDate) / (1000 * 60 * 60 * 24));
+
+            if (timeDiff === 1) {
+                streak += 1;
+                streakDate = today;
+            } else if (timeDiff > 1) {
+                streak = 0;
+                streakDate = null;
+            }
+        }
+
+        // 📊 **Update Reading Log (for Timeline Chart)**
+        let updatedLog = readingLog.map(log => ({ ...log })); // Clone array to avoid mutation
+
+        // Check if today already exists in log, update instead of adding duplicate
+        let todayLogIndex = updatedLog.findIndex(log => log.date === today);
+        if (todayLogIndex !== -1) {
+            updatedLog[todayLogIndex].pagesRead += pagesRead; // Aggregate pages read for today
+        } else {
+            updatedLog.unshift({ date: today, pagesRead }); // Add new entry for today
+        }
+
+        // Ensure we only keep 90 days of logs
+        if (updatedLog.length > 90) {
+            updatedLog.pop(); // Remove the oldest entry
+        }
+
+        // 🔄 Update Firestore
         await updateDoc(entryDocRef, {
             currentPage: newCurrentPage,
             updatedAt: new Date(),
@@ -371,18 +449,32 @@
             journalLogs: journalLogs
         });
 
-        console.log(`Updated entry ${entryId}: ${previousPage} ➝ ${newCurrentPage}, pages read: ${pagesRead}, comment: ${comment}`);
+        await setDoc(summaryDocRef, {
+            mostRecent: entryDocSnap.data().title,
+            updatedAt: new Date(),
+            streak: streak,
+            streakDate: streakDate,
+            readingLog: updatedLog
+        }, { merge: true });
 
-        // Update `viewingPublication` in memory
+        console.log(`✅ Updated streak to ${streak} days, streakDate: ${streakDate}`);
+        console.log("📊 Updated reading log for timeline chart:", updatedLog);
+
+        // ✅ Ensure UI updates properly
         if (viewingPublication && viewingPublication.id === entryId) {
-            viewingPublication.journalLogs = journalLogs;  // Update logs
-            viewingPublication.currentPage = newCurrentPage; // Update page count
+            viewingPublication.journalLogs = journalLogs;
+            viewingPublication.currentPage = newCurrentPage;
         }
 
-        await loadUserLibrary(); // Refresh the library without requiring a reload
+        await loadUserLibrary();
+        currentStreak = streak; // Update UI Streak
+
+        // ✅ Trigger Timeline Chart and Progress Chart Re-render
+        chartRefreshKey.update(n => n + 1);
+        chartKey.update(n => n + 1);
 
     } catch (error) {
-        console.error("Error updating progress:", error.message);
+        console.error("❌ Error updating progress:", error.message);
     }
 }
 
@@ -408,38 +500,88 @@
     });
 
     async function updateCharts() {
-      const user = auth.currentUser;
-      if (!user) {
+    const user = auth.currentUser;
+    if (!user) {
         console.error("No authenticated user found.");
         return;
-      }
-      try {
-        const userDocRef = doc(firestore, "users", user.uid);
-        const userDocSnap = await getDoc(userDocRef);
-        if (!userDocSnap.exists()) {
-          await setDoc(userDocRef, { createdAt: new Date() });
-        }
-        const chartsDocRef = doc(collection(userDocRef, "charts"), "summary");
-        // (Calculation details omitted for brevity)
-        let mostRecentEntry = null;
-        for (const entry of libraryList) {
-          let entryDate = entry.updatedAt
-            ? (typeof entry.updatedAt.toDate === "function" ? entry.updatedAt.toDate() : new Date(entry.updatedAt))
-            : null;
-          if (!entryDate) continue;
-          if (!mostRecentEntry || entryDate > mostRecentEntry.date) {
-            mostRecentEntry = { title: entry.title, date: entryDate };
-          }
-        }
-        const mostRecent = mostRecentEntry ? mostRecentEntry.title : "None";
-        const chartsData = { mostRecent, updatedAt: new Date() };
-        await setDoc(chartsDocRef, chartsData, { merge: true });
-        console.log("Charts updated:", chartsData);
-      } catch (error) {
-        console.error("Error updating charts:", error.message);
-      }
     }
-  
+
+    try {
+        console.log("📊 Starting full chart refresh...");
+        const userDocRef = doc(firestore, "users", user.uid);
+        const chartsCollectionRef = collection(userDocRef, "charts");
+        const batch = writeBatch(firestore);
+
+        let tagsCount = {};
+        let authorsCount = {};
+        let mostRecentTitle = null;
+        let latestLogTime = null;
+
+        // 🔍 Fetch all current publications from the library
+        const libraryRef = collection(userDocRef, "library");
+        const librarySnapshot = await getDocs(libraryRef);
+
+        if (librarySnapshot.empty) {
+            console.warn("⚠️ No publications found. Wiping all tags and authors.");
+        }
+
+        batch.set(doc(chartsCollectionRef, "tags"), {}, { merge: false });
+        batch.set(doc(chartsCollectionRef, "authors"), {}, { merge: false });
+
+        // 🔄 Recalculate authors, tags, and find most recently logged book
+        librarySnapshot.forEach(docSnap => {
+            const entry = docSnap.data();
+            const { tags, author, journalLogs, title } = entry;
+
+            // Count tags
+            if (tags && Array.isArray(tags)) {
+                tags.forEach(tag => {
+                    if (typeof tag === "string") {
+                        tagsCount[tag] = (tagsCount[tag] || 0) + 1;
+                    } else {
+                        console.warn("❌ Invalid tag:", tag);
+                    }
+                });
+            }
+
+            // Count authors
+            if (author) {
+                authorsCount[author] = (authorsCount[author] || 0) + 1;
+            }
+
+            // Check if this book has logs
+            if (journalLogs && journalLogs.length > 0) {
+                const lastLog = journalLogs[journalLogs.length - 1]; // Get most recent log
+                const logDate = new Date(lastLog.date);
+
+                if (!latestLogTime || logDate > latestLogTime) {
+                    mostRecentTitle = title;
+                    latestLogTime = logDate;
+                }
+            }
+        });
+
+        console.log("📊 Final Tag Counts:", tagsCount);
+        console.log("✍️ Final Author Counts:", authorsCount);
+        console.log("📌 Most Recent Book (with logged pages):", mostRecentTitle);
+
+        // ✅ Save the recalculated data to Firestore
+        batch.set(doc(chartsCollectionRef, "tags"), tagsCount, { merge: true });
+        batch.set(doc(chartsCollectionRef, "authors"), authorsCount, { merge: true });
+        batch.set(doc(chartsCollectionRef, "summary"), { mostRecent: mostRecentTitle, updatedAt: new Date() }, { merge: true });
+
+        await batch.commit();
+        console.log("✅ Charts updated successfully!");
+
+        // ✅ Trigger UI update
+        chartKey.update(n => n + 1);
+
+    } catch (error) {
+        console.error("❌ Error updating charts:", error.message);
+    }
+}
+
+
     // Tag functions
     function addTag() {
       if (tagInput.trim() && !tags.includes(tagInput.trim())) {
@@ -513,53 +655,80 @@
     }
   
     async function addLiteratureToLibrary() {
-      if (title && author && isbn && pageStart && pageEnd && pageEnd >= pageStart) {
+    if (title && author && isbn && pageStart && pageEnd && pageEnd >= pageStart) {
         const newEntry = {
-          title,
-          author,
-          isbn,
-          pageStart,
-          pageEnd,
-          currentPage: pageStart,
-          comment,
-          tags,
-          journalLogs: [],
+            title,
+            author,
+            isbn,
+            pageStart,
+            pageEnd,
+            currentPage: pageStart,
+            comment,
+            tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
+            journalLogs: [],
         };
+
+        console.log("📌 Saving entry with tags:", newEntry.tags);
+
         await saveEntryToFirestore(newEntry);
         await loadUserLibrary();
-        await updateCharts();
-      } else {
+        await updateCharts();  // ✅ Refresh charts
+    } else {
         alert("Please fill in all required fields before adding.");
-      }
     }
-  
-    async function updateEditedPublication() {
-      if (!editingPublication) return;
-      const user = auth.currentUser;
-      if (!user) {
+}
+
+async function updateEditedPublication() {
+    if (!editingPublication) return;
+    const user = auth.currentUser;
+    if (!user) {
         console.error("No authenticated user found.");
         return;
-      }
-      try {
+    }
+
+    try {
         const userDocRef = doc(firestore, "users", user.uid);
         const entryDocRef = doc(collection(userDocRef, "library"), editingPublication.id);
-        await updateDoc(entryDocRef, {
-          title,
-          author,
-          isbn,
-          pageStart,
-          pageEnd,
-          currentPage,
-          tags,
-          updatedAt: new Date()
-        });
-        console.log(`Updated publication: ${editingPublication.id}`);
-        await loadUserLibrary();
+
+        // 🔍 Fetch the existing data before update
+        const entryDocSnap = await getDoc(entryDocRef);
+        if (!entryDocSnap.exists()) {
+            console.warn("Publication not found for editing.");
+            return;
+        }
+
+        const updatedData = {
+            title,
+            author,
+            isbn,
+            pageStart,
+            pageEnd,
+            currentPage,
+            tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
+            updatedAt: new Date()
+        };
+
+        // ✅ Save updated publication data
+        await updateDoc(entryDocRef, updatedData);
+        console.log(`✅ Updated publication: ${editingPublication.id}`);
+
+        // ✅ Update `libraryList` in-memory so the UI updates
+        libraryList = libraryList.map(entry =>
+            entry.id === editingPublication.id ? { ...entry, ...updatedData } : entry
+        );
+
+        // ✅ Trigger a UI reactivity update
+        libraryList = [...libraryList];
+
+        // ✅ Refresh charts so the tags/authors are fully rebuilt
+        await updateCharts();
+
         closeModal();
-      } catch (error) {
-        console.error("Error updating publication:", error.message);
-      }
+    } catch (error) {
+        console.error("❌ Error updating publication:", error.message);
     }
+}
+
   
     function logout() {
       signOut(auth).then(() => {
@@ -599,33 +768,160 @@
     }
 
     async function deletePublication(publicationId) {
-        const user = auth.currentUser;
-        if (!user) {
-            console.error("No authenticated user found.");
+    const user = auth.currentUser;
+    if (!user) {
+        console.error("No authenticated user found.");
+        return;
+    }
+
+    console.log("🗑 Deleting publication:", publicationId);
+
+    const confirmDelete = confirm("Are you sure you want to delete this publication?");
+    if (!confirmDelete) return;
+
+    try {
+        const userDocRef = doc(firestore, "users", user.uid);
+        const entryDocRef = doc(userDocRef, "library", publicationId);
+        const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
+
+        // Fetch publication before deletion
+        const entryDocSnap = await getDoc(entryDocRef);
+        if (!entryDocSnap.exists()) {
+            console.warn("Publication not found.");
             return;
         }
 
-        // Ask for confirmation
-        const confirmDelete = confirm("Are you sure you want to delete this publication?");
-        if (!confirmDelete) return;
+        const deletedTitle = entryDocSnap.data().title;
 
-        try {
-            // Reference the document inside the user's library subcollection
-            const userDocRef = doc(firestore, "users", user.uid);
-            const entryDocRef = doc(userDocRef, "library", publicationId);
+        await deleteDoc(entryDocRef);
+        console.log(`✅ Deleted publication: ${deletedTitle}`);
 
-            // Delete the document from Firestore
-            await deleteDoc(entryDocRef);
+        // ✅ Remove from UI state
+        libraryList = libraryList.filter(entry => entry.id !== publicationId);
+        libraryList = [...libraryList];
 
-            console.log(`Deleted publication with ID: ${publicationId}`);
+        // ✅ Recalculate most recent book
+        let newMostRecentTitle = null;
+        let latestLogTime = null;
 
-            // Refresh the UI by updating the local list
-            libraryList = libraryList.filter(entry => entry.id !== publicationId);
+        const libraryRef = collection(userDocRef, "library");
+        const q = query(libraryRef, orderBy("updatedAt", "desc"));
+        const querySnapshot = await getDocs(q);
 
-        } catch (error) {
-            console.error("Error deleting publication:", error.message);
-        }
+        querySnapshot.forEach(docSnap => {
+            const entry = docSnap.data();
+            if (entry.journalLogs && entry.journalLogs.length > 0) {
+                const lastLog = entry.journalLogs[entry.journalLogs.length - 1];
+                const logDate = new Date(lastLog.date);
+
+                if (!latestLogTime || logDate > latestLogTime) {
+                    newMostRecentTitle = entry.title;
+                    latestLogTime = logDate;
+                }
+            }
+        });
+
+        // ✅ Save new mostRecent
+        await setDoc(summaryDocRef, { mostRecent: newMostRecentTitle, updatedAt: new Date() }, { merge: true });
+
+        console.log(`📌 Updated mostRecent book to: ${newMostRecentTitle}`);
+
+        // ✅ Refresh UI
+        await updateCharts();
+
+    } catch (error) {
+        console.error("❌ Error deleting publication:", error.message);
     }
+}
+
+
+
+
+async function updateChartsAfterDeletion(userId, author, tags, deletedTitle) {
+    try {
+        console.log("🚀 Starting updateChartsAfterDeletion...");
+        const userDocRef = doc(firestore, "users", userId);
+        const chartsCollectionRef = collection(userDocRef, "charts");
+        const batch = writeBatch(firestore);
+
+        // --- Update author count ---
+        console.log("📊 Updating author counts...");
+        const authorDocRef = doc(chartsCollectionRef, "authors");
+        const authorDocSnap = await getDoc(authorDocRef);
+        if (authorDocSnap.exists()) {
+            const authorData = authorDocSnap.data();
+            if (authorData[author]) {
+                authorData[author] -= 1;
+                if (authorData[author] <= 0) {
+                    delete authorData[author];
+                }
+                batch.set(authorDocRef, authorData, { merge: true });
+            }
+        }
+
+        // --- Update tag counts ---
+        console.log("🏷️ Updating tag counts...");
+        const tagsDocRef = doc(chartsCollectionRef, "tags");
+        const tagsDocSnap = await getDoc(tagsDocRef);
+        if (tagsDocSnap.exists()) {
+            const tagData = tagsDocSnap.data();
+            tags.forEach(tag => {
+                if (tagData[tag]) {
+                    tagData[tag] -= 1;
+                    if (tagData[tag] <= 0) {
+                        delete tagData[tag];
+                    }
+                }
+            });
+            batch.set(tagsDocRef, tagData, { merge: true });
+        }
+
+        // --- Check and update "mostRecent" ---
+        console.log("📌 Checking mostRecent...");
+        const mostRecentDocRef = doc(chartsCollectionRef, "summary");
+        const mostRecentDocSnap = await getDoc(mostRecentDocRef);
+        let isMostRecentDeleted = false;
+
+        if (mostRecentDocSnap.exists()) {
+            const mostRecentData = mostRecentDocSnap.data();
+            console.log(`🔎 Current mostRecent in Firestore: ${mostRecentData.mostRecent}`);
+            if (mostRecentData.mostRecent === deletedTitle) {
+                isMostRecentDeleted = true;
+            }
+        }
+
+        if (isMostRecentDeleted) {
+            console.log(`🛑 Deleted title "${deletedTitle}" was the most recent. Finding a new most recent...`);
+
+            // --- Get the next most recent entry ---
+            const libraryRef = collection(userDocRef, "library");
+            const q = query(libraryRef, orderBy("updatedAt", "desc"), limit(1));
+            const querySnapshot = await getDocs(q);
+
+            let newMostRecentTitle = "None";
+            if (!querySnapshot.empty) {
+                newMostRecentTitle = querySnapshot.docs[0].data().title;
+            }
+
+            console.log(`📌 New most recent title: ${newMostRecentTitle}`);
+
+            batch.set(mostRecentDocRef, { mostRecent: newMostRecentTitle, updatedAt: new Date() }, { merge: true });
+
+            console.log("📝 Added mostRecent update to batch.");
+        } else {
+            console.log(`✅ Deleted title "${deletedTitle}" was NOT the most recent. No update needed.`);
+        }
+
+        // Finalize batch update
+        console.log("🛠️ Final batch object before commit:", batch);
+        await batch.commit();
+        console.log("✅ Charts and most recent literature updated successfully.");
+
+    } catch (error) {
+        console.error("❌ Error updating charts after deletion:", error.message);
+    }
+}
+
 
     function handleCardClick(event, lit) {
         // Check if the click originated from a button or dropdown/popover trigger
@@ -1040,8 +1336,7 @@
             </ul>
           {/if}
         </section>
-        
-  
+
         <!-- Analytics Section -->
         <section class="w-1/2 py-12 pl-3 pr-12">
           <div class="h-[36.5px] mb-4 items-center">
@@ -1106,42 +1401,51 @@
                 </DropdownMenu.Root>
               </div>
               <div class="flex-1 flex items-center justify-center max-h-64 w-full">
-                <PieChart type={$selectedPieChart} />
+                <PieChart type={$selectedPieChart} chartKey={$chartKey} />
               </div>
             </div>
-            <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
-              <div class="flex items-center justify-between mb-4">
-                <div>
-                  <p class="text-lg font-semibold">Progress</p>
-                </div>
-                <DropdownMenu.Root>
-                  <DropdownMenu.Trigger>
-                    <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
-                      {$selectedProgress}
-                      <ChevronDown class="w-4" />
-                    </button>
-                  </DropdownMenu.Trigger>
-                  <DropdownMenu.Content>
-                    <DropdownMenu.Group>
-                      {#each progressOptions as option}
-                        <DropdownMenu.Item on:click={() => selectedProgress.set(option)} class="text-sm">
-                          {option}
-                        </DropdownMenu.Item>
-                      {/each}
-                    </DropdownMenu.Group>
-                  </DropdownMenu.Content>
-                </DropdownMenu.Root>
-              </div>
-              <div class="text-center mb-3">
-                <p class="text-4xl font-bold text-blue-600">{$progressPercentage}%</p>
-                <p class="text-sm text-gray-500">of total reading completed</p>
-              </div>
-              <div class="relative w-full h-6 bg-gray-200 rounded-full">
-                <div class="absolute top-0 left-0 h-6 bg-blue-500 rounded-full transition-all" style="width: {$progressPercentage}%;">
-                </div>
-              </div>
+            <!-- Progress Section -->
+<div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
+  <div class="flex items-center justify-between mb-4">
+    <div>
+      <p class="text-lg font-semibold">Progress</p>
+    </div>
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger>
+        <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
+          {$selectedProgress}
+          <ChevronDown class="w-4" />
+        </button>
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content>
+        <DropdownMenu.Group>
+          {#each progressOptions as option}
+            <DropdownMenu.Item on:click={() => selectedProgress.set(option)} class="text-sm">
+              {option}
+            </DropdownMenu.Item>
+          {/each}
+        </DropdownMenu.Group>
+      </DropdownMenu.Content>
+    </DropdownMenu.Root>
+  </div>
+
+  <!-- Display progress percentage -->
+  <div class="text-center mb-3">
+    <p class="text-4xl font-bold text-blue-600">{$progressPercentage}%</p>
+    <p class="text-sm text-gray-500">of total reading completed</p>
+  </div>
+
+  <!-- Progress Chart (Calculates but does NOT display) -->
+  <ProgressChart selectedView={$selectedProgress} updateProgress={val => progressPercentage.set(val)} chartKey={$chartRefreshKey} />
+
+  <!-- Simple Progress Bar -->
+  <div class="relative w-full h-6 bg-gray-200 rounded-full">
+    <div class="absolute top-0 left-0 h-6 bg-blue-500 rounded-full transition-all" style="width: {$progressPercentage}%;"></div>
+  </div>
+</div>
+
+
             </div>
-          </div>
         </section>
       </div>
     </div>

@@ -1,71 +1,110 @@
 <script>
-    import { onMount, onDestroy, afterUpdate } from "svelte";
-    import { Chart, ArcElement, Title, Tooltip, Legend } from "chart.js";
+    import { onMount, afterUpdate } from "svelte";
+    import { writable } from "svelte/store";
+    import { auth, firestore } from "/src/firebase";
+    import { doc, getDoc, collection, getDocs } from "firebase/firestore";
 
-    Chart.register(ArcElement, Title, Tooltip, Legend);
+    export let selectedView = "All Progress";
+    export let updateProgress; // Function to update progress in Dashboard.svelte
+    export let chartKey; // Used to force re-render
 
-    export let selectedView = "All Progress"; // Default progress type
-    let chart;
-    let ctx;
+    let progressPercentage = writable(0);
 
-    // Dummy data for demonstration
-    function getProgressData(view) {
-        if (view === "Most Recent Book Progress") {
-            return { completed: 180, remaining: 120, label: "Most Recent Book" }; // Example: 180 pages read out of 300
-        }
-        return { completed: 600, remaining: 400, label: "Total Progress" }; // Example: 600 pages read out of 1000 total
-    }
-
-    function createChart() {
-        if (!ctx) return;
-
-        const { completed, remaining, label } = getProgressData(selectedView);
-
-        if (chart) {
-            chart.destroy(); // Destroy existing chart to update
+    async function fetchProgressData(view) {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("❌ No authenticated user found.");
+            return;
         }
 
-        chart = new Chart(ctx, {
-            type: "doughnut",
-            data: {
-                labels: ["Completed", "Remaining"],
-                datasets: [{
-                    data: [completed, remaining],
-                    backgroundColor: ["#36A2EB", "#CCCCCC"], // Blue for progress, Gray for remaining
-                    hoverBackgroundColor: ["#36A2EB", "#AAAAAA"],
-                }]
-            },
-            options: {
-                responsive: true,
-                cutout: "70%", // Creates the donut effect
-                plugins: {
-                    legend: {
-                        position: "bottom"
-                    },
-                    tooltip: {
-                        enabled: true
-                    },
-                    title: {
-                        display: true,
-                        text: label
-                    }
+        try {
+            const userDocRef = doc(firestore, "users", user.uid);
+            const libraryRef = collection(userDocRef, "library");
+            const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
+
+            let completed = 0;
+            let remaining = 0;
+            let label = "Loading...";
+
+            console.log("📌 Fetching progress for:", view);
+
+            if (view === "Most Recent Book Progress") {
+                const summarySnap = await getDoc(summaryDocRef);
+                if (!summarySnap.exists()) {
+                    console.warn("⚠️ No summary data found.");
+                    return;
                 }
+
+                const mostRecentTitle = summarySnap.data().mostRecent;
+                if (!mostRecentTitle) {
+                    console.warn("⚠️ No most recent book found.");
+                    return;
+                }
+
+                console.log("📖 Most Recent Book:", mostRecentTitle);
+
+                const librarySnap = await getDocs(libraryRef);
+                let recentBook = null;
+
+                librarySnap.forEach(docSnap => {
+                    const entry = docSnap.data();
+                    if (entry.title === mostRecentTitle) {
+                        recentBook = entry;
+                    }
+                });
+
+                if (!recentBook) {
+                    console.warn("⚠️ Most recent book not found in library.");
+                    return;
+                }
+
+                console.log("✅ Found Recent Book Data:", recentBook);
+
+                completed = recentBook.currentPage - recentBook.pageStart;
+                remaining = recentBook.pageEnd - recentBook.pageStart - completed;
+                label = recentBook.title;
+
+            } else {
+                let totalPagesRead = 0;
+                let totalPagesAvailable = 0;
+
+                const librarySnap = await getDocs(libraryRef);
+                librarySnap.forEach(docSnap => {
+                    const entry = docSnap.data();
+                    if (entry.currentPage && entry.pageStart && entry.pageEnd) {
+                        totalPagesRead += entry.currentPage - entry.pageStart;
+                        totalPagesAvailable += entry.pageEnd - entry.pageStart;
+                    }
+                });
+
+                completed = totalPagesRead;
+                remaining = totalPagesAvailable - totalPagesRead;
+                label = "Total Reading Progress";
+
+                console.log("📊 Total Pages Read:", totalPagesRead);
+                console.log("📊 Total Pages Available:", totalPagesAvailable);
             }
-        });
+
+            const totalPagesAvailable = completed + remaining;
+            const percentage = totalPagesAvailable === 0 ? 0 : Math.round((completed / totalPagesAvailable) * 100);
+
+            console.log(`📈 Progress Percentage: ${percentage}%`);
+
+            updateProgress(percentage);
+            progressPercentage.set(percentage);
+
+        } catch (error) {
+            console.error("❌ Error fetching progress data:", error.message);
+        }
     }
 
-    onMount(() => {
-        ctx = document.getElementById("progressChart").getContext("2d");
-        createChart();
+    onMount(async () => {
+        await fetchProgressData(selectedView);
     });
 
-    afterUpdate(() => {
-        createChart(); // Update chart when selectedView changes
+    afterUpdate(async () => {
+        await fetchProgressData(selectedView);
     });
 
-    onDestroy(() => {
-        if (chart) chart.destroy();
-    });
 </script>
 
-<canvas id="progressChart"></canvas>
