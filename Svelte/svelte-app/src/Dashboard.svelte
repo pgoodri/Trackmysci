@@ -355,6 +355,9 @@
         const q = query(libraryRef, where("userId", "==", user.uid));
         const querySnapshot = await getDocs(q);
         libraryList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        
+        // Load ratings from localStorage after loading library
+        loadRatingsFromLocalStorage();
       } catch (error) {
         console.error("Error fetching library:", error.message);
       }
@@ -466,6 +469,16 @@
             viewingPublication.currentPage = newCurrentPage;
         }
 
+        // Calculate if reading is complete (100%)
+        const publication = entryDocSnap.data();
+        const progress = Math.round(((newCurrentPage - publication.pageStart) / (publication.pageEnd - publication.pageStart)) * 100);
+        
+        // If reading is complete, show rating dialog
+        if (progress >= 100) {
+            // Open rating dialog for the completed publication
+            showRatingDialog(entryId, publication.title);
+        }
+
         await loadUserLibrary();
         currentStreak = streak; // Update UI Streak
 
@@ -476,6 +489,65 @@
     } catch (error) {
         console.error("❌ Error updating progress:", error.message);
     }
+}
+
+// Rating variables
+let ratingDialogOpen = false;
+let currentRating = 0;
+let publicationToRate = null;
+let publicationTitleToRate = "";
+
+// Show rating dialog
+function showRatingDialog(pubId, pubTitle) {
+    publicationToRate = pubId;
+    publicationTitleToRate = pubTitle;
+    currentRating = 0;
+    ratingDialogOpen = true;
+}
+
+// Save rating to localStorage
+function saveRating() {
+    if (!publicationToRate || currentRating === 0) return;
+    
+    // Get existing ratings from localStorage
+    let ratings = {};
+    const savedRatings = localStorage.getItem('publicationRatings');
+    if (savedRatings) {
+        ratings = JSON.parse(savedRatings);
+    }
+    
+    // Save this rating
+    ratings[publicationToRate] = currentRating;
+    localStorage.setItem('publicationRatings', JSON.stringify(ratings));
+    
+    console.log(`Rating of ${currentRating} saved for publication ${publicationToRate}`);
+    
+    // Update UI for this publication
+    libraryList = libraryList.map(entry => {
+        if (entry.id === publicationToRate) {
+            return { ...entry, rating: currentRating };
+        }
+        return entry;
+    });
+    
+    // Close dialog
+    ratingDialogOpen = false;
+}
+
+// Load ratings from localStorage
+function loadRatingsFromLocalStorage() {
+    const savedRatings = localStorage.getItem('publicationRatings');
+    if (!savedRatings) return;
+    
+    const ratings = JSON.parse(savedRatings);
+    
+    // Apply ratings to library list
+    libraryList = libraryList.map(entry => {
+        if (ratings[entry.id]) {
+            return { ...entry, rating: ratings[entry.id] };
+        }
+        return entry;
+    });
 }
 
   
@@ -824,7 +896,7 @@ async function updateEditedPublication() {
         // ✅ Save new mostRecent
         await setDoc(summaryDocRef, { mostRecent: newMostRecentTitle, updatedAt: new Date() }, { merge: true });
 
-        console.log(`📌 Updated mostRecent book to: ${newMostRecentTitle}`);
+        console.log(`�� Updated mostRecent book to: ${newMostRecentTitle}`);
 
         // ✅ Refresh UI
         await updateCharts();
@@ -1449,5 +1521,47 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle) {
         </section>
       </div>
     </div>
+  {/if}
+  
+  <!-- Rating Dialog -->
+  {#if ratingDialogOpen}
+  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+          <h2 class="text-xl font-bold mb-4">Rate this publication</h2>
+          <p class="mb-4">Congratulations on finishing "{publicationTitleToRate}"! How would you rate it?</p>
+          
+          <div class="flex items-center justify-center space-x-2 mb-6">
+              {#each Array(5) as _, i}
+                  <button 
+                      type="button"
+                      on:click={() => currentRating = i + 1}
+                      class="text-3xl focus:outline-none transition-transform hover:scale-110"
+                  >
+                      {#if i < currentRating}
+                          <span class="text-yellow-400">★</span>
+                      {:else}
+                          <span class="text-gray-300">★</span>
+                      {/if}
+                  </button>
+              {/each}
+          </div>
+          
+          <div class="flex justify-end space-x-3">
+              <button 
+                  class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                  on:click={() => ratingDialogOpen = false}
+              >
+                  Skip
+              </button>
+              <button 
+                  class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                  on:click={saveRating}
+                  disabled={currentRating === 0}
+              >
+                  Save Rating
+              </button>
+          </div>
+      </div>
+  </div>
   {/if}
   

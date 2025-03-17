@@ -47,10 +47,22 @@
 
         // Use set() to update the store reactively
         const books = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-libraryList.set(books); // ✅ First update the store
-
-extractUniqueTags(); // ✅ Then extract tags
-
+        
+        // Load ratings from localStorage
+        const savedRatings = localStorage.getItem('publicationRatings');
+        if (savedRatings) {
+            const ratings = JSON.parse(savedRatings);
+            books.forEach(book => {
+                if (ratings[book.id]) {
+                    book.rating = ratings[book.id];
+                }
+            });
+        }
+        
+        // Update the store
+        libraryList.set(books);
+        
+        extractUniqueTags();
     } catch (error) {
         console.error("Error fetching library:", error.message);
     }
@@ -265,6 +277,23 @@ function toggleTag(tag) {
                                     </DropdownMenu.Root>
                                 </div>
                             </div>
+
+                            <!-- Rating Display -->
+                            {#if lit.rating !== undefined && lit.rating > 0}
+                            <div class="mt-2">
+                                <div class="flex items-center">
+                                    {#each Array(5) as _, i}
+                                        <span class="text-lg">
+                                            {#if i < lit.rating}
+                                                <span class="text-yellow-400">★</span>
+                                            {:else}
+                                                <span class="text-gray-300">★</span>
+                                            {/if}
+                                        </span>
+                                    {/each}
+                                </div>
+                            </div>
+                            {/if}
 
                             {#if lit.tags?.length > 0}
                                 <div class="flex flex-wrap gap-2 mt-3">
