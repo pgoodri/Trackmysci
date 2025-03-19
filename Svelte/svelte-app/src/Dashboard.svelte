@@ -50,9 +50,9 @@
     import PieChart from "./lib/components/ui/charts/PieChart.svelte";
     import StreakChart from "./lib/components/ui/charts/StreakChart.svelte";
   
-    let currentStreak = 5; // Example streak; replace with your logic
     let chartKey = writable(0); // Used to force chart re-render
     let chartRefreshKey = writable(0);
+    let currentStreak = writable(0); // Initialize streak to 0
     const batch = writeBatch(firestore);
   
     async function searchLiterature() {
@@ -343,25 +343,34 @@
 }
 
   
-    async function loadUserLibrary() {
-      const user = auth.currentUser;
-      if (!user) {
+async function loadUserLibrary() {
+    const user = auth.currentUser;
+    if (!user) {
         console.error("No authenticated user found.");
         return;
-      }
-      try {
+    }
+
+    try {
         const userDocRef = doc(firestore, "users", user.uid);
         const libraryRef = collection(userDocRef, "library");
-        const q = query(libraryRef, where("userId", "==", user.uid));
-        const querySnapshot = await getDocs(q);
-        libraryList = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        // Load ratings from localStorage after loading library
-        loadRatingsFromLocalStorage();
-      } catch (error) {
-        console.error("Error fetching library:", error.message);
-      }
+        const querySnapshot = await getDocs(libraryRef);
+
+        // Fetch user ratings
+        const ratingsDocRef = doc(userDocRef, "charts", "ratings");
+        const ratingsSnap = await getDoc(ratingsDocRef);
+        const ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
+
+        libraryList = querySnapshot.docs.map(docSnap => {
+            const data = docSnap.data();
+            return { id: docSnap.id, ...data, rating: data.rating || 0 };
+        });
+
+        console.log("📚 Loaded library with ratings:", libraryList);
+    } catch (error) {
+        console.error("❌ Error loading library:", error.message);
     }
+}
+
   
     async function updateProgress(entryId, newCurrentPage, pageStart, comment) {
     const user = auth.currentUser;
@@ -439,10 +448,15 @@
             updatedLog.unshift({ date: today, pagesRead }); // Add new entry for today
         }
 
-        // Ensure we only keep 90 days of logs
-        if (updatedLog.length > 90) {
-            updatedLog.pop(); // Remove the oldest entry
-        }
+        // 🔥 **Ensure we only keep logs within 90 days**
+        const cutoffDate = new Date();
+        cutoffDate.setDate(cutoffDate.getDate() - 90);
+
+        // ✅ Remove outdated logs from Firestore
+        updatedLog = updatedLog.filter(log => new Date(log.date) >= cutoffDate);
+        journalLogs = journalLogs.filter(log => new Date(log.date) >= cutoffDate);
+
+        console.log(`🔥 Deleted logs older than 90 days from Firestore. Remaining logs:`, updatedLog);
 
         // 🔄 Update Firestore
         await updateDoc(entryDocRef, {
@@ -472,10 +486,9 @@
         // Calculate if reading is complete (100%)
         const publication = entryDocSnap.data();
         const progress = Math.round(((newCurrentPage - publication.pageStart) / (publication.pageEnd - publication.pageStart)) * 100);
-        
+
         // If reading is complete, show rating dialog
         if (progress >= 100) {
-            // Open rating dialog for the completed publication
             showRatingDialog(entryId, publication.title);
         }
 
@@ -491,6 +504,7 @@
     }
 }
 
+
 // Rating variables
 let ratingDialogOpen = false;
 let currentRating = 0;
@@ -505,51 +519,54 @@ function showRatingDialog(pubId, pubTitle) {
     ratingDialogOpen = true;
 }
 
-// Save rating to localStorage
-function saveRating() {
+// Save rating to Storage
+async function saveRating() {
     if (!publicationToRate || currentRating === 0) return;
-    
-    // Get existing ratings from localStorage
-    let ratings = {};
-    const savedRatings = localStorage.getItem('publicationRatings');
-    if (savedRatings) {
-        ratings = JSON.parse(savedRatings);
+
+    const user = auth.currentUser;
+    if (!user) {
+        console.error("No authenticated user found.");
+        return;
     }
-    
-    // Save this rating
-    ratings[publicationToRate] = currentRating;
-    localStorage.setItem('publicationRatings', JSON.stringify(ratings));
-    
-    console.log(`Rating of ${currentRating} saved for publication ${publicationToRate}`);
-    
-    // Update UI for this publication
-    libraryList = libraryList.map(entry => {
-        if (entry.id === publicationToRate) {
-            return { ...entry, rating: currentRating };
-        }
-        return entry;
-    });
-    
-    // Close dialog
-    ratingDialogOpen = false;
-}
 
-// Load ratings from localStorage
-function loadRatingsFromLocalStorage() {
-    const savedRatings = localStorage.getItem('publicationRatings');
-    if (!savedRatings) return;
-    
-    const ratings = JSON.parse(savedRatings);
-    
-    // Apply ratings to library list
-    libraryList = libraryList.map(entry => {
-        if (ratings[entry.id]) {
-            return { ...entry, rating: ratings[entry.id] };
-        }
-        return entry;
-    });
-}
+    try {
+        const userDocRef = doc(firestore, "users", user.uid);
+        const libraryRef = doc(userDocRef, "library", publicationToRate);
+        const ratingsDocRef = doc(userDocRef, "charts", "ratings");
 
+        // Fetch existing data
+        const librarySnap = await getDoc(libraryRef);
+        const ratingsSnap = await getDoc(ratingsDocRef);
+        let ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
+
+        // Remove previous rating (if exists)
+        if (librarySnap.exists()) {
+            const prevRating = librarySnap.data().rating;
+            if (prevRating && ratingsData[prevRating]) {
+                ratingsData[prevRating] = Math.max(0, ratingsData[prevRating] - 1);
+            }
+        }
+
+        // Update Firestore
+        ratingsData[currentRating] = (ratingsData[currentRating] || 0) + 1;
+
+        await Promise.all([
+            setDoc(libraryRef, { rating: currentRating }, { merge: true }), // Update publication rating
+            setDoc(ratingsDocRef, ratingsData, { merge: true }) // Update overall ratings count
+        ]);
+
+        console.log(`✅ Rating of ${currentRating} saved for publication ${publicationToRate}`);
+
+        // ✅ Update UI
+        libraryList = libraryList.map(entry => entry.id === publicationToRate ? { ...entry, rating: currentRating } : entry);
+        ratingDialogOpen = false;
+
+        // ✅ Refresh charts
+        chartKey.update(n => n + 1);
+    } catch (error) {
+        console.error("❌ Error saving rating:", error.message);
+    }
+}
   
     onAuthStateChanged(auth, async (user) => {
       console.log("Auth state changed. User:", user);
@@ -594,11 +611,14 @@ function loadRatingsFromLocalStorage() {
         const librarySnapshot = await getDocs(libraryRef);
 
         if (librarySnapshot.empty) {
-            console.warn("⚠️ No publications found. Wiping all tags and authors.");
-        }
+            console.warn("⚠️ No publications found. Resetting charts.");
+            batch.set(doc(chartsCollectionRef, "tags"), {}, { merge: false });
+            batch.set(doc(chartsCollectionRef, "authors"), {}, { merge: false });
+            batch.set(doc(chartsCollectionRef, "summary"), { mostRecent: null, updatedAt: new Date() }, { merge: true });
 
-        batch.set(doc(chartsCollectionRef, "tags"), {}, { merge: false });
-        batch.set(doc(chartsCollectionRef, "authors"), {}, { merge: false });
+            await batch.commit();
+            return;
+        }
 
         // 🔄 Recalculate authors, tags, and find most recently logged book
         librarySnapshot.forEach(docSnap => {
@@ -635,7 +655,7 @@ function loadRatingsFromLocalStorage() {
 
         console.log("📊 Final Tag Counts:", tagsCount);
         console.log("✍️ Final Author Counts:", authorsCount);
-        console.log("📌 Most Recent Book (with logged pages):", mostRecentTitle);
+        console.log("📌 Most Recent Book (with logs):", mostRecentTitle);
 
         // ✅ Save the recalculated data to Firestore
         batch.set(doc(chartsCollectionRef, "tags"), tagsCount, { merge: true });
@@ -652,7 +672,6 @@ function loadRatingsFromLocalStorage() {
         console.error("❌ Error updating charts:", error.message);
     }
 }
-
 
     // Tag functions
     function addTag() {
@@ -864,6 +883,9 @@ async function updateEditedPublication() {
         }
 
         const deletedTitle = entryDocSnap.data().title;
+        const author = entryDocSnap.data().author;
+        const tags = entryDocSnap.data().tags || [];
+        const deletedRating = entryDocSnap.data().rating || null; // Get the rating of the deleted publication
 
         await deleteDoc(entryDocRef);
         console.log(`✅ Deleted publication: ${deletedTitle}`);
@@ -893,28 +915,33 @@ async function updateEditedPublication() {
             }
         });
 
-        // ✅ Save new mostRecent
+        // ✅ Save updated mostRecent book
         await setDoc(summaryDocRef, { mostRecent: newMostRecentTitle, updatedAt: new Date() }, { merge: true });
 
-        console.log(`�� Updated mostRecent book to: ${newMostRecentTitle}`);
+        console.log(`📌 Updated mostRecent book to: ${newMostRecentTitle}`);
+
+        // ✅ Update Author & Tag Counts in Firestore, and deduct rating count
+        await updateChartsAfterDeletion(user.uid, author, tags, deletedTitle, deletedRating);
 
         // ✅ Refresh UI
         await updateCharts();
+
+        // 🔥 **Force Pie Chart & Ratings Chart Re-Rendering**
+        chartKey.update(n => n + 1); 
 
     } catch (error) {
         console.error("❌ Error deleting publication:", error.message);
     }
 }
 
-
-
-
-async function updateChartsAfterDeletion(userId, author, tags, deletedTitle) {
+async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, deletedRating) {
     try {
         console.log("🚀 Starting updateChartsAfterDeletion...");
         const userDocRef = doc(firestore, "users", userId);
         const chartsCollectionRef = collection(userDocRef, "charts");
         const batch = writeBatch(firestore);
+
+        let hasUpdates = false; // Track if there are updates to commit
 
         // --- Update author count ---
         console.log("📊 Updating author counts...");
@@ -946,6 +973,23 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle) {
                 }
             });
             batch.set(tagsDocRef, tagData, { merge: true });
+        }
+
+        // --- Update ratings count ---
+        if (deletedRating) {
+            console.log("⭐ Updating rating counts...");
+            const ratingsDocRef = doc(chartsCollectionRef, "ratings");
+            const ratingsSnap = await getDoc(ratingsDocRef);
+            if (ratingsSnap.exists()) {
+                const ratingsData = ratingsSnap.data();
+                if (ratingsData[deletedRating]) {
+                    ratingsData[deletedRating] -= 1;
+                    if (ratingsData[deletedRating] <= 0) {
+                        delete ratingsData[deletedRating];
+                    }
+                    batch.set(ratingsDocRef, ratingsData, { merge: true });
+                }
+            }
         }
 
         // --- Check and update "mostRecent" ---
@@ -1386,7 +1430,11 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle) {
                           <label class="text-sm font-medium text-neutral-700 mb-2 block">
                             Current Page:
                           </label>
-                          <input type="number" min={lit.pageStart} max={lit.pageEnd} bind:value={lit.newCurrentPage} class="w-full p-1 border rounded border-neutral-300 shadow-sm" />
+                          <input type="number" 
+                          min={lit.pageStart} 
+                          max={lit.pageEnd} 
+                          bind:value={lit.newCurrentPage} 
+                          class="w-full p-1 border rounded border-neutral-300 shadow-sm" />                          
                           <label class="text-sm font-medium text-neutral-700 mt-2 block">
                             Comment:
                           </label>
@@ -1440,7 +1488,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle) {
                 </DropdownMenu.Root>
               </div>
               <div class="flex-1 flex items-center justify-center">
-                <TimelineChart selectedRange={$selectedTimeline} />
+                <TimelineChart selectedRange={$selectedTimeline} chartRefreshKey={$chartRefreshKey} />
               </div>
             </div>
             <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col items-center justify-center">

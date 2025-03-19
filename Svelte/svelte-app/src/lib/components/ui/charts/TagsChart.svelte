@@ -132,6 +132,8 @@
         chart.destroy();
       }
     });
-  </script>
+
+</script>
+
 <canvas id="myChart"></canvas>
   
