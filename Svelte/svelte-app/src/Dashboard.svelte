@@ -1698,7 +1698,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
 
   <!-- View Publication Dialog -->
   <Dialog.Root bind:open={viewModalOpen}>
-    <Dialog.Content class="w-[300px] max-w-[60%] max-h-[80vh] overflow-y-auto">
+    <Dialog.Content class="w-[300px] max-w-[60%] max-h-[80vh] overflow-y-auto bg-white">
         <div class="flex justify-between items-start mb-2">
             <div>
                 <Dialog.Title class="text-2xl font-bold">
@@ -1710,7 +1710,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
             </div>
         </div>
         
-        <Dialog.Description class="mt-4">
+        <Dialog.Description class="mt-4 shadow-md">
             {#if viewingPublication}
                 <div class="flex items-center gap-2 mb-4">
                     <Book class="w-5 h-5 text-neutral-600" />

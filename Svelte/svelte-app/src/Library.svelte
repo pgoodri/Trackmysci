@@ -456,9 +456,15 @@ function toggleTag(tag) {
                         
                             return matchesSearch && matchesTags;
                         }) as lit}
-                        <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
+                        <li class="p-4 bg-white border border-neutral-300 rounded-md shadow hover:bg-neutral-50 cursor-pointer" on:click={(event) => {
+                            // Check if the click originated from a button or dropdown trigger
+                            const isButtonClick = event.target.closest('button') || event.target.closest('[role="button"]');
+                            if (!isButtonClick) {
+                                openViewModal(lit);
+                            }
+                        }}>
                             <div class="flex justify-between">
-                                <div class="cursor-pointer" on:click={() => openViewModal(lit)}>
+                                <div>
                                     <strong>{lit.title}</strong><br />
                                     <small>{lit.author}</small>
                                 </div>
@@ -614,158 +620,165 @@ function toggleTag(tag) {
 
 <!-- View Publication Dialog -->
 <Dialog.Root bind:open={viewModalOpen}>
-    <Dialog.Content class="w-[600px] max-w-[90%]">
-        <div class="flex justify-between items-start mb-2">
-            <div>
-                <Dialog.Title class="text-2xl font-bold">
-                    {viewingPublication?.title || "Publication Details"}
-                </Dialog.Title>
-                <p class="text-neutral-600 mt-1">
-                    {viewingPublication?.author || ""}
-                </p>
-            </div>
-            <Dialog.Close class="p-1 rounded-full hover:bg-neutral-100">
-                <button class="text-neutral-500">✕</button>
-            </Dialog.Close>
-        </div>
-        
-        <Dialog.Description class="mt-4">
-            {#if viewingPublication}
-                <div class="flex items-center gap-2 mb-4">
-                    <Book class="w-5 h-5 text-neutral-600" />
-                    <span class="text-neutral-700">
-                        {viewingPublication.currentPage || viewingPublication.pageStart} / {viewingPublication.pageEnd} pages
-                    </span>
-                </div>
-                
-                <!-- Progress Bar -->
-                <div class="mb-6">
-                    <div class="h-2 bg-blue-100 rounded-full mb-1">
-                        <div class="h-2 bg-blue-600 rounded-full" style="width: {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%"></div>
-                    </div>
-                    <div class="text-sm text-neutral-600">
-                        {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}% complete
-                    </div>
-                </div>
-                
-                <!-- Tags -->
-                {#if viewingPublication.tags?.length > 0}
-                    <div class="flex flex-wrap gap-2 mb-6">
-                        {#each viewingPublication.tags as tag}
-                            <span class="bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full text-sm">{tag}</span>
-                        {/each}
-                    </div>
-                {/if}
-                
-                <!-- Divider -->
-                <hr class="my-6 border-neutral-200" />
-                
-                <!-- Reading Logs Section -->
-                <div>
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-semibold">Reading Logs</h3>
-                        <Button 
-                          class="flex items-center gap-2" 
-                          variant="outline"
-                          on:click={() => {
-                            logReadingPublication = viewingPublication.id;
-                            logReadingNewPage = viewingPublication.currentPage || viewingPublication.pageStart;
-                            logReadingComment = "";
-                            logReadingModalOpen = true;
-                            viewModalOpen = false; // Close the view modal when opening the log modal
-                          }}
-                        >
-                            <BookOpen class="w-5 h-5" />
-                            Log Reading
-                        </Button>
-                    </div>
-                    
-                    {#if viewingPublication.journalLogs?.length > 0}
-                        <div class="space-y-4">
-                            {#each viewingPublication.journalLogs as log}
-                                <div class="bg-white border border-neutral-200 rounded-lg p-4">
-                                    <div class="flex justify-between mb-2">
-                                        <div class="flex items-center gap-2 text-neutral-600">
-                                            <Calendar class="w-4 h-4" />
-                                            <span>{new Date(log.date).toLocaleDateString()}</span>
-                                        </div>
-                                    </div>
-                                    
-                                    <div class="flex items-center gap-2 mb-2 text-neutral-600">
-                                        <Book class="w-4 h-4" />
-                                        <span>{log.pagesRead} pages</span>
-                                    </div>
-                                    
-                                    <div class="mb-3">
-                                        <div class="h-2 bg-blue-100 rounded-full">
-                                            <div class="h-2 bg-green-500 rounded-full" style="width: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%"></div>
-                                        </div>
-                                        <div class="text-xs text-neutral-600 mt-1">
-                                            Progress at this point: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%
-                                        </div>
-                                    </div>
-                                    
-                                    {#if log.comment}
-                                        <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md">{log.comment}</p>
-                                    {/if}
-                                </div>
-                            {/each}
-                        </div>
-                    {:else}
-                        <div class="text-center p-6 bg-neutral-50 rounded-lg">
-                            <p class="text-neutral-500">No reading logs yet.</p>
-                            <p class="text-sm text-neutral-400 mt-1">Start tracking your progress by clicking "Log Reading".</p>
-                        </div>
-                    {/if}
-                </div>
-            {/if}
-        </Dialog.Description>
-    </Dialog.Content>
+  <Dialog.Content class="w-[300px] max-w-[60%] max-h-[80vh] overflow-y-auto bg-white">
+      <div class="flex justify-between items-start mb-2">
+          <div>
+              <Dialog.Title class="text-2xl font-bold">
+                  {viewingPublication?.title || "Publication Details"}
+              </Dialog.Title>
+              <p class="text-neutral-600 mt-1">
+                  {viewingPublication?.author || ""}
+              </p>
+          </div>
+      </div>
+      
+      <Dialog.Description class="mt-4">
+          {#if viewingPublication}
+              <div class="flex items-center gap-2 mb-4">
+                  <Book class="w-5 h-5 text-neutral-600" />
+                  <span class="text-neutral-700">
+                      {viewingPublication.currentPage || viewingPublication.pageStart} / {viewingPublication.pageEnd} pages
+                  </span>
+              </div>
+              
+              <!-- Progress Bar -->
+              <div class="mb-6">
+                  <div class="h-2 bg-blue-100 rounded-full mb-1">
+                      <div class="h-2 bg-black rounded-full" style="width: {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%"></div>
+                  </div>
+                  <div class="text-sm text-neutral-600">
+                      {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}% complete
+                  </div>
+              </div>
+              
+              <!-- Tags -->
+              {#if viewingPublication.tags?.length > 0}
+                  <div class="flex flex-wrap gap-2 mb-6">
+                      {#each viewingPublication.tags as tag}
+                          <span class="bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                      {/each}
+                  </div>
+              {/if}
+              
+              <!-- Divider -->
+              <hr class="my-6 border-neutral-200" />
+              
+              <!-- Reading Logs Section -->
+              <div>
+                  <div class="flex justify-between items-center mb-4">
+                      <h3 class="text-lg font-semibold">Reading Logs</h3>
+                      <Button 
+                        class="flex items-center gap-2" 
+                        variant="outline"
+                        on:click={() => {
+                          logReadingPublication = viewingPublication.id;
+                          logReadingNewPage = viewingPublication.currentPage || viewingPublication.pageStart;
+                          logReadingComment = "";
+                          logReadingModalOpen = true;
+                          viewModalOpen = false; // Close the view modal when opening the log modal
+                        }}
+                      >
+                          <BookOpen class="w-5 h-5" />
+                          Log Reading
+                      </Button>
+                  </div>
+                  
+                  {#if viewingPublication.journalLogs?.length > 0}
+                      <div class="space-y-4">
+                          {#each viewingPublication.journalLogs as log}
+                              <div class="bg-white border border-neutral-200 rounded-lg p-4">
+                                  <div class="flex justify-between mb-2">
+                                      <div class="flex items-center gap-2 text-neutral-600">
+                                          <Calendar class="w-4 h-4" />
+                                          <span>{new Date(log.date).toLocaleDateString()}</span>
+                                      </div>
+                                  </div>
+                                  
+                                  <div class="flex items-center gap-2 mb-2 text-neutral-600">
+                                      <Book class="w-4 h-4" />
+                                      <span>{log.pagesRead} pages</span>
+                                  </div>
+                                  
+                                  <div class="mb-3">
+                                      <div class="h-2 bg-blue-100 rounded-full">
+                                          <div class="h-2 bg-black rounded-full" style="width: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%"></div>
+                                      </div>
+                                      <div class="text-xs text-neutral-600 mt-1">
+                                          Progress at this point: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%
+                                      </div>
+                                  </div>
+                                  
+                                  {#if log.comment}
+                                      <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md">{log.comment}</p>
+                                  {/if}
+                              </div>
+                          {/each}
+                      </div>
+                  {:else}
+                      <div class="text-center p-6 bg-neutral-50 rounded-lg">
+                          <p class="text-neutral-500">No reading logs yet.</p>
+                          <p class="text-sm text-neutral-400 mt-1">Start tracking your progress by clicking "Log Reading".</p>
+                      </div>
+                  {/if}
+              </div>
+          {/if}
+      </Dialog.Description>
+  </Dialog.Content>
 </Dialog.Root>
 
 <!-- Log Reading Modal -->
-{#if logReadingModalOpen && viewingPublication}
-<Dialog 
-    title="Log Reading Progress"
-    open={logReadingModalOpen} 
-    onClose={() => logReadingModalOpen = false}
->
-    <div slot="content">
-        <div class="flex flex-col gap-4">
-            <div class="flex flex-col gap-1">
-                <label class="font-medium">Current Page: {viewingPublication.currentPage || viewingPublication.pageStart}</label>
-                <label class="font-medium">New Page</label>
-                <input
-                    type="number"
-                    bind:value={logReadingNewPage}
-                    class="w-full border p-2 rounded"
-                    min={viewingPublication.currentPage || viewingPublication.pageStart}
-                    max={viewingPublication.pageEnd}
-                />
-            </div>
-            <div class="flex flex-col gap-1">
-                <label class="font-medium">Comments (optional)</label>
-                <textarea
-                    bind:value={logReadingComment}
-                    class="w-full border p-2 rounded"
-                    rows="3"
-                />
-            </div>
-        </div>
-    </div>
-    <div slot="actions" class="flex gap-2 justify-end">
-        <button
-            class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
-            on:click={() => logReadingModalOpen = false}
-        >
-            Cancel
-        </button>
-        <button
-            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
-            on:click={saveReadingLog}
-        >
-            Save
-        </button>
-    </div>
-</Dialog>
-{/if}
+<Dialog.Root bind:open={logReadingModalOpen}>
+    <Dialog.Content class="w-[500px]">
+        <Dialog.Header>
+            <Dialog.Title>Log Reading Progress</Dialog.Title>
+            <Dialog.Description>
+                <form on:submit|preventDefault={saveReadingLog} class="space-y-4 mt-4">
+                    <!-- Current Page Input -->
+                    <div class="space-y-2">
+                        <label for="current-page" class="block text-sm font-medium">
+                            Current Page
+                        </label>
+                        <input 
+                            id="current-page" 
+                            type="number" 
+                            bind:value={logReadingNewPage} 
+                            class="w-full p-2 border border-neutral-300 rounded"
+                            min={viewingPublication?.currentPage || viewingPublication?.pageStart || 1}
+                            max={viewingPublication?.pageEnd || 1000} 
+                        />
+                    </div>
+
+                    <!-- Reading Notes -->
+                    <div class="space-y-2">
+                        <label for="reading-notes" class="block text-sm font-medium">
+                            Reading Notes (Optional)
+                        </label>
+                        <textarea 
+                            id="reading-notes" 
+                            bind:value={logReadingComment} 
+                            class="w-full p-2 border border-neutral-300 rounded h-24"
+                            placeholder="Add notes about your reading session..."
+                        ></textarea>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <Button 
+                            type="button" 
+                            variant="outline" 
+                            on:click={() => logReadingModalOpen = false}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            type="submit" 
+                            class="bg-blue-600 hover:bg-blue-700"
+                        >
+                            Save Reading
+                        </Button>
+                    </div>
+                </form>
+            </Dialog.Description>
+        </Dialog.Header>
+    </Dialog.Content>
+</Dialog.Root>
