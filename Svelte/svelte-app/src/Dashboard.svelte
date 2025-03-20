@@ -38,7 +38,9 @@
       ChevronDown,
       ChevronsUpDown,
       Ellipsis,
-      Filter
+      Filter,
+      BookOpen,
+      Clock
     } from "lucide-svelte";
     import SimpleChart from "./lib/components/ui/charts/SimpleChart.svelte";
     import Chart from "chart.js/auto";
@@ -55,6 +57,17 @@
     let currentStreak = writable(0); // Initialize streak to 0
     const batch = writeBatch(firestore);
   
+    onMount(() => {
+      // Initialize properties for each publication in the library list
+      if (libraryList && libraryList.length > 0) {
+        libraryList.forEach(lit => {
+          lit.newCurrentPage = lit.currentPage || lit.pageStart;
+          lit.progressComment = "";
+          lit.isUpdating = false;
+        });
+      }
+    });
+
     async function searchLiterature() {
     // Reset previous results
     showResults = false;
@@ -254,6 +267,11 @@
     let viewingPublication = null;  // Will store the entire publication object
     let viewModalOpen = false;      // Controls if the "view publication details" modal is open
 
+    // Log Reading modal variables
+    let logReadingModalOpen = false;
+    let logReadingPublication = null;
+    let logReadingNewPage = 0;
+    let logReadingComment = "";
     
     function openViewModal(pub) {
         viewingPublication = pub;
@@ -263,6 +281,45 @@
     function closeViewModal() {
         viewingPublication = null;
         viewModalOpen = false;
+    }
+
+    // Function to open the log reading modal
+    function openLogReadingModal() {
+      // If there are publications in the library, select the first one by default
+      if (libraryList.length > 0) {
+        logReadingPublication = libraryList[0].id;
+        const publication = libraryList.find(p => p.id === logReadingPublication);
+        if (publication) {
+          logReadingNewPage = publication.currentPage || publication.pageStart;
+        }
+      }
+      logReadingComment = "";
+      logReadingModalOpen = true;
+    }
+
+    // Function to save reading log via modal
+    async function saveReadingLog() {
+      if (!logReadingPublication || !logReadingNewPage) return;
+      
+      const publication = libraryList.find(p => p.id === logReadingPublication);
+      if (publication) {
+        await updateProgress(
+          logReadingPublication, 
+          logReadingNewPage, 
+          publication.pageStart, 
+          logReadingComment
+        );
+        logReadingModalOpen = false;
+      }
+    }
+
+    // Function to handle publication selection in the log reading modal
+    function handlePublicationSelection(pubId) {
+      logReadingPublication = pubId;
+      const publication = libraryList.find(p => p.id === pubId);
+      if (publication) {
+        logReadingNewPage = publication.currentPage || publication.pageStart;
+      }
     }
 
     // ----- Modal Helper Functions -----
@@ -334,7 +391,7 @@
                 }
             }
             currentStreak = streak;
-            console.log(`🔥 Current streak: ${streak} days`);
+            console.log(`�� Current streak: ${streak} days`);
         }
 
     } catch (error) {
@@ -1047,8 +1104,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
         }
     }
 
-
-  </script>
+</script>
   
   {#if !authReady}
     <div class="flex justify-center items-center h-screen">
@@ -1085,386 +1141,202 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
         </div>
       </nav>
   
-      <!-- Welcome Message -->
-      <div class="pt-12 px-12">
-        <h2 class="text-4xl font-bold text-neutral-800">Welcome, {firstName} 👋</h2>
+      <!-- Header Area -->
+      <div class="pt-12 px-12 flex justify-between items-center">
+        <h2 class="text-4xl font-bold text-neutral-800">Welcome, {firstName}</h2>
+        <div class="flex space-x-4">
+          <Button class="bg-white hover:bg-neutral-300 text-neutral-800" on:click={openLogReadingModal}>
+            <BookOpen class="w-4 h-4 mr-2" /> Log Reading
+          </Button>
+          
+          <Button class="bg-blue-600 hover:bg-blue-700" on:click={openAddModal}>
+            <FilePlus2 class="w-4 h-4 mr-2" /> New Publication
+          </Button>
+        </div>
       </div>
   
       <!-- Main Content -->
       <div class="flex flex-1">
         <!-- Publications Section -->
-        <section class="w-1/2 py-12 pl-12 pr-3">
-          <div>
-            <h2 class="text-xl font-semibold mb-4 flex justify-between items-center text-neutral-700">
-              Recently Accessed
-              <!-- New Publication Trigger -->
-              <Dialog.Root bind:open={modalOpen}>
-                <Dialog.Trigger on:click={openAddModal}>
-                  <Button class="bg-blue-600 hover:bg-blue-700">
-                    <FilePlus2 class="w-7 pr-1.5" /> New publication
-                  </Button>
-                </Dialog.Trigger>
-                <Dialog.Content class="w-[90%] max-w-4xl">
-                  <Dialog.Header>
-                    <Dialog.Title class="text-xl mb-1">
-                      {editMode ? "Edit Publication" : "Add Literature"}
-                    </Dialog.Title>
-                    <Dialog.Description>
-                      <form on:submit|preventDefault={editMode ? updateEditedPublication : addLiteratureToLibrary}>
-                        <!-- Search Bar -->
-                        <div class="mb-4">
-                          <div class="relative">
-                            <label for="searchQuery" class="sr-only">Search Query</label>
-                            <input type="text" id="searchQuery" bind:value={searchQuery}
-                              on:keydown={(e) => {
-                                if (e.key === "Enter") {
-                                  e.preventDefault();
-                                  searchLiterature();
-                                }
-                              }}
-                              class="w-full pl-4 pr-10 py-4 text-neutral-700 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
-                              placeholder="Search by DOI, ISBN, or Title" autocomplete="off" />
-                            <div class="absolute inset-y-0 z-1000 right-3 flex items-center pointer-events-none">
-                              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#9ca3af" class="w-6 h-6">
-                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197M5.196 5.196a7.5 7.5 0 0 1 10.607 10.607" />
-                              </svg>
-                            </div>
-                          </div>
-                        </div>
+        <section class="w-1/2 py-12 pl-12 pr-3 flex flex-col">
+          <div class="bg-white border border-neutral-200 rounded-lg shadow flex-1 flex flex-col">
+            <div class="p-4 border-b border-neutral-200">
+              <h2 class="text-xl font-semibold flex justify-between items-center text-neutral-700">
+                <div class="flex items-center">
+                  <Clock class="w-5 h-5 mr-2 text-neutral-600" />
+                  Recently Accessed
+                </div>
+                <Button class="text-sm" variant="outline" on:click={() => navigate("/library")}>
+                  View all
+                </Button>
+              </h2>
+            </div>
   
-                        {#if showResults}
-                        <div class="absolute mt-0.5 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2 bg-white z-50">
-                            {#each searchResults as result}
-                                <button type="button" 
-                                    class="p-3 bg-neutral-100 rounded shadow cursor-pointer hover:bg-neutral-200 text-left w-full"
-                                    on:click={() => selectResult(result)}
-                                >
-                                    <strong>{result.title}</strong><br />
-                                    <small>Author: {result.author}</small><br />
-                                    {#if result.isbn && result.isbn !== "No ISBN"}
-                                        <em>ISBN: {result.isbn}</em>
-                                    {/if}
-                                    {#if result.doi}
-                                        <br /><em>DOI: {result.doi}</em>
-                                    {/if}
-                                    {#if (!result.isbn || result.isbn === "No ISBN") && !result.doi}
-                                        <em>No ISBN or DOI available</em>
-                                    {/if}
-                                </button>
-                            {/each}
-                        </div>
-                    {/if}
-                    
-  
-                        <!-- Form Fields -->
-                        <div class="flex flex-col gap-4 mt-4">
-                          <div class="flex flex-col">
-                            <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title *</label>
-                            <input id="title" type="text" bind:value={title}
-                              class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
-                          </div>
-                          <div class="flex flex-col">
-                            <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author *</label>
-                            <input id="author" type="text" bind:value={author}
-                              class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
-                          </div>
-                          <Separator />
-                          <div class="flex items-center">
-                            <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI *</label>
-                            <input id="isbn-doi" type="text" bind:value={isbn}
-                              class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" autocomplete="off" />
-                          </div>
-                          <Separator />
-                          <div class="flex gap-4 items-center">
-                            <div class="flex-1">
-                              <label for="page-start" class="text-sm font-medium text-neutral-700">Page Start *</label>
-                              <input id="page-start" type="number" bind:value={pageStart}
-                                class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min="1" />
-                            </div>
-                            <div class="flex-1">
-                              <label for="page-end" class="text-sm font-medium text-neutral-700">Page End *</label>
-                              <input id="page-end" type="number" bind:value={pageEnd}
-                                class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min={pageStart} />
-                            </div>
-                          </div>
-                          <Separator />
-                          <!-- Tag Input Section -->
-                          <div class="mb-4">
-                            <label for="tag-input" class="text-sm font-medium text-neutral-700">Tags</label>
-                            <div class="flex items-center mt-2">
-                              <input id="tag-input" type="text" bind:value={tagInput}
-                                class="flex-1 p-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
-                                placeholder="Type a tag and press Enter"
-                                on:keydown={(e) => {
-                                  if (e.key === "Enter") {
-                                    e.preventDefault();
-                                    addTag();
-                                  }
-                                }} />
-                              <Button type="button" class="ml-2 bg-blue-500 hover:bg-blue-600" on:click={addTag}>Add Tag</Button>
-                            </div>
-                            <div class="flex flex-wrap gap-2 mt-3">
-                              {#each tags as tag, index}
-                                <div class="flex items-center bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                                  <span>{tag}</span>
-                                  <button type="button" class="ml-2 text-blue-500 hover:text-blue-700" on:click={() => removeTag(index)}>
-                                    &times;
-                                  </button>
-                                </div>
+            {#if libraryList.length === 0}
+              <div class="flex flex-col items-center justify-center text-center text-gray-500 py-12 flex-1">
+                <p class="text-lg font-medium">No literature added yet.</p>
+                <p class="text-sm mt-2">Start by adding a new publication to track your progress!</p>
+              </div>
+            {:else}
+              <ul class="divide-y divide-neutral-200 flex-1">
+                {#each libraryList as lit, i}
+                  {#if i < 5}
+                    <li class="p-4 hover:bg-neutral-50">
+                      <div class="flex justify-between items-start">
+                        <button 
+                          class="text-left flex-1" 
+                          on:click={() => openViewModal(lit)}
+                          on:keydown={(e) => {
+                            if (e.key === 'Enter' || e.key === ' ') {
+                              openViewModal(lit);
+                            }
+                          }}
+                        >
+                          <h3 class="font-medium text-neutral-900">{lit.title}</h3>
+                          <p class="text-sm text-neutral-500">{lit.author}</p>
+                          
+                          {#if lit.tags?.length > 0}
+                            <div class="flex flex-wrap gap-1 mt-2">
+                              {#each lit.tags as tag}
+                                <span class="bg-blue-100 text-blue-800 px-2 py-0.5 text-xs rounded-full">{tag}</span>
                               {/each}
                             </div>
-                          </div>
-                          <Separator />
-                          <div class="flex items-center">
-                            <label for="comment" class="w-1/4 text-sm font-medium text-neutral-700">Comment</label>
-                            <textarea id="comment" bind:value={comment}
-                              class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm"></textarea>
-                          </div>
-                        </div>
-  
-                        <!-- Footer Buttons -->
-                        <div class="flex justify-end space-x-4 mt-4">
-                          <Button type="button" on:click={resetFields} class="bg-neutral-200 text-neutral-700 hover:bg-neutral-300">Clear</Button>
-                          <Button type="submit" class="bg-blue-600 text-white hover:bg-blue-700">{editMode ? "Update" : "Add"}</Button>
-                        </div>
-                      </form>
-                    </Dialog.Description>
-                  </Dialog.Header>
-                </Dialog.Content>
-              </Dialog.Root>
-
-
-                <Dialog.Root bind:open={viewModalOpen}>
-                    <Dialog.Content class="min-w-[700px] min-h-[800px] overflow-auto">
-                    <Dialog.Header>
-                        <Dialog.Title>
-                        <!-- If we have a viewingPublication, show its title -->
-                        {viewingPublication ? viewingPublication.title : "Publication Details"}
-                        </Dialog.Title>
-                        <Dialog.Description>
-                        
-                        {#if viewingPublication}
-                            <!-- Show any relevant data that was on the card: -->
-                            <p class="mt-2 text-sm text-neutral-600">
-                            <strong>Author:</strong> {viewingPublication.author}
-                            </p>
-                            
-                            <!-- The same progress bar logic: -->
-                            <div class="mt-1 flex items-center gap-3">
-                                <div class="flex-1">
-                                  <div class="flex justify-between text-sm text-neutral-600 mb-1">
-                                <span>
-                                {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%
-                                </span>
-                            </div>
-                            <Progress value={Math.min(
-                                100,
-                                Math.round(
-                                ((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) /
-                                (viewingPublication.pageEnd - viewingPublication.pageStart) * 100
-                                )
-                            )} />
-                            </div>
-                            <div class="mt-4">
-                                <Popover.Root bind:open={viewingPublication.isUpdating}>
-                                    <Popover.Trigger on:click={() => {
-                                        viewingPublication.newCurrentPage = viewingPublication.currentPage || viewingPublication.pageStart;
-                                        viewingPublication.progressComment = "";
-                                        viewingPublication.isUpdating = true;
-                                    }}>
-                                        <button class="bg-transparent text-neutral-900 hover:text-neutral-500 transition-all">
-                                            <SquarePen />
-                                        </button>
-                                    </Popover.Trigger>
-                                    <Popover.Content class="p-4 bg-white shadow-lg border rounded-md w-64">
-                                        <div>
-                                            <label class="text-sm font-medium text-neutral-700 mb-2 block">
-                                                Current Page:
-                                            </label>
-                                            <input type="number" min={viewingPublication.pageStart} max={viewingPublication.pageEnd} bind:value={viewingPublication.newCurrentPage} class="w-full p-1 border rounded border-neutral-300 shadow-sm" />
-                                            <label class="text-sm font-medium text-neutral-700 mt-2 block">
-                                                Comment:
-                                            </label>
-                                            <textarea bind:value={viewingPublication.progressComment} class="w-full p-1 border rounded border-neutral-300 shadow-sm" placeholder="Add a note about your reading progress"></textarea>
-                                        </div>
-                                        <div class="flex justify-end mt-4">
-                                            <Button on:click={async () => {
-                                                await updateProgress(viewingPublication.id, viewingPublication.newCurrentPage, viewingPublication.pageStart, viewingPublication.progressComment);
-                                                viewingPublication.isUpdating = false;
-                                            }} class="bg-blue-600 hover:bg-blue-700 text-white">
-                                                Save
-                                            </Button>
-                                        </div>
-                                    </Popover.Content>
-                                </Popover.Root>
-                            </div>
-                        </div>
-
-                            <!-- If it has tags, show them: -->
-                            {#if viewingPublication.tags?.length > 0}
-                            <div class="flex flex-wrap gap-2 mt-3">
-                                {#each viewingPublication.tags as tag}
-                                <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
-                                {/each}
-                            </div>
-                            {/if}
-                
-                            <!-- Show reading logs EXACTLY how you do in the card: -->
-                            <div class="mt-4 p-3 bg-gray-100 border border-gray-300 rounded-md">
-                            <h3 class="font-semibold text-sm mb-2">Reading Log:</h3>
-                            {#if viewingPublication.journalLogs?.length > 0}
-                                <ul class="space-y-2">
-                                {#each viewingPublication.journalLogs as log}
-                                    <li class="p-2 bg-white border rounded-md shadow-sm">
-                                    <strong>{log.dateTitle}</strong>
-                                    <p class="text-sm text-gray-600">From Page {log.fromPage} - To Page {log.toPage}</p>
-                                    <p class="text-xs text-gray-500">Pages Read: {log.pagesRead}</p>
-                                    {#if log.comment}
-                                        <p class="text-xs text-gray-500">"{log.comment}"</p>
-                                    {/if}
-                                    <small class="text-xs text-gray-500">{new Date(log.date).toLocaleString()}</small>
-                                    </li>
-                                {/each}
-                                </ul>
-                            {:else}
-                                <p class="text-sm text-gray-500">No logs yet.</p>
-                            {/if}
-                            </div>
-                
-                        {/if}
-                
-                        </Dialog.Description>
-                    </Dialog.Header>
-                    <Dialog.Footer>
-                    </Dialog.Footer>
-                    </Dialog.Content>
-                </Dialog.Root>
-  
-            </h2>
-          </div>
-  
-          {#if libraryList.length === 0}
-            <div class="flex flex-col items-center justify-center text-center text-gray-500 pt-12">
-              <p class="text-lg font-medium">No literature added yet.</p>
-              <p class="text-sm mt-2">Start by adding a new publication to track your progress!</p>
-            </div>
-          {:else}
-            <ul class="space-y-3">
-              {#each libraryList as lit}
-                <li class="p-4 bg-white border border-neutral-200 rounded-md shadow cursor-pointer hover:border-neutral-300 transition-all ease-in-out" type="button" on:click={(e) => handleCardClick(e, lit)}>
-                  <div class="flex justify-between">
-                    <div>
-                      <strong>{lit.title}</strong><br />
-                      <small>{lit.author}</small>
-                    </div>
-                    <div>
-                      <DropdownMenu.Root>
-                        <DropdownMenu.Trigger >
-                          <button class="p-0.5 text-gray-800 hover:bg-gray-200 rounded-sm" >
-                            <Ellipsis class="w-5 h-5" />
-                          </button>
-                        </DropdownMenu.Trigger>
-                        <DropdownMenu.Content>
-                          <DropdownMenu.Group>
-                            <DropdownMenu.Item on:click={() => openEditModal(lit)} class="text-sm">
-                              <Edit class="w-4 h-4 mr-2" /> Edit
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item on:click={() => deletePublication(lit.id)} class="text-sm text-red-600">
-                                <Trash2 class="w-4 h-4 mr-2" /> Delete
-                            </DropdownMenu.Item>
-                          </DropdownMenu.Group>
-                        </DropdownMenu.Content>
-                      </DropdownMenu.Root>
-                    </div>
-                  </div>
-                  {#if lit.tags?.length > 0}
-                    <div class="flex flex-wrap gap-2 mt-3">
-                      {#each lit.tags as tag}
-                        <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
-                      {/each}
-                    </div>
-                  {/if}
-                  {#if lit.showLogs}
-                    <div class="mt-3 p-3 bg-gray-100 border border-gray-300 rounded-md">
-                      <h3 class="font-semibold text-sm mb-2">Reading Log:</h3>
-                      {#if lit.journalLogs?.length > 0}
-                        <ul class="space-y-2">
-                          {#each lit.journalLogs as log}
-                            <li class="p-2 bg-white border rounded-md shadow-sm">
-                              <strong>{log.dateTitle}</strong>
-                              <p class="text-sm text-gray-600">From Page {log.fromPage} - To Page {log.toPage}</p>
-                              <p class="text-xs text-gray-500">Pages Read: {log.pagesRead}</p>
-                              {#if log.comment}
-                                <p class="text-xs text-gray-500">"{log.comment}"</p>
-                              {/if}
-                              <small class="text-xs text-gray-500">{new Date(log.date).toLocaleString()}</small>
-                            </li>
-                          {/each}
-                        </ul>
-                      {:else}
-                        <p class="text-sm text-gray-500">No logs yet.</p>
-                      {/if}
-                    </div>
-                  {/if}
-                  <div class="mt-1 flex items-center gap-3">
-                    <div class="flex-1">
-                      <div class="flex justify-between text-sm text-neutral-600 mb-1">
-                        <span>
-                          {Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))}%
-                        </span>
-                      </div>
-                      <Progress value={Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))} />
-                    </div>
-                    <Popover.Root bind:open={lit.isUpdating}>
-                      <Popover.Trigger on:click={() => {
-                        lit.newCurrentPage = lit.currentPage || lit.pageStart;
-                        lit.progressComment = "";
-                        lit.isUpdating = true;
-                      }}>
-                        <button class="pt-6 pb-0 mb-0 bg-transparent text-neutral-900 hover:text-neutral-500 transition-all">
-                          <SquarePen />
+                          {/if}
                         </button>
-                      </Popover.Trigger>
-                      <Popover.Content class="p-4 bg-white shadow-lg border rounded-md w-64">
-                        <div>
-                          <label class="text-sm font-medium text-neutral-700 mb-2 block">
-                            Current Page:
-                          </label>
-                          <input type="number" 
-                          min={lit.pageStart} 
-                          max={lit.pageEnd} 
-                          bind:value={lit.newCurrentPage} 
-                          class="w-full p-1 border rounded border-neutral-300 shadow-sm" />                          
-                          <label class="text-sm font-medium text-neutral-700 mt-2 block">
-                            Comment:
-                          </label>
-                          <textarea bind:value={lit.progressComment} class="w-full p-1 border rounded border-neutral-300 shadow-sm" placeholder="Add a note about your reading progress"></textarea>
-                        </div>
-                        <div class="flex justify-end mt-4">
-                          <Button on:click={async () => {
-                            await updateProgress(lit.id, lit.newCurrentPage, lit.pageStart, lit.progressComment);
-                            lit.isUpdating = false;
-                          }} class="bg-blue-600 hover:bg-blue-700 text-white">
-                            Save
+                        
+                        <div class="flex items-center space-x-2">
+                          <!-- Log Reading Button -->
+                          <Button 
+                            size="sm" 
+                            variant="outline" 
+                            class="gap-1" 
+                            on:click={() => {
+                              // Set up the current publication for logging
+                              lit.newCurrentPage = lit.currentPage || lit.pageStart;
+                              lit.progressComment = "";
+                              lit.isUpdating = true;
+                            }}
+                          >
+                            <BookOpen class="w-3.5 h-3.5" />
+                            <span>Log reading</span>
                           </Button>
+                          
+                          <!-- Menu Button -->
+                          <DropdownMenu.Root>
+                            <DropdownMenu.Trigger>
+                              <Button size="icon" variant="ghost">
+                                <MoreVertical class="h-4 w-4" />
+                              </Button>
+                            </DropdownMenu.Trigger>
+                            <DropdownMenu.Content>
+                              <DropdownMenu.Group>
+                                <DropdownMenu.Item on:click={() => openEditModal(lit)} class="text-sm">
+                                  <Edit class="w-4 h-4 mr-2" /> Edit
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item on:click={() => deletePublication(lit.id)} class="text-sm text-red-600">
+                                  <Trash2 class="w-4 h-4 mr-2" /> Delete
+                                </DropdownMenu.Item>
+                              </DropdownMenu.Group>
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Root>
                         </div>
-                      </Popover.Content>
-                    </Popover.Root>
-                  </div>
-                </li>
-              {/each}
-            </ul>
-          {/if}
+                      </div>
+                      
+                      <!-- Progress Section -->
+                      <button 
+                        class="w-full mt-3 text-left"
+                        on:click={() => openViewModal(lit)}
+                        on:keydown={(e) => {
+                          if (e.key === 'Enter' || e.key === ' ') {
+                            openViewModal(lit);
+                          }
+                        }}
+                      >
+                        <div class="flex justify-between text-xs text-neutral-500 mb-1">
+                          <span>
+                            {Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))}% Complete
+                          </span>
+                          <span>
+                            {lit.currentPage || lit.pageStart} of {lit.pageEnd} pages
+                          </span>
+                        </div>
+                        <Progress value={Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))} />
+                      </button>
+                      
+                      <!-- Log Reading Popover -->
+                      {#if lit.isUpdating}
+                        <Dialog.Root open={lit.isUpdating}>
+                          <Dialog.Content class="w-[400px]">
+                            <Dialog.Header>
+                              <Dialog.Title>Update Reading Progress</Dialog.Title>
+                              <Dialog.Description>
+                                Update your reading progress for "{lit.title}"
+                              </Dialog.Description>
+                            </Dialog.Header>
+                            <div class="p-4">
+                              <div class="space-y-4">
+                                <div>
+                                  <label for="current-page-{lit.id}" class="block text-sm font-medium text-neutral-700 mb-1">
+                                    Current Page:
+                                  </label>
+                                  <input 
+                                    id="current-page-{lit.id}"
+                                    type="number" 
+                                    min={lit.pageStart} 
+                                    max={lit.pageEnd} 
+                                    bind:value={lit.newCurrentPage} 
+                                    class="w-full p-2 border rounded border-neutral-300 shadow-sm" 
+                                  />
+                                </div>
+                                <div>
+                                  <label for="comment-{lit.id}" class="block text-sm font-medium text-neutral-700 mb-1">
+                                    Comment:
+                                  </label>
+                                  <textarea 
+                                    id="comment-{lit.id}"
+                                    bind:value={lit.progressComment} 
+                                    class="w-full p-2 border rounded border-neutral-300 shadow-sm" 
+                                    placeholder="Add a note about your reading progress"
+                                    rows="3"
+                                  ></textarea>
+                                </div>
+                              </div>
+                              <div class="flex justify-end mt-6 space-x-2">
+                                <Button 
+                                  variant="outline" 
+                                  on:click={() => {
+                                    lit.isUpdating = false;
+                                  }}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button 
+                                  on:click={async () => {
+                                    await updateProgress(lit.id, lit.newCurrentPage, lit.pageStart, lit.progressComment);
+                                    lit.isUpdating = false;
+                                  }} 
+                                  class="bg-blue-600 hover:bg-blue-700 text-white"
+                                >
+                                  Save Progress
+                                </Button>
+                              </div>
+                            </div>
+                          </Dialog.Content>
+                        </Dialog.Root>
+                      {/if}
+                    </li>
+                  {/if}
+                {/each}
+              </ul>
+            {/if}
+          </div>
         </section>
 
         <!-- Analytics Section -->
-        <section class="w-1/2 py-12 pl-3 pr-12">
-          <div class="h-[36.5px] mb-4 items-center">
-            <h2 class="text-xl font-semibold mb-4 text-neutral-700">Analytics</h2>
-          </div>
-          <div class="grid grid-cols-5 gap-4">
+        <section class="w-1/2 py-12 pl-3 pr-12 flex flex-col">
+          <div class="grid grid-cols-5 gap-4 flex-1">
             <!-- Row 1: Timeline & Streak -->
-            <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow">
+            <div class="col-span-3 p-6 h-72 bg-white border border-neutral-100 rounded-md shadow">
               <div class="flex items-center justify-between mb-4">
                 <div>
                   <p class="text-lg font-semibold">Pages Read</p>
@@ -1525,47 +1397,45 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
               </div>
             </div>
             <!-- Progress Section -->
-<div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
-  <div class="flex items-center justify-between mb-4">
-    <div>
-      <p class="text-lg font-semibold">Progress</p>
-    </div>
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger>
-        <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
-          {$selectedProgress}
-          <ChevronDown class="w-4" />
-        </button>
-      </DropdownMenu.Trigger>
-      <DropdownMenu.Content>
-        <DropdownMenu.Group>
-          {#each progressOptions as option}
-            <DropdownMenu.Item on:click={() => selectedProgress.set(option)} class="text-sm">
-              {option}
-            </DropdownMenu.Item>
-          {/each}
-        </DropdownMenu.Group>
-      </DropdownMenu.Content>
-    </DropdownMenu.Root>
-  </div>
+            <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
+              <div class="flex items-center justify-between mb-4">
+                <div>
+                  <p class="text-lg font-semibold">Progress</p>
+                </div>
+                <DropdownMenu.Root>
+                  <DropdownMenu.Trigger>
+                    <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
+                      {$selectedProgress}
+                      <ChevronDown class="w-4" />
+                    </button>
+                  </DropdownMenu.Trigger>
+                  <DropdownMenu.Content>
+                    <DropdownMenu.Group>
+                      {#each progressOptions as option}
+                        <DropdownMenu.Item on:click={() => selectedProgress.set(option)} class="text-sm">
+                          {option}
+                        </DropdownMenu.Item>
+                      {/each}
+                    </DropdownMenu.Group>
+                  </DropdownMenu.Content>
+                </DropdownMenu.Root>
+              </div>
 
-  <!-- Display progress percentage -->
-  <div class="text-center mb-3">
-    <p class="text-4xl font-bold text-blue-600">{$progressPercentage}%</p>
-    <p class="text-sm text-gray-500">of total reading completed</p>
-  </div>
+              <!-- Display progress percentage -->
+              <div class="text-center mb-3">
+                <p class="text-4xl font-bold text-blue-600">{$progressPercentage}%</p>
+                <p class="text-sm text-gray-500">of total reading completed</p>
+              </div>
 
-  <!-- Progress Chart (Calculates but does NOT display) -->
-  <ProgressChart selectedView={$selectedProgress} updateProgress={val => progressPercentage.set(val)} chartKey={$chartRefreshKey} />
+              <!-- Progress Chart (Calculates but does NOT display) -->
+              <ProgressChart selectedView={$selectedProgress} updateProgress={val => progressPercentage.set(val)} chartKey={$chartRefreshKey} />
 
-  <!-- Simple Progress Bar -->
-  <div class="relative w-full h-6 bg-gray-200 rounded-full">
-    <div class="absolute top-0 left-0 h-6 bg-blue-500 rounded-full transition-all" style="width: {$progressPercentage}%;"></div>
-  </div>
-</div>
-
-
+              <!-- Simple Progress Bar -->
+              <div class="relative w-full h-6 bg-gray-200 rounded-full">
+                <div class="absolute top-0 left-0 h-6 bg-blue-500 rounded-full transition-all" style="width: {$progressPercentage}%;"></div>
+              </div>
             </div>
+          </div>
         </section>
       </div>
     </div>
@@ -1613,3 +1483,310 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
   </div>
   {/if}
   
+  <!-- Log Reading Modal -->
+  <Dialog.Root bind:open={logReadingModalOpen}>
+    <Dialog.Content class="w-[500px]">
+      <Dialog.Header>
+        <Dialog.Title>Log Your Reading</Dialog.Title>
+        <Dialog.Description>
+          <form on:submit|preventDefault={saveReadingLog} class="space-y-4 mt-4">
+            <!-- Publication Selection -->
+            <div class="space-y-2">
+              <label for="publication-select" class="block text-sm font-medium">
+                Select Publication
+              </label>
+              <select 
+                id="publication-select" 
+                class="w-full p-2 border border-neutral-300 rounded"
+                bind:value={logReadingPublication}
+                on:change={() => handlePublicationSelection(logReadingPublication)}
+              >
+                {#if libraryList.length === 0}
+                  <option value="" disabled>No publications available</option>
+                {:else}
+                  {#each libraryList as pub}
+                    <option value={pub.id}>{pub.title}</option>
+                  {/each}
+                {/if}
+              </select>
+            </div>
+
+            <!-- Current Page Input -->
+            <div class="space-y-2">
+              <label for="current-page" class="block text-sm font-medium">
+                Current Page
+              </label>
+              <input id="current-page" type="number" bind:value={logReadingNewPage} 
+                class="w-full p-2 border border-neutral-300 rounded"
+                min={libraryList.find(p => p.id === logReadingPublication)?.pageStart || 1}
+                max={libraryList.find(p => p.id === logReadingPublication)?.pageEnd || 1000} />
+            </div>
+
+            <!-- Reading Notes -->
+            <div class="space-y-2">
+              <label for="reading-notes" class="block text-sm font-medium">
+                Reading Notes (Optional)
+              </label>
+              <textarea 
+                id="reading-notes" 
+                bind:value={logReadingComment} 
+                class="w-full p-2 border border-neutral-300 rounded h-24"
+                placeholder="Add notes about your reading session..."
+              ></textarea>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex justify-end space-x-3 pt-4">
+              <Button 
+                type="button" 
+                variant="outline" 
+                on:click={() => logReadingModalOpen = false}
+              >
+                Cancel
+              </Button>
+              <Button 
+                type="submit" 
+                class="bg-blue-600 hover:bg-blue-700"
+              >
+                Save Reading
+              </Button>
+            </div>
+          </form>
+        </Dialog.Description>
+      </Dialog.Header>
+    </Dialog.Content>
+  </Dialog.Root>
+  
+  <!-- New Publication Dialog -->
+  <Dialog.Root bind:open={modalOpen}>
+    <Dialog.Content class="w-[90%] max-w-4xl">
+      <Dialog.Header>
+        <Dialog.Title class="text-xl mb-1">
+          {editMode ? "Edit Publication" : "Add Literature"}
+        </Dialog.Title>
+        <Dialog.Description>
+          <form on:submit|preventDefault={editMode ? updateEditedPublication : addLiteratureToLibrary}>
+            <!-- Search Bar -->
+            <div class="mb-4">
+              <div class="relative">
+                <label for="searchQuery" class="sr-only">Search Query</label>
+                <input 
+                  type="text" 
+                  id="searchQuery" 
+                  bind:value={searchQuery}
+                  on:keydown={e => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      searchLiterature();
+                    }
+                  }}
+                  class="w-full pl-4 pr-10 py-4 text-neutral-700 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
+                  placeholder="Search by DOI, ISBN, or Title" 
+                  autocomplete="off" 
+                />
+                <div class="absolute inset-y-0 z-1000 right-3 flex items-center pointer-events-none">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#9ca3af" class="w-6 h-6">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197M5.196 5.196a7.5 7.5 0 0 1 10.607 10.607" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+
+            {#if showResults}
+            <div class="absolute mt-0.5 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2 bg-white z-50">
+                {#each searchResults as result}
+                    <button type="button" 
+                        class="p-3 bg-neutral-100 rounded shadow cursor-pointer hover:bg-neutral-200 text-left w-full"
+                        on:click={() => selectResult(result)}
+                    >
+                        <strong>{result.title}</strong><br />
+                        <small>Author: {result.author}</small><br />
+                        {#if result.isbn && result.isbn !== "No ISBN"}
+                            <em>ISBN: {result.isbn}</em>
+                        {/if}
+                        {#if result.doi}
+                            <br /><em>DOI: {result.doi}</em>
+                        {/if}
+                        {#if (!result.isbn || result.isbn === "No ISBN") && !result.doi}
+                            <em>No ISBN or DOI available</em>
+                        {/if}
+                    </button>
+                {/each}
+            </div>
+            {/if}
+
+            <!-- Form Fields -->
+            <div class="flex flex-col gap-4 mt-4">
+              <div class="flex flex-col">
+                <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title *</label>
+                <input id="title" type="text" bind:value={title}
+                  class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
+              </div>
+              <div class="flex flex-col">
+                <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author *</label>
+                <input id="author" type="text" bind:value={author}
+                  class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
+              </div>
+              <Separator />
+              <div class="flex items-center">
+                <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI *</label>
+                <input id="isbn-doi" type="text" bind:value={isbn}
+                  class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" autocomplete="off" />
+              </div>
+              <Separator />
+              <div class="flex gap-4 items-center">
+                <div class="flex-1">
+                  <label for="page-start" class="text-sm font-medium text-neutral-700">Page Start *</label>
+                  <input id="page-start" type="number" bind:value={pageStart}
+                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min="1" />
+                </div>
+                <div class="flex-1">
+                  <label for="page-end" class="text-sm font-medium text-neutral-700">Page End *</label>
+                  <input id="page-end" type="number" bind:value={pageEnd}
+                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min={pageStart} />
+                </div>
+              </div>
+              <Separator />
+              <!-- Tag Input Section -->
+              <div class="mb-4">
+                <label for="tag-input" class="text-sm font-medium text-neutral-700">Tags</label>
+                <div class="flex items-center mt-2">
+                  <input id="tag-input" type="text" bind:value={tagInput}
+                    class="flex-1 p-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
+                    placeholder="Type a tag and press Enter"
+                    on:keydown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        addTag();
+                      }
+                    }} />
+                  <Button type="button" class="ml-2 bg-blue-500 hover:bg-blue-600" on:click={addTag}>Add Tag</Button>
+                </div>
+                <div class="flex flex-wrap gap-2 mt-3">
+                  {#each tags as tag, index}
+                    <div class="flex items-center bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                      <span>{tag}</span>
+                      <button type="button" class="ml-2 text-blue-500 hover:text-blue-700" on:click={() => removeTag(index)}>
+                        &times;
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+              <Separator />
+              <div class="flex items-center">
+                <label for="comment" class="w-1/4 text-sm font-medium text-neutral-700">Comment</label>
+                <textarea id="comment" bind:value={comment}
+                  class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm"></textarea>
+              </div>
+            </div>
+
+            <!-- Footer Buttons -->
+            <div class="flex justify-end space-x-4 mt-4">
+              <Button type="button" on:click={resetFields} class="bg-neutral-200 text-neutral-700 hover:bg-neutral-300">Clear</Button>
+              <Button type="submit" class="bg-blue-600 text-white hover:bg-blue-700">{editMode ? "Update" : "Add"}</Button>
+            </div>
+          </form>
+        </Dialog.Description>
+      </Dialog.Header>
+    </Dialog.Content>
+  </Dialog.Root>
+
+  <!-- View Publication Dialog -->
+  <Dialog.Root bind:open={viewModalOpen}>
+    <Dialog.Content class="min-w-[700px] min-h-[800px] overflow-auto">
+      <Dialog.Header>
+        <Dialog.Title>
+          {viewingPublication ? viewingPublication.title : "Publication Details"}
+        </Dialog.Title>
+        <Dialog.Description>
+          {#if viewingPublication}
+            <p class="mt-2 text-sm text-neutral-600">
+              <strong>Author:</strong> {viewingPublication.author}
+            </p>
+            
+            <div class="mt-1 flex items-center gap-3">
+              <div class="flex-1">
+                <div class="flex justify-between text-sm text-neutral-600 mb-1">
+                  <span>
+                    {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%
+                  </span>
+                </div>
+                <Progress value={Math.min(
+                  100,
+                  Math.round(
+                    ((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) /
+                    (viewingPublication.pageEnd - viewingPublication.pageStart) * 100
+                  )
+                )} />
+              </div>
+              <div class="mt-4">
+                <Popover.Root bind:open={viewingPublication.isUpdating}>
+                  <Popover.Trigger on:click={() => {
+                    viewingPublication.newCurrentPage = viewingPublication.currentPage || viewingPublication.pageStart;
+                    viewingPublication.progressComment = "";
+                    viewingPublication.isUpdating = true;
+                  }}>
+                    <button class="bg-transparent text-neutral-900 hover:text-neutral-500 transition-all">
+                      <SquarePen />
+                    </button>
+                  </Popover.Trigger>
+                  <Popover.Content class="p-4 bg-white shadow-lg border rounded-md w-64">
+                    <div>
+                      <label class="text-sm font-medium text-neutral-700 mb-2 block">
+                        Current Page:
+                      </label>
+                      <input type="number" min={viewingPublication.pageStart} max={viewingPublication.pageEnd} bind:value={viewingPublication.newCurrentPage} class="w-full p-1 border rounded border-neutral-300 shadow-sm" />
+                      <label class="text-sm font-medium text-neutral-700 mt-2 block">
+                        Comment:
+                      </label>
+                      <textarea bind:value={viewingPublication.progressComment} class="w-full p-1 border rounded border-neutral-300 shadow-sm" placeholder="Add a note about your reading progress"></textarea>
+                    </div>
+                    <div class="flex justify-end mt-4">
+                      <Button on:click={async () => {
+                        await updateProgress(viewingPublication.id, viewingPublication.newCurrentPage, viewingPublication.pageStart, viewingPublication.progressComment);
+                        viewingPublication.isUpdating = false;
+                      }} class="bg-blue-600 hover:bg-blue-700 text-white">
+                        Save
+                      </Button>
+                    </div>
+                  </Popover.Content>
+                </Popover.Root>
+              </div>
+            </div>
+
+            {#if viewingPublication.tags?.length > 0}
+              <div class="flex flex-wrap gap-2 mt-3">
+                {#each viewingPublication.tags as tag}
+                  <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                {/each}
+              </div>
+            {/if}
+    
+            <div class="mt-4 p-3 bg-gray-100 border border-gray-300 rounded-md">
+              <h3 class="font-semibold text-sm mb-2">Reading Log:</h3>
+              {#if viewingPublication.journalLogs?.length > 0}
+                <ul class="space-y-2">
+                  {#each viewingPublication.journalLogs as log}
+                    <li class="p-2 bg-white border rounded-md shadow-sm">
+                      <strong>{log.dateTitle}</strong>
+                      <p class="text-sm text-gray-600">From Page {log.fromPage} - To Page {log.toPage}</p>
+                      <p class="text-xs text-gray-500">Pages Read: {log.pagesRead}</p>
+                      {#if log.comment}
+                        <p class="text-xs text-gray-500">"{log.comment}"</p>
+                      {/if}
+                      <small class="text-xs text-gray-500">{new Date(log.date).toLocaleString()}</small>
+                    </li>
+                  {/each}
+                </ul>
+              {:else}
+                <p class="text-sm text-gray-500">No logs yet.</p>
+              {/if}
+            </div>
+          {/if}
+        </Dialog.Description>
+      </Dialog.Header>
+      <Dialog.Footer>
+      </Dialog.Footer>
+    </Dialog.Content>
+  </Dialog.Root>
