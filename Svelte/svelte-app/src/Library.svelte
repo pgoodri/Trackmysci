@@ -4,7 +4,7 @@
     import { onAuthStateChanged } from "firebase/auth";
     import { onMount } from "svelte";
     import { writable } from "svelte/store";
-    import { LogOut, Gauge, Library, ChevronsUpDown, Edit, Trash2, Ellipsis, SquarePen, FilePlus2 } from "lucide-svelte";
+    import { LogOut, Gauge, Library, ChevronsUpDown, Edit, Trash2, Ellipsis, SquarePen, FilePlus2, BookOpen, Book, Calendar } from "lucide-svelte";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
     import * as Popover from "$lib/components/ui/popover";
     import * as Dialog from "$lib/components/ui/dialog";
@@ -15,8 +15,7 @@
     import { get } from "svelte/store"; 
 
     import {
-      Filter,
-      BookOpen
+      Filter
     } from "lucide-svelte";
     
 
@@ -633,9 +632,7 @@ function toggleTag(tag) {
         <Dialog.Description class="mt-4">
             {#if viewingPublication}
                 <div class="flex items-center gap-2 mb-4">
-                    <svg class="w-5 h-5 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                    </svg>
+                    <Book class="w-5 h-5 text-neutral-600" />
                     <span class="text-neutral-700">
                         {viewingPublication.currentPage || viewingPublication.pageStart} / {viewingPublication.pageEnd} pages
                     </span>
@@ -667,10 +664,18 @@ function toggleTag(tag) {
                 <div>
                     <div class="flex justify-between items-center mb-4">
                         <h3 class="text-lg font-semibold">Reading Logs</h3>
-                        <Button class="flex items-center gap-2" variant="outline">
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                            </svg>
+                        <Button 
+                          class="flex items-center gap-2" 
+                          variant="outline"
+                          on:click={() => {
+                            logReadingPublication = viewingPublication.id;
+                            logReadingNewPage = viewingPublication.currentPage || viewingPublication.pageStart;
+                            logReadingComment = "";
+                            logReadingModalOpen = true;
+                            viewModalOpen = false; // Close the view modal when opening the log modal
+                          }}
+                        >
+                            <BookOpen class="w-5 h-5" />
                             Log Reading
                         </Button>
                     </div>
@@ -681,17 +686,13 @@ function toggleTag(tag) {
                                 <div class="bg-white border border-neutral-200 rounded-lg p-4">
                                     <div class="flex justify-between mb-2">
                                         <div class="flex items-center gap-2 text-neutral-600">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                            </svg>
+                                            <Calendar class="w-4 h-4" />
                                             <span>{new Date(log.date).toLocaleDateString()}</span>
                                         </div>
                                     </div>
                                     
                                     <div class="flex items-center gap-2 mb-2 text-neutral-600">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                                        </svg>
+                                        <Book class="w-4 h-4" />
                                         <span>{log.pagesRead} pages</span>
                                     </div>
                                     

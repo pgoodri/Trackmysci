@@ -40,7 +40,11 @@
       Ellipsis,
       Filter,
       BookOpen,
-      Clock
+      Clock,
+      Calendar,
+      Book,
+      Search,
+      Percent
     } from "lucide-svelte";
     import SimpleChart from "./lib/components/ui/charts/SimpleChart.svelte";
     import Chart from "chart.js/auto";
@@ -1148,7 +1152,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
         <h2 class="text-4xl font-bold text-neutral-800">Welcome, {firstName}</h2>
         <div class="flex space-x-4">
           <Button class="bg-white hover:bg-neutral-300 text-neutral-800" on:click={openLogReadingModal}>
-            <BookOpen class="w-4 h-4 mr-2" /> Log Reading
+            <BookOpen class="w-5 h-5 mr-2" /> Log Reading
           </Button>
           
           <Button class="bg-blue-600 hover:bg-blue-700" on:click={openAddModal}>
@@ -1211,7 +1215,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                           <Button 
                             size="sm" 
                             variant="outline" 
-                            class="gap-1" 
+                            class="gap-2" 
                             on:click={() => {
                               // Set up the current publication for logging
                               lit.newCurrentPage = lit.currentPage || lit.pageStart;
@@ -1219,8 +1223,8 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                               lit.isUpdating = true;
                             }}
                           >
-                            <BookOpen class="w-3.5 h-3.5" />
-                            <span>Log reading</span>
+                            <BookOpen class="w-5 h-5" />
+                            <span>Log Reading</span>
                           </Button>
                           
                           <!-- Menu Button -->
@@ -1587,9 +1591,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                   autocomplete="off" 
                 />
                 <div class="absolute inset-y-0 z-1000 right-3 flex items-center pointer-events-none">
-                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="#9ca3af" class="w-6 h-6">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197M5.196 5.196a7.5 7.5 0 0 1 10.607 10.607" />
-                  </svg>
+                  <Search class="w-6 h-6 text-neutral-400" />
                 </div>
               </div>
             </div>
@@ -1711,9 +1713,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
         <Dialog.Description class="mt-4">
             {#if viewingPublication}
                 <div class="flex items-center gap-2 mb-4">
-                    <svg class="w-5 h-5 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                    </svg>
+                    <Book class="w-5 h-5 text-neutral-600" />
                     <span class="text-neutral-700">
                         {viewingPublication.currentPage || viewingPublication.pageStart} / {viewingPublication.pageEnd} pages
                     </span>
@@ -1756,9 +1756,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                             viewModalOpen = false; // Close the view modal when opening the log modal
                           }}
                         >
-                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                            </svg>
+                            <BookOpen class="w-5 h-5" />
                             Log Reading
                         </Button>
                     </div>
@@ -1769,17 +1767,13 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                                 <div class="bg-white border border-neutral-200 rounded-lg p-4">
                                     <div class="flex justify-between mb-2">
                                         <div class="flex items-center gap-2 text-neutral-600">
-                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                                            </svg>
+                                            <Calendar class="w-4 h-4" />
                                             <span>{new Date(log.date).toLocaleDateString()}</span>
                                         </div>
                                     </div>
                                     
                                     <div class="flex items-center gap-2 mb-2 text-neutral-600">
-                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
-                                        </svg>
+                                        <Book class="w-4 h-4" />
                                         <span>{log.pagesRead} pages</span>
                                     </div>
                                     
