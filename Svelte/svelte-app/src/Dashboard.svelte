@@ -273,6 +273,7 @@
     let logReadingNewPage = 0;
     let logReadingComment = "";
     
+    
     function openViewModal(pub) {
         viewingPublication = pub;
         viewModalOpen = true;
@@ -282,6 +283,7 @@
         viewingPublication = null;
         viewModalOpen = false;
     }
+    
 
     // Function to open the log reading modal
     function openLogReadingModal() {
@@ -391,7 +393,7 @@
                 }
             }
             currentStreak = streak;
-            console.log(`�� Current streak: ${streak} days`);
+            console.log(` Current streak: ${streak} days`);
         }
 
     } catch (error) {
@@ -1694,99 +1696,116 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
 
   <!-- View Publication Dialog -->
   <Dialog.Root bind:open={viewModalOpen}>
-    <Dialog.Content class="min-w-[700px] min-h-[800px] overflow-auto">
-      <Dialog.Header>
-        <Dialog.Title>
-          {viewingPublication ? viewingPublication.title : "Publication Details"}
-        </Dialog.Title>
-        <Dialog.Description>
-          {#if viewingPublication}
-            <p class="mt-2 text-sm text-neutral-600">
-              <strong>Author:</strong> {viewingPublication.author}
-            </p>
-            
-            <div class="mt-1 flex items-center gap-3">
-              <div class="flex-1">
-                <div class="flex justify-between text-sm text-neutral-600 mb-1">
-                  <span>
-                    {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%
-                  </span>
+    <Dialog.Content class="w-[300px] max-w-[60%] max-h-[80vh] overflow-y-auto">
+        <div class="flex justify-between items-start mb-2">
+            <div>
+                <Dialog.Title class="text-2xl font-bold">
+                    {viewingPublication?.title || "Publication Details"}
+                </Dialog.Title>
+                <p class="text-neutral-600 mt-1">
+                    {viewingPublication?.author || ""}
+                </p>
+            </div>
+        </div>
+        
+        <Dialog.Description class="mt-4">
+            {#if viewingPublication}
+                <div class="flex items-center gap-2 mb-4">
+                    <svg class="w-5 h-5 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                    </svg>
+                    <span class="text-neutral-700">
+                        {viewingPublication.currentPage || viewingPublication.pageStart} / {viewingPublication.pageEnd} pages
+                    </span>
                 </div>
-                <Progress value={Math.min(
-                  100,
-                  Math.round(
-                    ((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) /
-                    (viewingPublication.pageEnd - viewingPublication.pageStart) * 100
-                  )
-                )} />
-              </div>
-              <div class="mt-4">
-                <Popover.Root bind:open={viewingPublication.isUpdating}>
-                  <Popover.Trigger on:click={() => {
-                    viewingPublication.newCurrentPage = viewingPublication.currentPage || viewingPublication.pageStart;
-                    viewingPublication.progressComment = "";
-                    viewingPublication.isUpdating = true;
-                  }}>
-                    <button class="bg-transparent text-neutral-900 hover:text-neutral-500 transition-all">
-                      <SquarePen />
-                    </button>
-                  </Popover.Trigger>
-                  <Popover.Content class="p-4 bg-white shadow-lg border rounded-md w-64">
-                    <div>
-                      <label class="text-sm font-medium text-neutral-700 mb-2 block">
-                        Current Page:
-                      </label>
-                      <input type="number" min={viewingPublication.pageStart} max={viewingPublication.pageEnd} bind:value={viewingPublication.newCurrentPage} class="w-full p-1 border rounded border-neutral-300 shadow-sm" />
-                      <label class="text-sm font-medium text-neutral-700 mt-2 block">
-                        Comment:
-                      </label>
-                      <textarea bind:value={viewingPublication.progressComment} class="w-full p-1 border rounded border-neutral-300 shadow-sm" placeholder="Add a note about your reading progress"></textarea>
+                
+                <!-- Progress Bar -->
+                <div class="mb-6">
+                    <div class="h-2 bg-blue-100 rounded-full mb-1">
+                        <div class="h-2 bg-black rounded-full" style="width: {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%"></div>
                     </div>
-                    <div class="flex justify-end mt-4">
-                      <Button on:click={async () => {
-                        await updateProgress(viewingPublication.id, viewingPublication.newCurrentPage, viewingPublication.pageStart, viewingPublication.progressComment);
-                        viewingPublication.isUpdating = false;
-                      }} class="bg-blue-600 hover:bg-blue-700 text-white">
-                        Save
-                      </Button>
+                    <div class="text-sm text-neutral-600">
+                        {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}% complete
                     </div>
-                  </Popover.Content>
-                </Popover.Root>
-              </div>
-            </div>
-
-            {#if viewingPublication.tags?.length > 0}
-              <div class="flex flex-wrap gap-2 mt-3">
-                {#each viewingPublication.tags as tag}
-                  <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
-                {/each}
-              </div>
+                </div>
+                
+                <!-- Tags -->
+                {#if viewingPublication.tags?.length > 0}
+                    <div class="flex flex-wrap gap-2 mb-6">
+                        {#each viewingPublication.tags as tag}
+                            <span class="bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                        {/each}
+                    </div>
+                {/if}
+                
+                <!-- Divider -->
+                <hr class="my-6 border-neutral-200" />
+                
+                <!-- Reading Logs Section -->
+                <div>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">Reading Logs</h3>
+                        <Button 
+                          class="flex items-center gap-2" 
+                          variant="outline"
+                          on:click={() => {
+                            logReadingPublication = viewingPublication.id;
+                            logReadingNewPage = viewingPublication.currentPage || viewingPublication.pageStart;
+                            logReadingComment = "";
+                            logReadingModalOpen = true;
+                            viewModalOpen = false; // Close the view modal when opening the log modal
+                          }}
+                        >
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                            </svg>
+                            Log Reading
+                        </Button>
+                    </div>
+                    
+                    {#if viewingPublication.journalLogs?.length > 0}
+                        <div class="space-y-4">
+                            {#each viewingPublication.journalLogs as log}
+                                <div class="bg-white border border-neutral-200 rounded-lg p-4">
+                                    <div class="flex justify-between mb-2">
+                                        <div class="flex items-center gap-2 text-neutral-600">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
+                                            <span>{new Date(log.date).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-2 mb-2 text-neutral-600">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                                        </svg>
+                                        <span>{log.pagesRead} pages</span>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <div class="h-2 bg-blue-100 rounded-full">
+                                            <div class="h-2 bg-black rounded-full" style="width: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%"></div>
+                                        </div>
+                                        <div class="text-xs text-neutral-600 mt-1">
+                                            Progress at this point: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%
+                                        </div>
+                                    </div>
+                                    
+                                    {#if log.comment}
+                                        <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md">{log.comment}</p>
+                                    {/if}
+                                </div>
+                            {/each}
+                        </div>
+                    {:else}
+                        <div class="text-center p-6 bg-neutral-50 rounded-lg">
+                            <p class="text-neutral-500">No reading logs yet.</p>
+                            <p class="text-sm text-neutral-400 mt-1">Start tracking your progress by clicking "Log Reading".</p>
+                        </div>
+                    {/if}
+                </div>
             {/if}
-    
-            <div class="mt-4 p-3 bg-gray-100 border border-gray-300 rounded-md">
-              <h3 class="font-semibold text-sm mb-2">Reading Log:</h3>
-              {#if viewingPublication.journalLogs?.length > 0}
-                <ul class="space-y-2">
-                  {#each viewingPublication.journalLogs as log}
-                    <li class="p-2 bg-white border rounded-md shadow-sm">
-                      <strong>{log.dateTitle}</strong>
-                      <p class="text-sm text-gray-600">From Page {log.fromPage} - To Page {log.toPage}</p>
-                      <p class="text-xs text-gray-500">Pages Read: {log.pagesRead}</p>
-                      {#if log.comment}
-                        <p class="text-xs text-gray-500">"{log.comment}"</p>
-                      {/if}
-                      <small class="text-xs text-gray-500">{new Date(log.date).toLocaleString()}</small>
-                    </li>
-                  {/each}
-                </ul>
-              {:else}
-                <p class="text-sm text-gray-500">No logs yet.</p>
-              {/if}
-            </div>
-          {/if}
         </Dialog.Description>
-      </Dialog.Header>
-      <Dialog.Footer>
-      </Dialog.Footer>
     </Dialog.Content>
   </Dialog.Root>

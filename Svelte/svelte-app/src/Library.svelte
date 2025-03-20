@@ -15,7 +15,8 @@
     import { get } from "svelte/store"; 
 
     import {
-      Filter
+      Filter,
+      BookOpen
     } from "lucide-svelte";
     
 
@@ -27,6 +28,15 @@
 
     let selectedTags = writable([]);
     let uniqueTags = writable([]);
+
+    // View Modal variables
+    let viewModalOpen = false;
+    let viewingPublication = null;
+
+    // Log Reading variables
+    let logReadingModalOpen = false;
+    let logReadingNewPage = 0;
+    let logReadingComment = "";
 
     // Edit Modal variables
     let modalOpen = false;
@@ -172,6 +182,16 @@ function toggleTag(tag) {
     });
 
     // ----- Modal Functions -----
+    function openViewModal(pub) {
+        viewingPublication = pub;
+        viewModalOpen = true;
+    }
+
+    function closeViewModal() {
+        viewingPublication = null;
+        viewModalOpen = false;
+    }
+
     function openEditModal(pub) {
         editMode = true;
         editingPublication = { ...pub };
@@ -258,6 +278,86 @@ function toggleTag(tag) {
             closeModal();
         } catch (error) {
             console.error("Error updating publication:", error.message);
+        }
+    }
+
+    // Function to open log reading dialog
+    function openLogReading() {
+        if (viewingPublication) {
+            logReadingNewPage = viewingPublication.currentPage || viewingPublication.pageStart;
+            logReadingComment = "";
+            logReadingModalOpen = true;
+        }
+    }
+    
+    // Function to save reading log
+    async function saveReadingLog() {
+        if (!viewingPublication || !logReadingNewPage) return;
+        
+        try {
+            const user = auth.currentUser;
+            if (!user) {
+                console.error("No authenticated user found.");
+                return;
+            }
+            
+            const userDocRef = doc(firestore, "users", user.uid);
+            const entryDocRef = doc(collection(userDocRef, "library"), viewingPublication.id);
+            
+            // Get current publication data
+            const entryDocSnap = await getDoc(entryDocRef);
+            if (!entryDocSnap.exists()) {
+                console.warn("Publication not found.");
+                return;
+            }
+            
+            const pubData = entryDocSnap.data();
+            
+            // Calculate pages read
+            const previousPage = pubData.currentPage || pubData.pageStart;
+            const pagesRead = Math.max(logReadingNewPage - previousPage, 0);
+            
+            // Create log entry
+            const logEntry = {
+                dateTitle: new Date().toLocaleDateString(),
+                fromPage: previousPage,
+                toPage: logReadingNewPage,
+                pagesRead: pagesRead,
+                comment: logReadingComment || "",
+                date: new Date().toISOString()
+            };
+            
+            // Get existing logs
+            let journalLogs = pubData.journalLogs || [];
+            journalLogs.push(logEntry);
+            
+            // Update Firestore
+            await updateDoc(entryDocRef, {
+                currentPage: logReadingNewPage,
+                updatedAt: new Date(),
+                journalLogs: journalLogs
+            });
+            
+            console.log("Reading log saved successfully");
+            
+            // Update local data
+            if (viewingPublication) {
+                viewingPublication.currentPage = logReadingNewPage;
+                viewingPublication.journalLogs = journalLogs;
+            }
+            
+            // Update library list
+            libraryList.update(books => {
+                return books.map(book => 
+                    book.id === viewingPublication.id ? 
+                        { ...book, currentPage: logReadingNewPage, journalLogs } : book
+                );
+            });
+            
+            // Close modal
+            logReadingModalOpen = false;
+        } catch (error) {
+            console.error("Error saving reading log:", error);
         }
     }
 </script>
@@ -359,7 +459,7 @@ function toggleTag(tag) {
                         }) as lit}
                         <li class="p-4 bg-white border border-neutral-300 rounded-md shadow">
                             <div class="flex justify-between">
-                                <div class="cursor-pointer">
+                                <div class="cursor-pointer" on:click={() => openViewModal(lit)}>
                                     <strong>{lit.title}</strong><br />
                                     <small>{lit.author}</small>
                                 </div>
@@ -512,3 +612,159 @@ function toggleTag(tag) {
         </Dialog.Header>
     </Dialog.Content>
 </Dialog.Root>
+
+<!-- View Publication Dialog -->
+<Dialog.Root bind:open={viewModalOpen}>
+    <Dialog.Content class="w-[600px] max-w-[90%]">
+        <div class="flex justify-between items-start mb-2">
+            <div>
+                <Dialog.Title class="text-2xl font-bold">
+                    {viewingPublication?.title || "Publication Details"}
+                </Dialog.Title>
+                <p class="text-neutral-600 mt-1">
+                    {viewingPublication?.author || ""}
+                </p>
+            </div>
+            <Dialog.Close class="p-1 rounded-full hover:bg-neutral-100">
+                <button class="text-neutral-500">✕</button>
+            </Dialog.Close>
+        </div>
+        
+        <Dialog.Description class="mt-4">
+            {#if viewingPublication}
+                <div class="flex items-center gap-2 mb-4">
+                    <svg class="w-5 h-5 text-neutral-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                    </svg>
+                    <span class="text-neutral-700">
+                        {viewingPublication.currentPage || viewingPublication.pageStart} / {viewingPublication.pageEnd} pages
+                    </span>
+                </div>
+                
+                <!-- Progress Bar -->
+                <div class="mb-6">
+                    <div class="h-2 bg-blue-100 rounded-full mb-1">
+                        <div class="h-2 bg-blue-600 rounded-full" style="width: {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%"></div>
+                    </div>
+                    <div class="text-sm text-neutral-600">
+                        {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}% complete
+                    </div>
+                </div>
+                
+                <!-- Tags -->
+                {#if viewingPublication.tags?.length > 0}
+                    <div class="flex flex-wrap gap-2 mb-6">
+                        {#each viewingPublication.tags as tag}
+                            <span class="bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                        {/each}
+                    </div>
+                {/if}
+                
+                <!-- Divider -->
+                <hr class="my-6 border-neutral-200" />
+                
+                <!-- Reading Logs Section -->
+                <div>
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">Reading Logs</h3>
+                        <Button class="flex items-center gap-2" variant="outline">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                            </svg>
+                            Log Reading
+                        </Button>
+                    </div>
+                    
+                    {#if viewingPublication.journalLogs?.length > 0}
+                        <div class="space-y-4">
+                            {#each viewingPublication.journalLogs as log}
+                                <div class="bg-white border border-neutral-200 rounded-lg p-4">
+                                    <div class="flex justify-between mb-2">
+                                        <div class="flex items-center gap-2 text-neutral-600">
+                                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
+                                            <span>{new Date(log.date).toLocaleDateString()}</span>
+                                        </div>
+                                    </div>
+                                    
+                                    <div class="flex items-center gap-2 mb-2 text-neutral-600">
+                                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"></path>
+                                        </svg>
+                                        <span>{log.pagesRead} pages</span>
+                                    </div>
+                                    
+                                    <div class="mb-3">
+                                        <div class="h-2 bg-blue-100 rounded-full">
+                                            <div class="h-2 bg-green-500 rounded-full" style="width: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%"></div>
+                                        </div>
+                                        <div class="text-xs text-neutral-600 mt-1">
+                                            Progress at this point: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%
+                                        </div>
+                                    </div>
+                                    
+                                    {#if log.comment}
+                                        <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md">{log.comment}</p>
+                                    {/if}
+                                </div>
+                            {/each}
+                        </div>
+                    {:else}
+                        <div class="text-center p-6 bg-neutral-50 rounded-lg">
+                            <p class="text-neutral-500">No reading logs yet.</p>
+                            <p class="text-sm text-neutral-400 mt-1">Start tracking your progress by clicking "Log Reading".</p>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+        </Dialog.Description>
+    </Dialog.Content>
+</Dialog.Root>
+
+<!-- Log Reading Modal -->
+{#if logReadingModalOpen && viewingPublication}
+<Dialog 
+    title="Log Reading Progress"
+    open={logReadingModalOpen} 
+    onClose={() => logReadingModalOpen = false}
+>
+    <div slot="content">
+        <div class="flex flex-col gap-4">
+            <div class="flex flex-col gap-1">
+                <label class="font-medium">Current Page: {viewingPublication.currentPage || viewingPublication.pageStart}</label>
+                <label class="font-medium">New Page</label>
+                <input
+                    type="number"
+                    bind:value={logReadingNewPage}
+                    class="w-full border p-2 rounded"
+                    min={viewingPublication.currentPage || viewingPublication.pageStart}
+                    max={viewingPublication.pageEnd}
+                />
+            </div>
+            <div class="flex flex-col gap-1">
+                <label class="font-medium">Comments (optional)</label>
+                <textarea
+                    bind:value={logReadingComment}
+                    class="w-full border p-2 rounded"
+                    rows="3"
+                />
+            </div>
+        </div>
+    </div>
+    <div slot="actions" class="flex gap-2 justify-end">
+        <button
+            class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400"
+            on:click={() => logReadingModalOpen = false}
+        >
+            Cancel
+        </button>
+        <button
+            class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700"
+            on:click={saveReadingLog}
+        >
+            Save
+        </button>
+    </div>
+</Dialog>
+{/if}
