@@ -1,12 +1,15 @@
 <script>
     import { auth, firestore } from "./firebase";
-    import { getDoc, doc, collection, query, where, getDocs, deleteDoc } from "firebase/firestore";
+    import { getDoc, doc, collection, query, where, getDocs, deleteDoc, updateDoc } from "firebase/firestore";
     import { onAuthStateChanged } from "firebase/auth";
     import { onMount } from "svelte";
     import { writable } from "svelte/store";
-    import { LogOut, Gauge, Library, ChevronsUpDown, Edit, Trash2, Ellipsis, SquarePen } from "lucide-svelte";
+    import { LogOut, Gauge, Library, ChevronsUpDown, Edit, Trash2, Ellipsis, SquarePen, FilePlus2 } from "lucide-svelte";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
     import * as Popover from "$lib/components/ui/popover";
+    import * as Dialog from "$lib/components/ui/dialog";
+    import { Button } from "$lib/components/ui/button";
+    import { Separator } from "$lib/components/ui/separator";
     import { Progress } from "$lib/components/ui/progress";
     import { signOut } from "firebase/auth";
     import { get } from "svelte/store"; 
@@ -24,6 +27,19 @@
 
     let selectedTags = writable([]);
     let uniqueTags = writable([]);
+
+    // Edit Modal variables
+    let modalOpen = false;
+    let editMode = false;
+    let editingPublication = null;
+    let title = "";
+    let author = "";
+    let isbn = "";
+    let pageStart = 1;
+    let pageEnd = 1;
+    let currentPage = 1;
+    let tagInput = "";
+    let tags = [];
 
     async function fetchUserData(uid) {
         try {
@@ -154,6 +170,96 @@ function toggleTag(tag) {
             authReady = true;
         });
     });
+
+    // ----- Modal Functions -----
+    function openEditModal(pub) {
+        editMode = true;
+        editingPublication = { ...pub };
+        // Pre-fill modal fields with publication data
+        title = pub.title;
+        author = pub.author;
+        isbn = pub.isbn;
+        pageStart = pub.pageStart;
+        pageEnd = pub.pageEnd;
+        currentPage = pub.currentPage;
+        tags = pub.tags || [];
+        modalOpen = true;
+    }
+  
+    function closeModal() {
+        modalOpen = false;
+        editMode = false;
+        editingPublication = null;
+        resetFields();
+    }
+    
+    function resetFields() {
+        title = author = isbn = "";
+        pageStart = pageEnd = currentPage = 1;
+        tagInput = "";
+        tags = [];
+    }
+    
+    // Tag functions
+    function addTag() {
+        if (tagInput.trim() && !tags.includes(tagInput.trim())) {
+            tags = [...tags, tagInput.trim()];
+            tagInput = "";
+        }
+    }
+    
+    function removeTag(index) {
+        tags = tags.filter((_, i) => i !== index);
+    }
+
+    async function updateEditedPublication() {
+        if (!editingPublication) return;
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
+        }
+
+        try {
+            const userDocRef = doc(firestore, "users", user.uid);
+            const entryDocRef = doc(collection(userDocRef, "library"), editingPublication.id);
+
+            // Fetch the existing data before update
+            const entryDocSnap = await getDoc(entryDocRef);
+            if (!entryDocSnap.exists()) {
+                console.warn("Publication not found for editing.");
+                return;
+            }
+
+            const updatedData = {
+                title,
+                author,
+                isbn,
+                pageStart,
+                pageEnd,
+                currentPage,
+                tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
+                updatedAt: new Date()
+            };
+
+            // Save updated publication data
+            await updateDoc(entryDocRef, updatedData);
+            console.log(`Updated publication: ${editingPublication.id}`);
+
+            // Update the store to reflect changes in UI
+            libraryList.update(books => {
+                return books.map(book => 
+                    book.id === editingPublication.id ? { ...book, ...updatedData } : book
+                );
+            });
+
+            // Refresh tags
+            extractUniqueTags();
+            closeModal();
+        } catch (error) {
+            console.error("Error updating publication:", error.message);
+        }
+    }
 </script>
 
 {#if !authReady}
@@ -266,7 +372,7 @@ function toggleTag(tag) {
                                         </DropdownMenu.Trigger>
                                         <DropdownMenu.Content>
                                             <DropdownMenu.Group>
-                                                <DropdownMenu.Item class="text-sm">
+                                                <DropdownMenu.Item on:click={() => openEditModal(lit)} class="text-sm">
                                                     <Edit class="w-4 h-4 mr-2" /> Edit
                                                 </DropdownMenu.Item>
                                                 <DropdownMenu.Item class="text-sm text-red-600" on:click={() => deletePublication(lit.id)}>
@@ -321,3 +427,88 @@ function toggleTag(tag) {
         </div>
     </div>
 {/if}
+
+<!-- Edit Publication Dialog -->
+<Dialog.Root bind:open={modalOpen}>
+    <Dialog.Content class="w-[90%] max-w-4xl">
+        <Dialog.Header>
+            <Dialog.Title class="text-xl mb-1">
+                Edit Publication
+            </Dialog.Title>
+            <Dialog.Description>
+                <form on:submit|preventDefault={updateEditedPublication}>
+                    <!-- Form Fields -->
+                    <div class="flex flex-col gap-4 mt-4">
+                        <div class="flex flex-col">
+                            <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title *</label>
+                            <input id="title" type="text" bind:value={title}
+                                class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
+                        </div>
+                        <div class="flex flex-col">
+                            <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author *</label>
+                            <input id="author" type="text" bind:value={author}
+                                class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
+                        </div>
+                        <Separator />
+                        <div class="flex items-center">
+                            <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI *</label>
+                            <input id="isbn-doi" type="text" bind:value={isbn}
+                                class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" autocomplete="off" />
+                        </div>
+                        <Separator />
+                        <div class="flex gap-4 items-center">
+                            <div class="flex-1">
+                                <label for="page-start" class="text-sm font-medium text-neutral-700">Page Start *</label>
+                                <input id="page-start" type="number" bind:value={pageStart}
+                                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min="1" />
+                            </div>
+                            <div class="flex-1">
+                                <label for="page-end" class="text-sm font-medium text-neutral-700">Page End *</label>
+                                <input id="page-end" type="number" bind:value={pageEnd}
+                                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min={pageStart} />
+                            </div>
+                            <div class="flex-1">
+                                <label for="current-page" class="text-sm font-medium text-neutral-700">Current Page *</label>
+                                <input id="current-page" type="number" bind:value={currentPage}
+                                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min={pageStart} max={pageEnd} />
+                            </div>
+                        </div>
+                        <Separator />
+                        <!-- Tag Input Section -->
+                        <div class="mb-4">
+                            <label for="tag-input" class="text-sm font-medium text-neutral-700">Tags</label>
+                            <div class="flex items-center mt-2">
+                                <input id="tag-input" type="text" bind:value={tagInput}
+                                    class="flex-1 p-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
+                                    placeholder="Type a tag and press Enter"
+                                    on:keydown={(e) => {
+                                        if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            addTag();
+                                        }
+                                    }} />
+                                <Button type="button" class="ml-2 bg-blue-500 hover:bg-blue-600" on:click={addTag}>Add Tag</Button>
+                            </div>
+                            <div class="flex flex-wrap gap-2 mt-3">
+                                {#each tags as tag, index}
+                                    <div class="flex items-center bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
+                                        <span>{tag}</span>
+                                        <button type="button" class="ml-2 text-blue-500 hover:text-blue-700" on:click={() => removeTag(index)}>
+                                            &times;
+                                        </button>
+                                    </div>
+                                {/each}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Footer Buttons -->
+                    <div class="flex justify-end space-x-4 mt-4">
+                        <Button type="button" on:click={closeModal} class="bg-neutral-200 text-neutral-700 hover:bg-neutral-300">Cancel</Button>
+                        <Button type="submit" class="bg-blue-600 text-white hover:bg-blue-700">Update</Button>
+                    </div>
+                </form>
+            </Dialog.Description>
+        </Dialog.Header>
+    </Dialog.Content>
+</Dialog.Root>
