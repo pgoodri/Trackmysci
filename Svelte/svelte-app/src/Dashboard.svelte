@@ -1681,7 +1681,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
               <div class="flex items-center">
                 <label for="comment" class="w-1/4 text-sm font-medium text-neutral-700">Comment</label>
                 <textarea id="comment" bind:value={comment}
-                  class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm"></textarea>
+                  class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300"></textarea>
               </div>
             </div>
 
@@ -1710,7 +1710,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
             </div>
         </div>
         
-        <Dialog.Description class="mt-4 shadow-md">
+        <Dialog.Description class="mt-4">
             {#if viewingPublication}
                 <div class="flex items-center gap-2 mb-4">
                     <Book class="w-5 h-5 text-neutral-600" />
