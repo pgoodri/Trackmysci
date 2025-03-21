@@ -1,6 +1,6 @@
 <script>
     import { auth, firestore } from "./firebase";
-    import { getDoc, doc, collection, query, where, getDocs, deleteDoc, updateDoc } from "firebase/firestore";
+    import { getDoc, doc, collection, query, where, getDocs, deleteDoc, updateDoc, setDoc } from "firebase/firestore";
     import { onAuthStateChanged } from "firebase/auth";
     import { onMount } from "svelte";
     import { writable } from "svelte/store";
@@ -37,6 +37,12 @@
     let logReadingPublication = null;
     let logReadingNewPage = 0;
     let logReadingComment = "";
+
+    // Rating variables
+    let ratingDialogOpen = false;
+    let currentRating = 0;
+    let publicationToRate = null;
+    let publicationTitleToRate = "";
 
     // Edit Modal variables
     let modalOpen = false;
@@ -279,6 +285,12 @@ function toggleTag(tag) {
                 );
             });
 
+            // Check if the book is completed and show rating dialog
+            const progress = Math.round(((currentPage - pageStart) / (pageEnd - pageStart)) * 100);
+            if (progress >= 100) {
+                showRatingDialog(editingPublication.id, title);
+            }
+
             // Refresh tags
             extractUniqueTags();
             closeModal();
@@ -360,6 +372,12 @@ function toggleTag(tag) {
                 );
             });
             
+            // Check if the book is completed and show rating dialog
+            const progress = Math.round(((logReadingNewPage - pubData.pageStart) / (pubData.pageEnd - pubData.pageStart)) * 100);
+            if (progress >= 100) {
+                showRatingDialog(viewingPublication.id, viewingPublication.title);
+            }
+            
             // Close modal
             logReadingModalOpen = false;
         } catch (error) {
@@ -381,6 +399,70 @@ function toggleTag(tag) {
         // Clear the results for now
         searchResults = [];
         showResults = false;
+    }
+
+    // Show rating dialog function
+    function showRatingDialog(pubId, pubTitle) {
+        publicationToRate = pubId;
+        publicationTitleToRate = pubTitle;
+        currentRating = 0;
+        ratingDialogOpen = true;
+    }
+
+    // Save rating to Storage
+    async function saveRating() {
+        if (!publicationToRate || currentRating === 0) return;
+
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
+        }
+
+        try {
+            const userDocRef = doc(firestore, "users", user.uid);
+            const libraryRef = doc(userDocRef, "library", publicationToRate);
+            const ratingsDocRef = doc(userDocRef, "charts", "ratings");
+
+            // Fetch existing data
+            const librarySnap = await getDoc(libraryRef);
+            const ratingsSnap = await getDoc(ratingsDocRef);
+            let ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
+
+            // Remove previous rating (if exists)
+            if (librarySnap.exists()) {
+                const prevRating = librarySnap.data().rating;
+                if (prevRating && ratingsData[prevRating]) {
+                    ratingsData[prevRating] = Math.max(0, ratingsData[prevRating] - 1);
+                    if (ratingsData[prevRating] <= 0) {
+                        delete ratingsData[prevRating];
+                    }
+                }
+            }
+
+            // Update with new rating
+            ratingsData[currentRating] = (ratingsData[currentRating] || 0) + 1;
+
+            // Update both documents in a batch
+            await Promise.all([
+                setDoc(libraryRef, { rating: currentRating }, { merge: true }), // Update publication rating
+                setDoc(ratingsDocRef, ratingsData, { merge: true }) // Update overall ratings count
+            ]);
+
+            console.log(`✅ Rating of ${currentRating} saved for publication ${publicationToRate}`);
+
+            // Update the local state to reflect changes
+            libraryList.update(books => 
+                books.map(book => 
+                    book.id === publicationToRate ? { ...book, rating: currentRating } : book
+                )
+            );
+            ratingDialogOpen = false;
+            publicationToRate = null;
+
+        } catch (error) {
+            console.error("❌ Error saving rating:", error.message);
+        }
     }
 
     function selectResult(result) {
@@ -866,6 +948,56 @@ function toggleTag(tag) {
                         </Button>
                     </div>
                 </form>
+            </Dialog.Description>
+        </Dialog.Header>
+    </Dialog.Content>
+</Dialog.Root>
+
+<!-- Rating Dialog -->
+<Dialog.Root bind:open={ratingDialogOpen}>
+    <Dialog.Content class="w-[400px]">
+        <Dialog.Header>
+            <Dialog.Title>Rate This Publication</Dialog.Title>
+            <Dialog.Description>
+                <div class="py-4">
+                    <p class="text-center mb-4">You've completed "{publicationTitleToRate}". How would you rate it?</p>
+                    
+                    <!-- Star Rating -->
+                    <div class="flex justify-center space-x-2 mb-6">
+                        {#each Array(5) as _, i}
+                            <button 
+                                type="button"
+                                class="text-3xl focus:outline-none"
+                                on:click={() => currentRating = i + 1}
+                            >
+                                {#if i < currentRating}
+                                    <span class="text-yellow-400">★</span>
+                                {:else}
+                                    <span class="text-gray-300">★</span>
+                                {/if}
+                            </button>
+                        {/each}
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end space-x-3">
+                        <Button 
+                            type="button"
+                            variant="outline"
+                            on:click={() => ratingDialogOpen = false}
+                        >
+                            Skip
+                        </Button>
+                        <Button 
+                            type="button"
+                            class="bg-blue-600 hover:bg-blue-700"
+                            on:click={saveRating}
+                            disabled={currentRating === 0}
+                        >
+                            Save Rating
+                        </Button>
+                    </div>
+                </div>
             </Dialog.Description>
         </Dialog.Header>
     </Dialog.Content>

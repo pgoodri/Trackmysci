@@ -1448,49 +1448,57 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
   {/if}
   
   <!-- Rating Dialog -->
-  {#if ratingDialogOpen}
-  <div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
-          <h2 class="text-xl font-bold mb-4">Rate this publication</h2>
-          <p class="mb-4">Congratulations on finishing "{publicationTitleToRate}"! How would you rate it?</p>
-          
-          <div class="flex items-center justify-center space-x-2 mb-6">
-              {#each Array(5) as _, i}
-                  <button 
-                      type="button"
-                      on:click={() => currentRating = i + 1}
-                      class="text-3xl focus:outline-none transition-transform hover:scale-110"
-                  >
-                      {#if i < currentRating}
-                          <span class="text-yellow-400">★</span>
-                      {:else}
-                          <span class="text-gray-300">★</span>
-                      {/if}
-                  </button>
-              {/each}
-          </div>
-          
-          <div class="flex justify-end space-x-3">
-              <button 
-                  class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
-                  on:click={() => ratingDialogOpen = false}
-              >
-                  Skip
-              </button>
-              <button 
-                  class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
-                  on:click={saveRating}
-                  disabled={currentRating === 0}
-              >
-                  Save Rating
-              </button>
-          </div>
-      </div>
-  </div>
-  {/if}
-  
-  <!-- Log Reading Modal -->
-  <Dialog.Root bind:open={logReadingModalOpen}>
+  <Dialog.Root bind:open={ratingDialogOpen}>
+    <Dialog.Content class="w-[400px]">
+        <Dialog.Header>
+            <Dialog.Title>Rate This Publication</Dialog.Title>
+            <Dialog.Description>
+                <div class="py-4">
+                    <p class="text-center mb-4">You've completed "{publicationTitleToRate}". How would you rate it?</p>
+                    
+                    <!-- Star Rating -->
+                    <div class="flex justify-center space-x-2 mb-6">
+                        {#each Array(5) as _, i}
+                            <button 
+                                type="button"
+                                class="text-3xl focus:outline-none"
+                                on:click={() => currentRating = i + 1}
+                            >
+                                {#if i < currentRating}
+                                    <span class="text-yellow-400">★</span>
+                                {:else}
+                                    <span class="text-gray-300">★</span>
+                                {/if}
+                            </button>
+                        {/each}
+                    </div>
+                    
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end space-x-3">
+                        <Button 
+                            type="button"
+                            variant="outline"
+                            on:click={() => ratingDialogOpen = false}
+                        >
+                            Skip
+                        </Button>
+                        <Button 
+                            type="button"
+                            class="bg-blue-600 hover:bg-blue-700"
+                            on:click={saveRating}
+                            disabled={currentRating === 0}
+                        >
+                            Save Rating
+                        </Button>
+                    </div>
+                </div>
+            </Dialog.Description>
+        </Dialog.Header>
+    </Dialog.Content>
+</Dialog.Root>
+
+<!-- Log Reading Modal -->
+<Dialog.Root bind:open={logReadingModalOpen}>
     <Dialog.Content class="w-[500px]">
       <Dialog.Header>
         <Dialog.Title>Log Your Reading</Dialog.Title>
