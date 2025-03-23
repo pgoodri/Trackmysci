@@ -82,28 +82,34 @@
         const q = query(libraryRef, where("userId", "==", uid));
         const querySnapshot = await getDocs(q);
 
-        // Use set() to update the store reactively
-        const books = querySnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        
-        // Load ratings from localStorage
-        const savedRatings = localStorage.getItem('publicationRatings');
-        if (savedRatings) {
-            const ratings = JSON.parse(savedRatings);
-            books.forEach(book => {
-                if (ratings[book.id]) {
-                    book.rating = ratings[book.id];
-                }
-            });
-        }
-        
-        // Update the store
+        const books = querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        }));
+
+        // Fetch ratings from Firestore instead of localStorage
+        const ratingsDocRef = doc(userDocRef, "charts", "ratings");
+        const ratingsSnap = await getDoc(ratingsDocRef);
+        const ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
+
+        // Attach ratings to each book
+        books.forEach(book => {
+            if (book.rating && ratingsData[book.rating]) {
+                book.rating = ratingsData[book.rating];
+            } else {
+                book.rating = 0; // Default to zero if no rating exists
+            }
+        });
+
+        // Update the library list store
         libraryList.set(books);
-        
         extractUniqueTags();
+        console.log("📚 Library loaded successfully with ratings from Firestore.");
     } catch (error) {
-        console.error("Error fetching library:", error.message);
+        console.error("❌ Error fetching library from Firestore:", error.message);
     }
 }
+
 
 function extractUniqueTags() {
     let allTags = new Set();
@@ -136,25 +142,105 @@ function toggleTag(tag) {
     filteredLibrary(); // ✅ Force UI update after toggling a tag
 }
 
+async function updatePagesRead(userId, pagesReadIncrement) {
+    if (pagesReadIncrement <= 0) return;
 
+    try {
+        const userDocRef = doc(firestore, "users", userId);
+        const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
+        const summaryDocSnap = await getDoc(summaryDocRef);
 
-    async function deletePublication(entryId) {
-        if (!confirm("Are you sure you want to delete this publication?")) return;
-        try {
-            const user = auth.currentUser;
-            if (!user) {
-                console.error("No authenticated user found.");
-                return;
-            }
-            const userDocRef = doc(firestore, "users", user.uid);
-            const entryDocRef = doc(collection(userDocRef, "library"), entryId);
-            await deleteDoc(entryDocRef);
-            console.log(`Deleted entry ${entryId}`);
-            await loadUserLibrary(user.uid);
-        } catch (error) {
-            console.error("Error deleting entry:", error.message);
+        let summaryData = summaryDocSnap.exists() ? summaryDocSnap.data() : {};
+        let readingLog = summaryData.readingLog || [];
+        const currentDate = new Date().toISOString().split("T")[0]; // Correct date format (YYYY-MM-DD)
+
+        // Find today's entry if it exists
+        const todayLogIndex = readingLog.findIndex(log => log.date === currentDate);
+
+        if (todayLogIndex !== -1) {
+            // If today's log already exists, update pagesRead
+            readingLog[todayLogIndex].pagesRead += pagesReadIncrement;
+        } else {
+            // Otherwise, create a new entry for today
+            readingLog.push({ date: currentDate, pagesRead: pagesReadIncrement });
         }
+
+        // Update the summary with the new or updated reading log
+        summaryData.readingLog = readingLog;
+        await updateDoc(summaryDocRef, summaryData);
+
+        console.log(`✅ Updated pagesRead for ${currentDate} to ${readingLog[todayLogIndex]?.pagesRead || pagesReadIncrement}`);
+    } catch (error) {
+        console.error("❌ Error updating pagesRead:", error.message);
     }
+}
+
+async function deletePublication(entryId) {
+    if (!confirm("Are you sure you want to delete this publication?")) return;
+    try {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
+        }
+
+        const userDocRef = doc(firestore, "users", user.uid);
+        const entryDocRef = doc(collection(userDocRef, "library"), entryId);
+        const entryDocSnap = await getDoc(entryDocRef);
+
+        if (!entryDocSnap.exists()) {
+            console.warn("Publication not found for deletion.");
+            return;
+        }
+
+        const data = entryDocSnap.data();
+        const chartsCollectionRef = collection(userDocRef, "charts");
+
+        // Delete publication
+        await deleteDoc(entryDocRef);
+        console.log(`🗑️ Deleted entry ${entryId}`);
+
+        // Update authors
+        const authorsDocRef = doc(chartsCollectionRef, "authors");
+        const authorsSnap = await getDoc(authorsDocRef);
+        const authorsData = authorsSnap.exists() ? authorsSnap.data() : {};
+
+        if (data.author) {
+            delete authorsData[data.author];
+            await setDoc(authorsDocRef, authorsData);
+        }
+
+        // Update tags
+        const tagsDocRef = doc(chartsCollectionRef, "tags");
+        const tagsSnap = await getDoc(tagsDocRef);
+        const tagsData = tagsSnap.exists() ? tagsSnap.data() : {};
+
+        if (data.tags) {
+            data.tags.forEach(tag => {
+                delete tagsData[tag];
+            });
+            await setDoc(tagsDocRef, tagsData);
+        }
+
+        // Update ratings
+        const ratingsDocRef = doc(chartsCollectionRef, "ratings");
+        const ratingsSnap = await getDoc(ratingsDocRef);
+        const ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
+
+        if (data.rating) {
+            delete ratingsData[data.rating];
+            await setDoc(ratingsDocRef, ratingsData);
+        }
+
+        // Update most recent book
+        await updateMostRecentBook(user.uid, null);
+
+        // Update UI
+        libraryList.update(books => books.filter(book => book.id !== entryId));
+    } catch (error) {
+        console.error("❌ Error deleting publication:", error.message);
+    }
+}
 
     function logout() {
         signOut(auth).then(() => {
@@ -176,11 +262,6 @@ function toggleTag(tag) {
         return matchesSearch && matchesTags;
     });
 }
-
-
-
-
-
 
     onMount(() => {
         onAuthStateChanged(auth, async (user) => {
@@ -245,59 +326,125 @@ function toggleTag(tag) {
     }
 
     async function updateEditedPublication() {
-        if (!editingPublication) return;
-        const user = auth.currentUser;
-        if (!user) {
-            console.error("No authenticated user found.");
+    if (!editingPublication) return;
+    const user = auth.currentUser;
+    if (!user) {
+        console.error("No authenticated user found.");
+        return;
+    }
+
+    try {
+        const userDocRef = doc(firestore, "users", user.uid);
+        const entryDocRef = doc(collection(userDocRef, "library"), editingPublication.id);
+
+        // Fetch the existing data before update
+        const entryDocSnap = await getDoc(entryDocRef);
+        if (!entryDocSnap.exists()) {
+            console.warn("Publication not found for editing.");
             return;
         }
 
-        try {
-            const userDocRef = doc(firestore, "users", user.uid);
-            const entryDocRef = doc(collection(userDocRef, "library"), editingPublication.id);
+        const oldData = entryDocSnap.data();
+        const pagesReadIncrement = Math.max(currentPage - (oldData.currentPage || oldData.pageStart), 0);
+        
+        const updatedData = {
+            title,
+            author,
+            isbn,
+            pageStart,
+            pageEnd,
+            currentPage,
+            tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
+            updatedAt: new Date()
+        };
 
-            // Fetch the existing data before update
-            const entryDocSnap = await getDoc(entryDocRef);
-            if (!entryDocSnap.exists()) {
-                console.warn("Publication not found for editing.");
-                return;
-            }
+        // Save updated publication data
+        await updateDoc(entryDocRef, updatedData);
+        console.log(`✅ Updated publication: ${editingPublication.id}`);
 
-            const updatedData = {
-                title,
-                author,
-                isbn,
-                pageStart,
-                pageEnd,
-                currentPage,
-                tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
-                updatedAt: new Date()
-            };
-
-            // Save updated publication data
-            await updateDoc(entryDocRef, updatedData);
-            console.log(`Updated publication: ${editingPublication.id}`);
-
-            // Update the store to reflect changes in UI
-            libraryList.update(books => {
-                return books.map(book => 
-                    book.id === editingPublication.id ? { ...book, ...updatedData } : book
-                );
-            });
-
-            // Check if the book is completed and show rating dialog
-            const progress = Math.round(((currentPage - pageStart) / (pageEnd - pageStart)) * 100);
-            if (progress >= 100) {
-                showRatingDialog(editingPublication.id, title);
-            }
-
-            // Refresh tags
-            extractUniqueTags();
-            closeModal();
-        } catch (error) {
-            console.error("Error updating publication:", error.message);
+        // Check if the book is completed and show rating dialog
+        const progress = Math.round(((currentPage - pageStart) / (pageEnd - pageStart)) * 100);
+        if (progress >= 100) {
+            showRatingDialog(editingPublication.id, title);  // Trigger rating dialog
         }
+
+        // Only update the most recent if the currentPage increased
+        if (currentPage > (oldData.currentPage || oldData.pageStart)) {
+            await updateMostRecentBook(user.uid, updatedData.title);
+            await updatePagesRead(user.uid, pagesReadIncrement);
+        }
+
+        // Update the authors and tags in charts
+        const chartsCollectionRef = collection(userDocRef, "charts");
+
+        // 🔄 Update Authors
+        const authorsDocRef = doc(chartsCollectionRef, "authors");
+        const authorsSnap = await getDoc(authorsDocRef);
+        const authorsData = authorsSnap.exists() ? authorsSnap.data() : {};
+
+        // Remove old author
+        if (oldData.author) {
+            delete authorsData[oldData.author];
+        }
+
+        // Add new author
+        if (updatedData.author) {
+            authorsData[updatedData.author] = (authorsData[updatedData.author] || 0) + 1;
+        }
+
+        await setDoc(authorsDocRef, authorsData);
+
+        // 🔄 Update Tags
+        const tagsDocRef = doc(chartsCollectionRef, "tags");
+        const tagsSnap = await getDoc(tagsDocRef);
+        const tagsData = tagsSnap.exists() ? tagsSnap.data() : {};
+
+        // Remove old tags
+        if (oldData.tags) {
+            oldData.tags.forEach(tag => {
+                if (tagsData[tag]) {
+                    tagsData[tag] = Math.max(0, tagsData[tag] - 1);
+                    if (tagsData[tag] === 0) delete tagsData[tag];
+                }
+            });
+        }
+
+        // Add new tags
+        updatedData.tags.forEach(tag => {
+            tagsData[tag] = (tagsData[tag] || 0) + 1;
+        });
+
+        await setDoc(tagsDocRef, tagsData);
+
+        // Update the UI state
+        libraryList.update(books => books.map(book => 
+            book.id === editingPublication.id ? { ...book, ...updatedData } : book
+        ));
+
+        closeModal();
+    } catch (error) {
+        console.error("❌ Error updating publication:", error.message);
     }
+}
+
+
+async function updateMostRecentBook(userId, title) {
+    try {
+        const userDocRef = doc(firestore, "users", userId);
+        const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
+
+        await setDoc(summaryDocRef, {
+            mostRecent: title,
+            updatedAt: new Date()
+        }, { merge: true });
+
+        console.log(`✅ Updated most recent book to: ${title}`);
+    } catch (error) {
+        console.error("❌ Error updating most recent book:", error.message);
+    }
+}
+
+
 
     // Function to open log reading dialog
     function openLogReading() {
@@ -310,80 +457,70 @@ function toggleTag(tag) {
     
     // Function to save reading log
     async function saveReadingLog() {
-        if (!viewingPublication || !logReadingNewPage) return;
-        
-        try {
-            const user = auth.currentUser;
-            if (!user) {
-                console.error("No authenticated user found.");
-                return;
-            }
-            
-            const userDocRef = doc(firestore, "users", user.uid);
-            const entryDocRef = doc(collection(userDocRef, "library"), viewingPublication.id);
-            
-            // Get current publication data
-            const entryDocSnap = await getDoc(entryDocRef);
-            if (!entryDocSnap.exists()) {
-                console.warn("Publication not found.");
-                return;
-            }
-            
-            const pubData = entryDocSnap.data();
-            
-            // Calculate pages read
-            const previousPage = pubData.currentPage || pubData.pageStart;
-            const pagesRead = Math.max(logReadingNewPage - previousPage, 0);
-            
-            // Create log entry
-            const logEntry = {
-                dateTitle: new Date().toLocaleDateString(),
-                fromPage: previousPage,
-                toPage: logReadingNewPage,
-                pagesRead: pagesRead,
-                comment: logReadingComment || "",
-                date: new Date().toISOString()
-            };
-            
-            // Get existing logs
-            let journalLogs = pubData.journalLogs || [];
-            journalLogs.push(logEntry);
-            
-            // Update Firestore
-            await updateDoc(entryDocRef, {
-                currentPage: logReadingNewPage,
-                updatedAt: new Date(),
-                journalLogs: journalLogs
-            });
-            
-            console.log("Reading log saved successfully");
-            
-            // Update local data
-            if (viewingPublication) {
-                viewingPublication.currentPage = logReadingNewPage;
-                viewingPublication.journalLogs = journalLogs;
-            }
-            
-            // Update library list
-            libraryList.update(books => {
-                return books.map(book => 
-                    book.id === viewingPublication.id ? 
-                        { ...book, currentPage: logReadingNewPage, journalLogs } : book
-                );
-            });
-            
-            // Check if the book is completed and show rating dialog
-            const progress = Math.round(((logReadingNewPage - pubData.pageStart) / (pubData.pageEnd - pubData.pageStart)) * 100);
-            if (progress >= 100) {
-                showRatingDialog(viewingPublication.id, viewingPublication.title);
-            }
-            
-            // Close modal
-            logReadingModalOpen = false;
-        } catch (error) {
-            console.error("Error saving reading log:", error);
+    if (!viewingPublication || !logReadingNewPage) return;
+
+    try {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
         }
+
+        const userDocRef = doc(firestore, "users", user.uid);
+        const entryDocRef = doc(collection(userDocRef, "library"), viewingPublication.id);
+
+        const entryDocSnap = await getDoc(entryDocRef);
+        if (!entryDocSnap.exists()) {
+            console.warn("Publication not found.");
+            return;
+        }
+
+        const pubData = entryDocSnap.data();
+        const previousPage = pubData.currentPage || pubData.pageStart;
+        const pagesRead = Math.max(logReadingNewPage - previousPage, 0);
+
+        const logEntry = {
+            dateTitle: new Date().toISOString().split("T")[0],  // Correct date format (YYYY-MM-DD)
+            fromPage: previousPage,
+            toPage: logReadingNewPage,
+            pagesRead: pagesRead,
+            comment: logReadingComment || "",
+            date: new Date().toISOString().split("T")[0],  // Correct date format (YYYY-MM-DD)
+        };
+
+        let journalLogs = pubData.journalLogs || [];
+        journalLogs.push(logEntry);
+
+        await updateDoc(entryDocRef, {
+            currentPage: logReadingNewPage,
+            updatedAt: new Date(),
+            journalLogs: journalLogs
+        });
+
+        console.log("✅ Reading log saved successfully");
+
+        // Check if the book is completed and show rating dialog
+        const progress = Math.round(((logReadingNewPage - pubData.pageStart) / (pubData.pageEnd - pubData.pageStart)) * 100);
+        if (progress >= 100) {
+            showRatingDialog(viewingPublication.id, viewingPublication.title);  // Trigger rating dialog
+        }
+
+        // Update most recent book if the current page increased
+        if (logReadingNewPage > previousPage) {
+            await updateMostRecentBook(user.uid, viewingPublication.title);
+            await updatePagesRead(user.uid, pagesRead);
+        }
+
+        // Update UI
+        libraryList.update(books => books.map(book => 
+            book.id === viewingPublication.id ? { ...book, currentPage: logReadingNewPage, journalLogs } : book
+        ));
+        logReadingModalOpen = false;
+    } catch (error) {
+        console.error("❌ Error saving reading log:", error.message);
     }
+}
+
 
     // For the search functionality in the Edit Publication dialog
     async function searchLiterature() {
@@ -409,61 +546,61 @@ function toggleTag(tag) {
         ratingDialogOpen = true;
     }
 
-    // Save rating to Storage
     async function saveRating() {
-        if (!publicationToRate || currentRating === 0) return;
+    if (!publicationToRate || currentRating === 0) return;
 
-        const user = auth.currentUser;
-        if (!user) {
-            console.error("No authenticated user found.");
-            return;
-        }
+    const user = auth.currentUser;
+    if (!user) {
+        console.error("No authenticated user found.");
+        return;
+    }
 
-        try {
-            const userDocRef = doc(firestore, "users", user.uid);
-            const libraryRef = doc(userDocRef, "library", publicationToRate);
-            const ratingsDocRef = doc(userDocRef, "charts", "ratings");
+    try {
+        const userDocRef = doc(firestore, "users", user.uid);
+        const libraryRef = doc(userDocRef, "library", publicationToRate);
+        const ratingsDocRef = doc(userDocRef, "charts", "ratings");
 
-            // Fetch existing data
-            const librarySnap = await getDoc(libraryRef);
-            const ratingsSnap = await getDoc(ratingsDocRef);
-            let ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
+        // Fetch existing data
+        const librarySnap = await getDoc(libraryRef);
+        const ratingsSnap = await getDoc(ratingsDocRef);
+        let ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
 
-            // Remove previous rating (if exists)
-            if (librarySnap.exists()) {
-                const prevRating = librarySnap.data().rating;
-                if (prevRating && ratingsData[prevRating]) {
-                    ratingsData[prevRating] = Math.max(0, ratingsData[prevRating] - 1);
-                    if (ratingsData[prevRating] <= 0) {
-                        delete ratingsData[prevRating];
-                    }
+        // Remove previous rating (if exists)
+        if (librarySnap.exists()) {
+            const prevRating = librarySnap.data().rating;
+            if (prevRating && ratingsData[prevRating]) {
+                ratingsData[prevRating] = Math.max(0, ratingsData[prevRating] - 1);
+                if (ratingsData[prevRating] <= 0) {
+                    delete ratingsData[prevRating];
                 }
             }
-
-            // Update with new rating
-            ratingsData[currentRating] = (ratingsData[currentRating] || 0) + 1;
-
-            // Update both documents in a batch
-            await Promise.all([
-                setDoc(libraryRef, { rating: currentRating }, { merge: true }), // Update publication rating
-                setDoc(ratingsDocRef, ratingsData, { merge: true }) // Update overall ratings count
-            ]);
-
-            console.log(`✅ Rating of ${currentRating} saved for publication ${publicationToRate}`);
-
-            // Update the local state to reflect changes
-            libraryList.update(books => 
-                books.map(book => 
-                    book.id === publicationToRate ? { ...book, rating: currentRating } : book
-                )
-            );
-            ratingDialogOpen = false;
-            publicationToRate = null;
-
-        } catch (error) {
-            console.error("❌ Error saving rating:", error.message);
         }
+
+        // Update with new rating
+        ratingsData[currentRating] = (ratingsData[currentRating] || 0) + 1;
+
+        // Save the updated rating to Firestore
+        await Promise.all([
+            setDoc(libraryRef, { rating: currentRating }, { merge: true }), // Update publication rating
+            setDoc(ratingsDocRef, ratingsData, { merge: true }) // Update overall ratings count
+        ]);
+
+        console.log(`✅ Rating of ${currentRating} saved for publication ${publicationToRate}`);
+
+        // Update the local state to reflect changes
+        libraryList.update(books => 
+            books.map(book => 
+                book.id === publicationToRate ? { ...book, rating: currentRating } : book
+            )
+        );
+        ratingDialogOpen = false;
+        publicationToRate = null;
+
+    } catch (error) {
+        console.error("❌ Error saving rating:", error.message);
     }
+}
+
 
     function selectResult(result) {
         if (!result) return;
