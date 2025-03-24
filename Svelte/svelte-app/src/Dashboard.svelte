@@ -61,6 +61,8 @@
   let currentStreak = writable(0); // Initialize streak to 0
   const batch = writeBatch(firestore);
 
+  let isSearching = false; // Add this for spinner state
+
   onMount(() => {
     // Initialize properties for each publication in the library list
     if (libraryList && libraryList.length > 0) {
@@ -73,159 +75,162 @@
   });
 
   async function searchLiterature() {
-  // Reset previous results
-  showResults = false;
-  searchResults = [];
-  isbn = "";
+    // Reset previous results
+    showResults = false;
+    searchResults = [];
+    isbn = "";
+    isSearching = true; // Set searching state to true
 
-  console.log("Search query:", searchQuery);
+    console.log("Search query:", searchQuery);
 
-  if (/^10\.\d{4,9}\/[-._;()\/:A-Za-z0-9]+$/.test(searchQuery)) {
-    console.log("Query looks like a DOI. Calling fetchDOI...");
-    await fetchDOI();
-  } else if (/^(97(8|9))?\d{9}(\d|X)$/.test(searchQuery)) {
-    console.log("Query looks like an ISBN. Calling fetchISBN...");
-    isbn = searchQuery;
-    await fetchISBN();
-  } else {
-    console.log("Query treated as Title. Calling fetchTitle...");
-    title = searchQuery;
-    await fetchTitle();
+    if (/^10\.\d{4,9}\/[-._;()\/:A-Za-z0-9]+$/.test(searchQuery)) {
+      console.log("Query looks like a DOI. Calling fetchDOI...");
+      await fetchDOI();
+    } else if (/^(97(8|9))?\d{9}(\d|X)$/.test(searchQuery)) {
+      console.log("Query looks like an ISBN. Calling fetchISBN...");
+      isbn = searchQuery;
+      await fetchISBN();
+    } else {
+      console.log("Query treated as Title. Calling fetchTitle...");
+      title = searchQuery;
+      await fetchTitle();
+    }
+
+    console.log("Search results after fetch:", searchResults);
+    if (searchResults.length > 0) {
+      showResults = true;
+    } else {
+      alert("No results found.");
+    }
+    
+    isSearching = false; // Set searching state back to false
   }
 
-  console.log("Search results after fetch:", searchResults);
-  if (searchResults.length > 0) {
-    showResults = true;
-  } else {
-    alert("No results found.");
+  async function fetchDOI() {
+    try {
+      const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(searchQuery)}`);
+      const data = await response.json();
+      console.log("CrossRef response:", data);
+      if (data.status === "ok") {
+        const fetchedData = data.message;
+        searchResults = [
+          {
+            title: fetchedData.title ? fetchedData.title[0] : "Unknown Title",
+            author: fetchedData.author
+              ? fetchedData.author.map((a) => `${a.given} ${a.family}`).join(", ")
+              : "Unknown Author",
+            isbn: fetchedData.ISBN ? fetchedData.ISBN[0] : null,
+            doi: fetchedData.DOI || null
+          }
+        ];
+      } else {
+        searchResults = [];
+      }
+    } catch (error) {
+      console.error("Error fetching DOI data:", error);
+      alert("Failed to retrieve DOI information.");
+    }
   }
-}
 
-async function fetchDOI() {
-  try {
-    const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(searchQuery)}`);
-    const data = await response.json();
-    console.log("CrossRef response:", data);
-    if (data.status === "ok") {
-      const fetchedData = data.message;
+  async function fetchISBN() {
+    try {
+      console.log("Fetching ISBN:", isbn);
+      const response = await fetch(
+        `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`
+      );
+      const data = await response.json();
+      console.log("Raw ISBN API response:", data);
+      if (!data[`ISBN:${isbn}`]) {
+        console.warn("No ISBN data found in response.");
+        searchResults = [];
+        return;
+      }
+      const bookData = data[`ISBN:${isbn}`];
+      console.log("Book Data:", bookData);
+      let pageEnd = bookData.number_of_pages || null;
+      if (!pageEnd && bookData.pagination) {
+        pageEnd = parseInt(bookData.pagination.replace(/\D/g, ""), 10) || null;
+      }
       searchResults = [
         {
-          title: fetchedData.title ? fetchedData.title[0] : "Unknown Title",
-          author: fetchedData.author
-            ? fetchedData.author.map((a) => `${a.given} ${a.family}`).join(", ")
+          title: bookData.title || "Unknown Title",
+          author: bookData.authors
+            ? bookData.authors.map((a) => a.name).join(", ")
             : "Unknown Author",
-          isbn: fetchedData.ISBN ? fetchedData.ISBN[0] : null,
-          doi: fetchedData.DOI || null
+          isbn: isbn,
+          pageEnd: pageEnd || "Unknown Pages"
         }
       ];
-    } else {
-      searchResults = [];
+      console.log("Final Search Result (ISBN):", searchResults);
+    } catch (error) {
+      console.error("Error fetching ISBN data:", error);
+      alert("Failed to retrieve ISBN information.");
     }
-  } catch (error) {
-    console.error("Error fetching DOI data:", error);
-    alert("Failed to retrieve DOI information.");
   }
-}
 
-async function fetchISBN() {
-  try {
-    console.log("Fetching ISBN:", isbn);
-    const response = await fetch(
-      `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`
-    );
-    const data = await response.json();
-    console.log("Raw ISBN API response:", data);
-    if (!data[`ISBN:${isbn}`]) {
-      console.warn("No ISBN data found in response.");
-      searchResults = [];
-      return;
-    }
-    const bookData = data[`ISBN:${isbn}`];
-    console.log("Book Data:", bookData);
-    let pageEnd = bookData.number_of_pages || null;
-    if (!pageEnd && bookData.pagination) {
-      pageEnd = parseInt(bookData.pagination.replace(/\D/g, ""), 10) || null;
-    }
-    searchResults = [
-      {
-        title: bookData.title || "Unknown Title",
-        author: bookData.authors
-          ? bookData.authors.map((a) => a.name).join(", ")
-          : "Unknown Author",
-        isbn: isbn,
-        pageEnd: pageEnd || "Unknown Pages"
+  async function fetchTitle() {
+    try {
+      console.log("Fetching Title for:", title);
+      const response = await fetch(
+        `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}`
+      );
+      const data = await response.json();
+      console.log("Full API Response (Title):", data);
+      if (!data.docs || data.docs.length === 0) {
+        console.warn("No title data found.");
+        searchResults = [];
+        return;
       }
-    ];
-    console.log("Final Search Result (ISBN):", searchResults);
-  } catch (error) {
-    console.error("Error fetching ISBN data:", error);
-    alert("Failed to retrieve ISBN information.");
-  }
-}
-
-async function fetchTitle() {
-  try {
-    console.log("Fetching Title for:", title);
-    const response = await fetch(
-      `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}`
-    );
-    const data = await response.json();
-    console.log("Full API Response (Title):", data);
-    if (!data.docs || data.docs.length === 0) {
-      console.warn("No title data found.");
-      searchResults = [];
-      return;
+      searchResults = await Promise.all(
+        data.docs.slice(0, 10).map(async (doc) => {
+          console.log("Processing book:", doc);
+          let isbn = doc.isbn ? doc.isbn[0] : null;
+          let pageEnd = null;
+          if (!isbn && doc.key) {
+            const editionData = await fetchISBNFromEditions(doc.key);
+            isbn = editionData?.isbn || null;
+            pageEnd = editionData?.pageCount || null;
+          }
+          return {
+            title: doc.title || "Unknown Title",
+            author: doc.author_name ? doc.author_name.join(", ") : "Unknown Author",
+            isbn: isbn || "No ISBN",
+            pageEnd: pageEnd || "Unknown Pages"
+          };
+        })
+      );
+      console.log("Final Search Results (Title):", searchResults);
+    } catch (error) {
+      console.error("Error fetching title data:", error);
+      alert("Failed to retrieve title information.");
     }
-    searchResults = await Promise.all(
-      data.docs.slice(0, 10).map(async (doc) => {
-        console.log("Processing book:", doc);
-        let isbn = doc.isbn ? doc.isbn[0] : null;
-        let pageEnd = null;
-        if (!isbn && doc.key) {
-          const editionData = await fetchISBNFromEditions(doc.key);
-          isbn = editionData?.isbn || null;
-          pageEnd = editionData?.pageCount || null;
-        }
-        return {
-          title: doc.title || "Unknown Title",
-          author: doc.author_name ? doc.author_name.join(", ") : "Unknown Author",
-          isbn: isbn || "No ISBN",
-          pageEnd: pageEnd || "Unknown Pages"
-        };
-      })
-    );
-    console.log("Final Search Results (Title):", searchResults);
-  } catch (error) {
-    console.error("Error fetching title data:", error);
-    alert("Failed to retrieve title information.");
   }
-}
 
-async function fetchISBNFromEditions(workKey) {
-  try {
-    console.log("Fetching ISBN and page count from editions for:", workKey);
-    const response = await fetch(`https://openlibrary.org${workKey}/editions.json`);
-    const data = await response.json();
-    console.log("Editions Data:", data);
-    if (data.entries && data.entries.length > 0) {
-      for (const entry of data.entries) {
-        let isbn = entry.isbn_10 ? entry.isbn_10[0] : entry.isbn_13 ? entry.isbn_13[0] : null;
-        let pageCount = entry.number_of_pages || null;
-        if (!pageCount && entry.pagination) {
-          pageCount = parseInt(entry.pagination.replace(/\D/g, ""), 10) || null;
-        }
-        if (isbn || pageCount) {
-          return { isbn, pageCount };
+  async function fetchISBNFromEditions(workKey) {
+    try {
+      console.log("Fetching ISBN and page count from editions for:", workKey);
+      const response = await fetch(`https://openlibrary.org${workKey}/editions.json`);
+      const data = await response.json();
+      console.log("Editions Data:", data);
+      if (data.entries && data.entries.length > 0) {
+        for (const entry of data.entries) {
+          let isbn = entry.isbn_10 ? entry.isbn_10[0] : entry.isbn_13 ? entry.isbn_13[0] : null;
+          let pageCount = entry.number_of_pages || null;
+          if (!pageCount && entry.pagination) {
+            pageCount = parseInt(entry.pagination.replace(/\D/g, ""), 10) || null;
+          }
+          if (isbn || pageCount) {
+            return { isbn, pageCount };
+          }
         }
       }
+      console.warn("No ISBN or page count found in editions for:", workKey);
+      return { isbn: null, pageCount: null };
+    } catch (error) {
+      console.error("Error fetching ISBN from editions:", error);
+      return { isbn: null, pageCount: null };
     }
-    console.warn("No ISBN or page count found in editions for:", workKey);
-    return { isbn: null, pageCount: null };
-  } catch (error) {
-    console.error("Error fetching ISBN from editions:", error);
-    return { isbn: null, pageCount: null };
   }
-}
 
   // Stores for selected chart options
   let selectedPieChart = writable("Tags");
@@ -810,28 +815,28 @@ async function saveRating() {
   }
 
   async function addLiteratureToLibrary() {
-  if (title && author && isbn && pageStart && pageEnd && pageEnd >= pageStart) {
-      const newEntry = {
-          title,
-          author,
-          isbn,
-          pageStart,
-          pageEnd,
-          currentPage: pageStart,
-          comment,
-          tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
-          journalLogs: [],
-      };
+    if (title && author && pageStart && pageEnd && pageEnd >= pageStart) { // Remove isbn from required fields
+        const newEntry = {
+            title,
+            author,
+            isbn: isbn || "", // Make ISBN/DOI optional
+            pageStart,
+            pageEnd,
+            currentPage: pageStart,
+            comment,
+            tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
+            journalLogs: [],
+        };
 
-      console.log("📌 Saving entry with tags:", newEntry.tags);
+        console.log("📌 Saving entry with tags:", newEntry.tags);
 
-      await saveEntryToFirestore(newEntry);
-      await loadUserLibrary();
-      await updateCharts();  // ✅ Refresh charts
-  } else {
-      alert("Please fill in all required fields before adding.");
+        await saveEntryToFirestore(newEntry);
+        await loadUserLibrary();
+        await updateCharts();  // ✅ Refresh charts
+    } else {
+        alert("Please fill in all required fields before adding.");
+    }
   }
-}
 
 async function updateEditedPublication() {
   if (!editingPublication) return;
@@ -974,13 +979,16 @@ async function updateChartsAfterEdit(userId, oldData, newData) {
   function selectResult(result) {
       title = result.title;
       author = result.author;
-      isbn = result.isbn;
+      isbn = result.isbn || ""; // Make ISBN/DOI optional
+      if (result.doi) {
+          isbn = result.doi; // Also assign DOI to the isbn field if available
+      }
       pageStart = 1;
       pageEnd = result.pageEnd !== "Unknown Pages" ? result.pageEnd : 1;
       currentPage = 1;
       showResults = false; // Hide the search results dropdown after selection
 
-      console.log(`Selected book: ${title}, ISBN: ${isbn}, Total Pages: ${pageEnd}`);
+      console.log(`Selected book: ${title}, ISBN/DOI: ${isbn}, Total Pages: ${pageEnd}`);
   }
 
   async function deletePublication(publicationId) {
@@ -1656,13 +1664,20 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                     searchLiterature();
                   }
                 }}
-                class="w-full pl-4 pr-10 py-4 text-neutral-700 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
+                class="w-full pl-4 pr-16 py-4 text-neutral-700 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
                 placeholder="Search by DOI, ISBN, or Title" 
                 autocomplete="off" 
               />
-              <div class="absolute inset-y-0 z-1000 right-3 flex items-center pointer-events-none">
-                <Search class="w-6 h-6 text-neutral-400" />
-              </div>
+              <button 
+                class="absolute inset-y-0 right-0 px-4 flex items-center rounded-r-full bg-blue-500 hover:bg-blue-600 text-white"
+                on:click={searchLiterature}
+              >
+                {#if isSearching}
+                  <div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                {:else}
+                  <Search class="w-6 h-6" />
+                {/if}
+              </button>
             </div>
           </div>
 
@@ -1703,7 +1718,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
             </div>
             <Separator />
             <div class="flex items-center">
-              <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI *</label>
+              <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI</label>
               <input id="isbn-doi" type="text" bind:value={isbn}
                 class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" autocomplete="off" />
             </div>
