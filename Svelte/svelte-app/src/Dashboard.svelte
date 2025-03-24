@@ -397,7 +397,7 @@ async function fetchISBNFromEditions(workKey) {
                   streak = 0;
               }
           }
-          currentStreak = streak;
+          currentStreak.set(streak);
           console.log(` Current streak: ${streak} days`);
       }
 
@@ -557,7 +557,7 @@ async function loadUserLibrary() {
       }
 
       await loadUserLibrary();
-      currentStreak = streak; // Update UI Streak
+      currentStreak.set(streak); // Update UI Streak using store's set method
 
       // ✅ Trigger Timeline Chart and Progress Chart Re-render
       chartRefreshKey.update(n => n + 1);
@@ -1441,7 +1441,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
           </div>
           <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col items-center justify-center">
             <p class="text-lg font-semibold text-neutral-800">Current Streak</p>
-            <p class="text-5xl font-bold text-blue-500 mt-2">{currentStreak}</p>
+            <p class="text-5xl font-bold text-blue-500 mt-2">{$currentStreak}</p>
             <p class="text-sm text-gray-500">days in a row</p>
           </div>
           <!-- Row 2: Progress & Distribution -->
