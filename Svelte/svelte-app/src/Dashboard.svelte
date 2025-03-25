@@ -1243,7 +1243,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
     <div class="flex flex-1">
       <!-- Publications Section -->
       <section class="w-1/2 py-12 pl-12 pr-3 flex flex-col">
-        <div class="bg-white border border-neutral-200 rounded-lg shadow flex-1 flex flex-col">
+        <div class="bg-white border border-neutral-300 rounded-lg shadow flex-1 flex flex-col">
           <div class="p-4 border-b border-neutral-200">
             <h2 class="text-xl font-semibold flex justify-between items-center text-neutral-700">
               <div class="flex items-center">
@@ -1420,7 +1420,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
       <section class="w-1/2 py-12 pl-3 pr-12 flex flex-col">
         <div class="grid grid-cols-5 gap-4 flex-1">
           <!-- Row 1: Timeline & Streak -->
-          <div class="col-span-3 p-6 h-72 bg-white border border-neutral-100 rounded-md shadow">
+          <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow">
             <div class="flex items-center justify-between mb-4">
               <div>
                 <p class="text-lg font-semibold">Pages Read</p>
@@ -1849,7 +1849,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                   {#if viewingPublication.journalLogs?.length > 0}
                       <div class="space-y-4">
                           {#each viewingPublication.journalLogs as log}
-                              <div class="bg-white border border-neutral-200 rounded-lg p-4">
+                              <div class="bg-white border border-neutral-300 rounded-lg p-4">
                                   <div class="flex justify-between mb-2">
                                       <div class="flex items-center gap-2 text-neutral-600">
                                           <Calendar class="w-4 h-4" />
