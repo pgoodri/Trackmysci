@@ -1240,10 +1240,10 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
     </div>
 
     <!-- Main Content -->
-    <div class="flex flex-1">
+    <div class="flex flex-col md:flex-row flex-1">
       <!-- Publications Section -->
-      <section class="w-1/2 py-12 pl-12 pr-3 flex flex-col">
-        <div class="bg-white border border-neutral-300 rounded-lg shadow flex-1 flex flex-col">
+      <section class="w-full md:w-1/2 py-6 md:py-12 px-6 md:pl-12 md:pr-3 flex flex-col">
+        <div class="bg-white border border-neutral-200 rounded-lg shadow flex-1 flex flex-col">
           <div class="p-4 border-b border-neutral-200">
             <h2 class="text-xl font-semibold flex justify-between items-center text-neutral-700">
               <div class="flex items-center">
@@ -1262,7 +1262,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
               <p class="text-sm mt-2">Start by adding a new publication to track your progress!</p>
             </div>
           {:else}
-            <ul class="divide-y divide-neutral-200 flex-1">
+            <ul class="divide-y divide-neutral-200 overflow-y-auto max-h-[500px] flex-1">
               {#each libraryList as lit, i}
                 {#if i < 5}
                   <li class="p-4 hover:bg-neutral-50">
@@ -1417,10 +1417,10 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
       </section>
 
       <!-- Analytics Section -->
-      <section class="w-1/2 py-12 pl-3 pr-12 flex flex-col">
-        <div class="grid grid-cols-5 gap-4 flex-1">
+      <section class="w-full md:w-1/2 py-6 md:py-12 px-6 md:pl-3 md:pr-12 flex flex-col">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 h-full">
           <!-- Row 1: Timeline & Streak -->
-          <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow">
+          <div class="col-span-1 lg:col-span-3 p-6 min-h-[18rem] bg-white border border-neutral-300 rounded-md shadow">
             <div class="flex items-center justify-between mb-4">
               <div>
                 <p class="text-lg font-semibold">Pages Read</p>
@@ -1447,13 +1447,13 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
               <TimelineChart selectedRange={$selectedTimeline} chartRefreshKey={$chartRefreshKey} />
             </div>
           </div>
-          <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col items-center justify-center">
+          <div class="col-span-1 lg:col-span-2 p-6 min-h-[18rem] bg-white border border-neutral-300 rounded-md shadow flex flex-col items-center justify-center">
             <p class="text-lg font-semibold text-neutral-800">Current Streak</p>
             <p class="text-5xl font-bold text-blue-500 mt-2">{$currentStreak}</p>
             <p class="text-sm text-gray-500">days in a row</p>
           </div>
           <!-- Row 2: Progress & Distribution -->
-          <div class="col-span-2 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
+          <div class="col-span-1 lg:col-span-2 p-6 min-h-[18rem] bg-white border border-neutral-300 rounded-md shadow flex flex-col">
             <div class="flex items-center justify-between">
               <div>
                 <p class="text-lg font-semibold">Distribution</p>
@@ -1481,7 +1481,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
             </div>
           </div>
           <!-- Progress Section -->
-          <div class="col-span-3 p-6 h-72 bg-white border border-neutral-300 rounded-md shadow flex flex-col">
+          <div class="col-span-1 lg:col-span-3 p-6 min-h-[18rem] bg-white border border-neutral-300 rounded-md shadow flex flex-col">
             <div class="flex items-center justify-between mb-4">
               <div>
                 <p class="text-lg font-semibold">Progress</p>
@@ -1849,7 +1849,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                   {#if viewingPublication.journalLogs?.length > 0}
                       <div class="space-y-4">
                           {#each viewingPublication.journalLogs as log}
-                              <div class="bg-white border border-neutral-300 rounded-lg p-4">
+                              <div class="bg-white border border-neutral-200 rounded-lg p-4">
                                   <div class="flex justify-between mb-2">
                                       <div class="flex items-center gap-2 text-neutral-600">
                                           <Calendar class="w-4 h-4" />
