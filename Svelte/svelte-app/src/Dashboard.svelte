@@ -24,7 +24,7 @@
     updateDoc,
     deleteDoc,
     orderBy,
-    limit
+    limit as firebaseLimit
   } from "firebase/firestore";
   import {
     MoreVertical,
@@ -44,10 +44,17 @@
     Calendar,
     Book,
     Search,
-    Percent
+    Percent,
+    BookMarked,
+    Timer,
+    TrendingUp,
+    Plus,
+    BarChart,
+    ClipboardList,
+    Flame,
+    PieChart as PieChartIcon
   } from "lucide-svelte";
-  import SimpleChart from "./lib/components/ui/charts/SimpleChart.svelte";
-  import Chart from "chart.js/auto";
+  import { Chart } from "chart.js/auto";
   import { onMount } from "svelte";
   import TagsChart from "./lib/components/ui/charts/TagsChart.svelte";
   import RatingsChart from "./lib/components/ui/charts/RatingsChart.svelte";
@@ -56,20 +63,105 @@
   import PieChart from "./lib/components/ui/charts/PieChart.svelte";
   import StreakChart from "./lib/components/ui/charts/StreakChart.svelte";
 
+  // Stores for data and UI
   let chartKey = writable(0); // Used to force chart re-render
   let chartRefreshKey = writable(0);
   let currentStreak = writable(0); // Initialize streak to 0
   const batch = writeBatch(firestore);
 
   let isSearching = false; // Add this for spinner state
+  
+  // Constant for primary color
+  const PRIMARY_COLOR = "#4361ee";
+
+  // Track today's reading metrics
+  let todayStats = {
+    pagesRead: 0,
+    readingTime: 0,
+    pagesPerHour: 0,
+    weeklyPages: 0,
+    weeklyHours: 0
+  };
+  
+  function calculateReadingMetrics() {
+    if (!libraryList || libraryList.length === 0) return;
+    
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    // Calculate yesterday's date
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayString = yesterday.toISOString().split('T')[0];
+    
+    // Calculate a week ago
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekAgoString = weekAgo.toISOString().split('T')[0];
+    
+    let todayPages = 0;
+    let todayMinutes = 0;
+    let yesterdayPages = 0;
+    let weeklyPages = 0;
+    let weeklyMinutes = 0;
+    
+    // Calculate metrics from all reading sessions
+    libraryList.forEach(pub => {
+      if (pub.readingSessions && pub.readingSessions.length > 0) {
+        pub.readingSessions.forEach(session => {
+          const sessionDate = new Date(session.date).toISOString().split('T')[0];
+          
+          // Today's metrics
+          if (sessionDate === today) {
+            todayPages += session.pagesRead || 0;
+            todayMinutes += session.duration || 0;
+          }
+          
+          // Yesterday's metrics
+          if (sessionDate === yesterdayString) {
+            yesterdayPages += session.pagesRead || 0;
+          }
+          
+          // Weekly metrics
+          if (sessionDate >= weekAgoString) {
+            weeklyPages += session.pagesRead || 0;
+            weeklyMinutes += session.duration || 0;
+          }
+        });
+      }
+    });
+    
+    // Convert minutes to hours
+    const todayHours = todayMinutes / 60;
+    const weeklyHours = weeklyMinutes / 60;
+    
+    // Calculate progress from yesterday
+    const progressFromYesterday = todayPages > 0 && yesterdayPages > 0 
+      ? todayPages - yesterdayPages 
+      : 0;
+    
+    // Update the metrics object
+    todayStats = {
+      pagesRead: todayPages,
+      readingTime: todayHours.toFixed(1),
+      pagesPerHour: todayHours > 0 ? (todayPages / todayHours).toFixed(1) : 0,
+      weeklyPages: weeklyPages,
+      weeklyHours: weeklyHours.toFixed(1),
+      yesterdayPages: yesterdayPages,
+      progressFromYesterday: progressFromYesterday
+    };
+  }
+
+  // Days of the week for streak visualization
+  const daysOfWeek = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
   onMount(() => {
     // Initialize properties for each publication in the library list
     if (libraryList && libraryList.length > 0) {
       libraryList.forEach(lit => {
-        lit.newCurrentPage = lit.currentPage || lit.pageStart;
         lit.progressComment = "";
         lit.isUpdating = false;
+        lit.pagesRead = 0;
+        lit.duration = 0;
       });
     }
   });
@@ -147,18 +239,14 @@
       }
       const bookData = data[`ISBN:${isbn}`];
       console.log("Book Data:", bookData);
-      let pageEnd = bookData.number_of_pages || null;
-      if (!pageEnd && bookData.pagination) {
-        pageEnd = parseInt(bookData.pagination.replace(/\D/g, ""), 10) || null;
-      }
+      
       searchResults = [
         {
           title: bookData.title || "Unknown Title",
           author: bookData.authors
             ? bookData.authors.map((a) => a.name).join(", ")
             : "Unknown Author",
-          isbn: isbn,
-          pageEnd: pageEnd || "Unknown Pages"
+          isbn: isbn
         }
       ];
       console.log("Final Search Result (ISBN):", searchResults);
@@ -185,17 +273,16 @@
         data.docs.slice(0, 10).map(async (doc) => {
           console.log("Processing book:", doc);
           let isbn = doc.isbn ? doc.isbn[0] : null;
-          let pageEnd = null;
+          
           if (!isbn && doc.key) {
             const editionData = await fetchISBNFromEditions(doc.key);
             isbn = editionData?.isbn || null;
-            pageEnd = editionData?.pageCount || null;
           }
+          
           return {
             title: doc.title || "Unknown Title",
             author: doc.author_name ? doc.author_name.join(", ") : "Unknown Author",
-            isbn: isbn || "No ISBN",
-            pageEnd: pageEnd || "Unknown Pages"
+            isbn: isbn || "No ISBN"
           };
         })
       );
@@ -208,42 +295,37 @@
 
   async function fetchISBNFromEditions(workKey) {
     try {
-      console.log("Fetching ISBN and page count from editions for:", workKey);
+      console.log("Fetching ISBN from editions for:", workKey);
       const response = await fetch(`https://openlibrary.org${workKey}/editions.json`);
       const data = await response.json();
       console.log("Editions Data:", data);
       if (data.entries && data.entries.length > 0) {
         for (const entry of data.entries) {
           let isbn = entry.isbn_10 ? entry.isbn_10[0] : entry.isbn_13 ? entry.isbn_13[0] : null;
-          let pageCount = entry.number_of_pages || null;
-          if (!pageCount && entry.pagination) {
-            pageCount = parseInt(entry.pagination.replace(/\D/g, ""), 10) || null;
-          }
-          if (isbn || pageCount) {
-            return { isbn, pageCount };
+          if (isbn) {
+            return { isbn };
           }
         }
       }
-      console.warn("No ISBN or page count found in editions for:", workKey);
-      return { isbn: null, pageCount: null };
+      console.warn("No ISBN found in editions for:", workKey);
+      return { isbn: null };
     } catch (error) {
       console.error("Error fetching ISBN from editions:", error);
-      return { isbn: null, pageCount: null };
+      return { isbn: null };
     }
   }
 
   // Stores for selected chart options
   let selectedPieChart = writable("Tags");
   let selectedTimeline = writable("30 Days");
-  let selectedProgress = writable("All Progress");
+  let selectedProgress = writable("All Publications");
   let progressPercentage = writable(0); // Initially 0, will update dynamically
 
   const pieChartOptions = ["Tags", "Ratings", "Authors"];
   const timelineOptions = ["30 Days", "60 Days", "90 Days"];
-  const progressOptions = ["All Progress", "Most Recent Book Progress"];
+  const progressOptions = ["All Publications", "Reading Status"];
 
   // Variables for progress updates
-  let newCurrentPage = 0;
   let progressComment = "";
 
   // Publication management variables
@@ -252,9 +334,6 @@
   let author = "";
   let isbn = "";
   let comment = "";
-  let pageStart = 1;
-  let pageEnd = 1;
-  let currentPage = 1;
   let searchResults = [];
   let showResults = false;
   let tagInput = "";
@@ -269,7 +348,6 @@
 
   // Modal and editing state
   let modalOpen = false;
-  let trackingPageOpen = false;
   let editMode = false;
   let editingPublication = null;
 
@@ -279,8 +357,9 @@
   // Log Reading modal variables
   let logReadingModalOpen = false;
   let logReadingPublication = null;
-  let logReadingNewPage = 0;
+  let logReadingPagesRead = 0;
   let logReadingComment = "";
+  let logReadingDuration = 0;
   
   
   function openViewModal(pub) {
@@ -299,26 +378,24 @@
     // If there are publications in the library, select the first one by default
     if (libraryList.length > 0) {
       logReadingPublication = libraryList[0].id;
-      const publication = libraryList.find(p => p.id === logReadingPublication);
-      if (publication) {
-        logReadingNewPage = publication.currentPage || publication.pageStart;
-      }
     }
+    logReadingPagesRead = 0;
     logReadingComment = "";
+    logReadingDuration = 0;
     logReadingModalOpen = true;
   }
 
   // Function to save reading log via modal
   async function saveReadingLog() {
-    if (!logReadingPublication || !logReadingNewPage) return;
+    if (!logReadingPublication || !logReadingPagesRead) return;
     
     const publication = libraryList.find(p => p.id === logReadingPublication);
     if (publication) {
       await updateProgress(
         logReadingPublication, 
-        logReadingNewPage, 
-        publication.pageStart, 
-        logReadingComment
+        logReadingPagesRead, 
+        logReadingComment,
+        logReadingDuration
       );
       logReadingModalOpen = false;
     }
@@ -327,10 +404,8 @@
   // Function to handle publication selection in the log reading modal
   function handlePublicationSelection(pubId) {
     logReadingPublication = pubId;
-    const publication = libraryList.find(p => p.id === pubId);
-    if (publication) {
-      logReadingNewPage = publication.currentPage || publication.pageStart;
-    }
+    logReadingPagesRead = 0; // Reset pages read since this is a new session
+    logReadingDuration = 0; // Reset duration
   }
 
   // ----- Modal Helper Functions -----
@@ -351,9 +426,6 @@
     title = pub.title;
     author = pub.author;
     isbn = pub.isbn;
-    pageStart = pub.pageStart;
-    pageEnd = pub.pageEnd;
-    currentPage = pub.currentPage;
     tags = pub.tags || [];
     modalOpen = true;
   }
@@ -361,7 +433,6 @@
     function closeModal() {
       console.log("Closing modal...");
       modalOpen = false;
-      trackingPageOpen = false;
       editMode = false;
       editingPublication = null;
       resetFields();
@@ -435,13 +506,16 @@ async function loadUserLibrary() {
       });
 
       console.log("📚 Loaded library with ratings:", libraryList);
+      
+      // Calculate reading metrics based on loaded library data
+      calculateReadingMetrics();
   } catch (error) {
       console.error("❌ Error loading library:", error.message);
   }
 }
 
 
-  async function updateProgress(entryId, newCurrentPage, pageStart, comment) {
+  async function updateProgress(entryId, pagesRead, comment, duration = 0) {
   const user = auth.currentUser;
   if (!user) {
       console.error("No authenticated user found.");
@@ -456,8 +530,7 @@ async function loadUserLibrary() {
       const entryDocSnap = await getDoc(entryDocRef);
       const summaryDocSnap = await getDoc(summaryDocRef);
 
-      let journalLogs = [];
-      let previousPage = pageStart;
+      let readingSessions = [];
       let streak = 0;
       let streakDate = null;
       let today = new Date().toISOString().split("T")[0]; // Get current date (YYYY-MM-DD)
@@ -465,8 +538,7 @@ async function loadUserLibrary() {
 
       if (entryDocSnap.exists()) {
           const entryData = entryDocSnap.data();
-          journalLogs = entryData.journalLogs || [];
-          previousPage = entryData.currentPage || pageStart;
+          readingSessions = entryData.readingSessions || [];
       }
 
       if (summaryDocSnap.exists()) {
@@ -476,18 +548,16 @@ async function loadUserLibrary() {
           readingLog = summaryData.readingLog || [];
       }
 
-      // ✅ Calculate Pages Read
-      const pagesRead = Math.max(newCurrentPage - previousPage, 0);
-      const logEntry = {
+      // Create reading session entry
+      const sessionEntry = {
           dateTitle: new Date().toLocaleDateString(),
-          fromPage: previousPage,
-          toPage: newCurrentPage,
           pagesRead: pagesRead,
-          comment: comment || "",
+          notes: comment || "",
+          duration: duration,
           date: new Date().toISOString()
       };
 
-      journalLogs.push(logEntry);
+      readingSessions.push(sessionEntry);
 
       // 🔥 **Streak Logic**
       if (!streakDate) {
@@ -501,8 +571,8 @@ async function loadUserLibrary() {
               streak += 1;
               streakDate = today;
           } else if (timeDiff > 1) {
-              streak = 0;
-              streakDate = null;
+              streak = 1; // Reset to 1 since user is reading today
+              streakDate = today;
           }
       }
 
@@ -523,16 +593,23 @@ async function loadUserLibrary() {
 
       // ✅ Remove outdated logs from Firestore
       updatedLog = updatedLog.filter(log => new Date(log.date) >= cutoffDate);
-      journalLogs = journalLogs.filter(log => new Date(log.date) >= cutoffDate);
-
+      
+      // Keep reading sessions for all time
       console.log(`🔥 Deleted logs older than 90 days from Firestore. Remaining logs:`, updatedLog);
+
+      // Update publication status if not already marked as complete
+      const entryData = entryDocSnap.data();
+      let status = entryData.status || "unread";
+      if (status === "unread" && !entryData.completed) {
+          status = "in progress";
+      }
 
       // 🔄 Update Firestore
       await updateDoc(entryDocRef, {
-          currentPage: newCurrentPage,
+          readingSessions: readingSessions,
           updatedAt: new Date(),
-          pagesRead: pagesRead,
-          journalLogs: journalLogs
+          totalPagesRead: (entryData.totalPagesRead || 0) + pagesRead,
+          status: status
       });
 
       await setDoc(summaryDocRef, {
@@ -548,17 +625,9 @@ async function loadUserLibrary() {
 
       // ✅ Ensure UI updates properly
       if (viewingPublication && viewingPublication.id === entryId) {
-          viewingPublication.journalLogs = journalLogs;
-          viewingPublication.currentPage = newCurrentPage;
-      }
-
-      // Calculate if reading is complete (100%)
-      const publication = entryDocSnap.data();
-      const progress = Math.round(((newCurrentPage - publication.pageStart) / (publication.pageEnd - publication.pageStart)) * 100);
-
-      // If reading is complete, show rating dialog
-      if (progress >= 100) {
-          showRatingDialog(entryId, publication.title);
+          viewingPublication.readingSessions = readingSessions;
+          viewingPublication.totalPagesRead = (viewingPublication.totalPagesRead || 0) + pagesRead;
+          viewingPublication.status = status;
       }
 
       await loadUserLibrary();
@@ -567,6 +636,9 @@ async function loadUserLibrary() {
       // ✅ Trigger Timeline Chart and Progress Chart Re-render
       chartRefreshKey.update(n => n + 1);
       chartKey.update(n => n + 1);
+      
+      // Recalculate reading metrics after updating session data
+      calculateReadingMetrics();
 
   } catch (error) {
       console.error("❌ Error updating progress:", error.message);
@@ -579,6 +651,7 @@ let ratingDialogOpen = false;
 let currentRating = 0;
 let publicationToRate = null;
 let publicationTitleToRate = "";
+let markCompletedWithRating = false;
 
 // Show rating dialog
 function showRatingDialog(pubId, pubTitle) {
@@ -588,10 +661,8 @@ function showRatingDialog(pubId, pubTitle) {
   ratingDialogOpen = true;
 }
 
-// Save rating to Storage
-async function saveRating() {
-  if (!publicationToRate || currentRating === 0) return;
-
+// Function to mark a publication as completed
+async function markAsCompleted(publicationId) {
   const user = auth.currentUser;
   if (!user) {
       console.error("No authenticated user found.");
@@ -600,40 +671,31 @@ async function saveRating() {
 
   try {
       const userDocRef = doc(firestore, "users", user.uid);
-      const libraryRef = doc(userDocRef, "library", publicationToRate);
-      const ratingsDocRef = doc(userDocRef, "charts", "ratings");
+      const libraryRef = doc(userDocRef, "library", publicationId);
+      
+      // Update Firestore
+      await updateDoc(libraryRef, { 
+          completed: true, 
+          status: "completed",
+          updatedAt: new Date()
+      });
 
-      // Fetch existing data
-      const librarySnap = await getDoc(libraryRef);
-      const ratingsSnap = await getDoc(ratingsDocRef);
-      let ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
-
-      // Remove previous rating (if exists)
-      if (librarySnap.exists()) {
-          const prevRating = librarySnap.data().rating;
-          if (prevRating && ratingsData[prevRating]) {
-              ratingsData[prevRating] = Math.max(0, ratingsData[prevRating] - 1);
-          }
+      // Show rating dialog after marking as complete
+      const publication = libraryList.find(p => p.id === publicationId);
+      if (publication) {
+          showRatingDialog(publicationId, publication.title);
       }
 
-      // Update Firestore
-      ratingsData[currentRating] = (ratingsData[currentRating] || 0) + 1;
+      // Update UI
+      libraryList = libraryList.map(entry => 
+          entry.id === publicationId 
+              ? { ...entry, completed: true, status: "completed" } 
+              : entry
+      );
 
-      await Promise.all([
-          setDoc(libraryRef, { rating: currentRating }, { merge: true }), // Update publication rating
-          setDoc(ratingsDocRef, ratingsData, { merge: true }) // Update overall ratings count
-      ]);
-
-      console.log(`✅ Rating of ${currentRating} saved for publication ${publicationToRate}`);
-
-      // ✅ Update UI
-      libraryList = libraryList.map(entry => entry.id === publicationToRate ? { ...entry, rating: currentRating } : entry);
-      ratingDialogOpen = false;
-
-      // ✅ Refresh charts
-      chartKey.update(n => n + 1);
+      console.log(`✅ Publication ${publicationId} marked as completed`);
   } catch (error) {
-      console.error("❌ Error saving rating:", error.message);
+      console.error("❌ Error marking publication as completed:", error.message);
   }
 }
 
@@ -692,7 +754,7 @@ async function saveRating() {
       // 🔄 Recalculate authors, tags, and find most recently logged book
       librarySnapshot.forEach(docSnap => {
           const entry = docSnap.data();
-          const { tags, author, journalLogs, title } = entry;
+          const { tags, author, readingSessions, title } = entry;
 
           // Count tags
           if (tags && Array.isArray(tags)) {
@@ -710,14 +772,14 @@ async function saveRating() {
               authorsCount[author] = (authorsCount[author] || 0) + 1;
           }
 
-          // Check if this book has logs
-          if (journalLogs && journalLogs.length > 0) {
-              const lastLog = journalLogs[journalLogs.length - 1]; // Get most recent log
-              const logDate = new Date(lastLog.date);
+          // Check if this book has reading sessions
+          if (readingSessions && readingSessions.length > 0) {
+              const lastSession = readingSessions[readingSessions.length - 1]; // Get most recent session
+              const sessionDate = new Date(lastSession.date);
 
-              if (!latestLogTime || logDate > latestLogTime) {
+              if (!latestLogTime || sessionDate > latestLogTime) {
                   mostRecentTitle = title;
-                  latestLogTime = logDate;
+                  latestLogTime = sessionDate;
               }
           }
       });
@@ -756,9 +818,6 @@ async function saveRating() {
   // Reset fields for modal
   function resetFields() {
     searchQuery = title = author = isbn = comment = "";
-    pageStart = 1;
-    pageEnd = 1;
-    currentPage = 1;
     searchResults = [];
     showResults = false;
     tagInput = "";
@@ -780,52 +839,62 @@ async function saveRating() {
       }
       const libraryRef = collection(userDocRef, "library");
       console.log("Checking new entry ISBN:", newEntry.isbn);
-      const isbnQuery = query(libraryRef, where("isbn", "==", newEntry.isbn));
-      const querySnapshot = await getDocs(isbnQuery);
-      console.log(`Query result for ISBN "${newEntry.isbn}" -> empty:`, querySnapshot.empty);
-      if (!querySnapshot.empty) {
-        alert("This article is already in your library!");
+      
+      // Check if the same title and author already exists
+      const titleQuery = query(libraryRef, where("title", "==", newEntry.title), where("author", "==", newEntry.author));
+      const titleQuerySnapshot = await getDocs(titleQuery);
+      if (!titleQuerySnapshot.empty) {
+        alert("This publication is already in your library!");
         resetFields();
         return;
       }
-      const pagesRead = newEntry.currentPage - newEntry.pageStart + 1;
+      
+      // Check ISBN if provided
+      if (newEntry.isbn) {
+        const isbnQuery = query(libraryRef, where("isbn", "==", newEntry.isbn));
+        const isbnQuerySnapshot = await getDocs(isbnQuery);
+        if (!isbnQuerySnapshot.empty) {
+          alert("This ISBN is already in your library!");
+          resetFields();
+          return;
+        }
+      }
+      
       await addDoc(libraryRef, {
         title: newEntry.title,
         author: newEntry.author,
         isbn: newEntry.isbn,
-        pageStart: newEntry.pageStart,
-        pageEnd: newEntry.pageEnd,
-        currentPage: newEntry.currentPage,
         comment: newEntry.comment,
         tags: newEntry.tags,
-        journalLogs: newEntry.journalLogs,
+        readingSessions: newEntry.readingSessions || [],
+        status: newEntry.status || "unread",
+        completed: newEntry.completed || false,
+        totalPagesRead: newEntry.totalPagesRead || 0,
         userId: user.uid,
         createdAt: new Date(),
-        updatedAt: new Date(),
-        pagesRead: pagesRead
+        updatedAt: new Date()
       });
-      console.log(`Added entry with ISBN ${newEntry.isbn}.`);
+      console.log(`Added publication: "${newEntry.title}" by ${newEntry.author}`);
       libraryList = [newEntry, ...libraryList];
       resetFields();
       modalOpen = false;
-      trackingPageOpen = true;
     } catch (error) {
       console.error("Error saving entry:", error.message);
     }
   }
 
   async function addLiteratureToLibrary() {
-    if (title && author && pageStart && pageEnd && pageEnd >= pageStart) { // Remove isbn from required fields
+    if (title && author) { // Only require title and author
         const newEntry = {
             title,
             author,
             isbn: isbn || "", // Make ISBN/DOI optional
-            pageStart,
-            pageEnd,
-            currentPage: pageStart,
             comment,
             tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
-            journalLogs: [],
+            readingSessions: [],
+            status: "unread",
+            completed: false,
+            totalPagesRead: 0
         };
 
         console.log("📌 Saving entry with tags:", newEntry.tags);
@@ -863,9 +932,6 @@ async function updateEditedPublication() {
           title,
           author,
           isbn,
-          pageStart,
-          pageEnd,
-          currentPage,
           tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
           updatedAt: new Date()
       };
@@ -951,47 +1017,7 @@ async function updateChartsAfterEdit(userId, oldData, newData) {
     }
 }
 
-  function logout() {
-    signOut(auth).then(() => {
-      userStore.set(null);
-      navigate("/login");
-    });
-  }
-
-  // For dropdown demo (not used in modal)
-  let selectedComponent = TagsChart;
-  function handleSelection(event) {
-    const value = event.target.value;
-    console.log("Selected Value:", value);
-    switch (value.trim()) {
-      case "option1":
-        selectedComponent = TagsChart;
-        break;
-      case "option2":
-        selectedComponent = RatingsChart;
-        break;
-      default:
-        console.log("No valid option selected");
-        selectedComponent = null;
-    }
-  }
-
-  function selectResult(result) {
-      title = result.title;
-      author = result.author;
-      isbn = result.isbn || ""; // Make ISBN/DOI optional
-      if (result.doi) {
-          isbn = result.doi; // Also assign DOI to the isbn field if available
-      }
-      pageStart = 1;
-      pageEnd = result.pageEnd !== "Unknown Pages" ? result.pageEnd : 1;
-      currentPage = 1;
-      showResults = false; // Hide the search results dropdown after selection
-
-      console.log(`Selected book: ${title}, ISBN/DOI: ${isbn}, Total Pages: ${pageEnd}`);
-  }
-
-  async function deletePublication(publicationId) {
+async function deletePublication(publicationId) {
   const user = auth.currentUser;
   if (!user) {
       console.error("No authenticated user found.");
@@ -1015,157 +1041,100 @@ async function updateChartsAfterEdit(userId, oldData, newData) {
           return;
       }
 
-      const oldData = entryDocSnap.data();
+      const deletedPub = entryDocSnap.data();
+      const deletedTitle = deletedPub.title;
 
-      const deletedTitle = entryDocSnap.data().title;
-      const author = entryDocSnap.data().author;
-      const tags = entryDocSnap.data().tags || [];
-      const deletedRating = entryDocSnap.data().rating || null; // Get the rating of the deleted publication
+      // Update UI first for better UX
+      libraryList = libraryList.filter(lit => lit.id !== publicationId);
 
+      // Delete the publication
       await deleteDoc(entryDocRef);
       console.log(`✅ Deleted publication: ${deletedTitle}`);
 
-      // Update charts after deletion
-      await updateChartsAfterEdit(user.uid, oldData, {});
+      // Close modal if open
+      if (viewingPublication && viewingPublication.id === publicationId) {
+          closeViewModal();
+      }
 
-      // ✅ Remove from UI state
-      libraryList = libraryList.filter(entry => entry.id !== publicationId);
-      libraryList = [...libraryList];
-
-      // ✅ Recalculate most recent book
-      let newMostRecentTitle = null;
-      let latestLogTime = null;
-
-      const libraryRef = collection(userDocRef, "library");
-      const q = query(libraryRef, orderBy("updatedAt", "desc"));
-      const querySnapshot = await getDocs(q);
-
-      querySnapshot.forEach(docSnap => {
-          const entry = docSnap.data();
-          if (entry.journalLogs && entry.journalLogs.length > 0) {
-              const lastLog = entry.journalLogs[entry.journalLogs.length - 1];
-              const logDate = new Date(lastLog.date);
-
-              if (!latestLogTime || logDate > latestLogTime) {
-                  newMostRecentTitle = entry.title;
-                  latestLogTime = logDate;
-              }
-          }
-      });
-
-      // ✅ Save updated mostRecent book
-      await setDoc(summaryDocRef, { mostRecent: newMostRecentTitle, updatedAt: new Date() }, { merge: true });
-
-      console.log(`📌 Updated mostRecent book to: ${newMostRecentTitle}`);
-
-      // ✅ Update Author & Tag Counts in Firestore, and deduct rating count
-      await updateChartsAfterDeletion(user.uid, author, tags, deletedTitle, deletedRating);
-
-      // ✅ Refresh UI
-      await updateCharts();
-
-      // 🔥 **Force Pie Chart & Ratings Chart Re-Rendering**
-      chartKey.update(n => n + 1); 
+      // Update charts and recent literature data
+      await updateChartsAfterDeletion(user.uid, deletedPub);
 
   } catch (error) {
       console.error("❌ Error deleting publication:", error.message);
   }
 }
 
-async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, deletedRating) {
-    try {
-        console.log("🚀 Starting updateChartsAfterDeletion...");
-        const userDocRef = doc(firestore, "users", userId);
-        const chartsCollectionRef = collection(userDocRef, "charts");
-        const batch = writeBatch(firestore);
+async function updateChartsAfterDeletion(userId, deletedPub) {
+    const userDocRef = doc(firestore, "users", userId);
+    const chartsCollectionRef = collection(userDocRef, "charts");
+    const batch = writeBatch(firestore);
+    const deletedTitle = deletedPub.title;
 
-        // --- Update author count ---
-        console.log("📊 Updating author counts...");
-        const authorDocRef = doc(chartsCollectionRef, "authors");
-        const authorDocSnap = await getDoc(authorDocRef);
-        if (authorDocSnap.exists()) {
-            const authorData = authorDocSnap.data();
-            if (authorData[author]) {
-                authorData[author] -= 1;
-                if (authorData[author] <= 0) {
-                    delete authorData[author];
-                }
-                batch.set(authorDocRef, authorData, { merge: false });
+    try {
+        // 🔄 Update Authors
+        const authorsDocRef = doc(chartsCollectionRef, "authors");
+        const authorsSnap = await getDoc(authorsDocRef);
+        let authorsData = authorsSnap.exists() ? authorsSnap.data() : {};
+
+        if (deletedPub.author && authorsData[deletedPub.author]) {
+            authorsData[deletedPub.author] -= 1;
+            if (authorsData[deletedPub.author] <= 0) {
+                delete authorsData[deletedPub.author];
             }
         }
 
-        // --- Update tag counts ---
-        console.log("🏷️ Updating tag counts...");
+        batch.set(authorsDocRef, authorsData, { merge: false });
+
+        // 🔄 Update Tags
         const tagsDocRef = doc(chartsCollectionRef, "tags");
-        const tagsDocSnap = await getDoc(tagsDocRef);
-        if (tagsDocSnap.exists()) {
-            const tagData = tagsDocSnap.data();
-            tags.forEach(tag => {
-                if (tagData[tag]) {
-                    tagData[tag] -= 1;
-                    if (tagData[tag] <= 0) {
-                        delete tagData[tag];
+        const tagsSnap = await getDoc(tagsDocRef);
+        let tagsData = tagsSnap.exists() ? tagsSnap.data() : {};
+
+        if (deletedPub.tags && Array.isArray(deletedPub.tags)) {
+            deletedPub.tags.forEach(tag => {
+                if (tagsData[tag]) {
+                    tagsData[tag] -= 1;
+                    if (tagsData[tag] <= 0) {
+                        delete tagsData[tag];
                     }
                 }
             });
-            batch.set(tagsDocRef, tagData, { merge: false });
         }
 
-        // --- Update ratings count ---
-        if (deletedRating) {
-            console.log("⭐ Updating rating counts...");
-            const ratingsDocRef = doc(chartsCollectionRef, "ratings");
-            const ratingsSnap = await getDoc(ratingsDocRef);
-            if (ratingsSnap.exists()) {
-                const ratingsData = ratingsSnap.data();
-                const ratingKey = String(deletedRating); // Ensure it matches Firestore's string key format
+        batch.set(tagsDocRef, tagsData, { merge: false });
 
-                if (ratingsData[ratingKey]) {
-                    ratingsData[ratingKey] -= 1;
+        // 🔄 Check if we need to update "mostRecent" in summary
+        const summaryDocRef = doc(chartsCollectionRef, "summary");
+        const summarySnap = await getDoc(summaryDocRef);
 
-                    // If the count becomes zero, set it to null or delete the field entirely
-                    if (ratingsData[ratingKey] <= 0) {
-                        delete ratingsData[ratingKey];
+        if (summarySnap.exists()) {
+            const summaryData = summarySnap.data();
+            if (summaryData.mostRecent === deletedTitle) {
+                // Need to find new most recent book
+                const libraryRef = collection(userDocRef, "library");
+                const librarySnap = await getDocs(libraryRef);
+
+                let newMostRecent = null;
+                let latestDate = null;
+
+                librarySnap.forEach(doc => {
+                    const entry = doc.data();
+                    if (entry.readingSessions && entry.readingSessions.length > 0) {
+                        const lastSession = entry.readingSessions[entry.readingSessions.length - 1];
+                        const sessionDate = new Date(lastSession.date);
+
+                        if (!latestDate || sessionDate > latestDate) {
+                            newMostRecent = entry.title;
+                            latestDate = sessionDate;
+                        }
                     }
+                });
 
-                    batch.set(ratingsDocRef, ratingsData, { merge: false });
-                    console.log(`✅ Updated rating ${ratingKey} count:`, ratingsData[ratingKey]);
-                }
+                batch.set(summaryDocRef, { mostRecent: newMostRecent, updatedAt: new Date() }, { merge: true });
+                console.log(`🔄 Updating most recent title from "${deletedTitle}" to "${newMostRecent}"`);
+            } else {
+                console.log(`✅ Deleted title "${deletedTitle}" was NOT the most recent. No update needed.`);
             }
-        }
-
-
-        // --- Check and update "mostRecent" ---
-        console.log("📌 Checking mostRecent...");
-        const mostRecentDocRef = doc(chartsCollectionRef, "summary");
-        const mostRecentDocSnap = await getDoc(mostRecentDocRef);
-        let isMostRecentDeleted = false;
-
-        if (mostRecentDocSnap.exists()) {
-            const mostRecentData = mostRecentDocSnap.data();
-            if (mostRecentData.mostRecent === deletedTitle) {
-                isMostRecentDeleted = true;
-            }
-        }
-
-        if (isMostRecentDeleted) {
-            console.log(`🛑 Deleted title "${deletedTitle}" was the most recent. Finding a new most recent...`);
-
-            const libraryRef = collection(userDocRef, "library");
-            const q = query(libraryRef, orderBy("updatedAt", "desc"), limit(1));
-            const querySnapshot = await getDocs(q);
-
-            let newMostRecentTitle = "None";
-            if (!querySnapshot.empty) {
-                newMostRecentTitle = querySnapshot.docs[0].data().title;
-            }
-
-            console.log(`📌 New most recent title: ${newMostRecentTitle}`);
-
-            batch.set(mostRecentDocRef, { mostRecent: newMostRecentTitle, updatedAt: new Date() }, { merge: false });
-            console.log("📝 Added mostRecent update to batch.");
-        } else {
-            console.log(`✅ Deleted title "${deletedTitle}" was NOT the most recent. No update needed.`);
         }
 
         // Finalize batch update
@@ -1179,13 +1148,70 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
 }
 
 
-
   function handleCardClick(event, lit) {
       // Check if the click originated from a button or dropdown/popover trigger
       const isButtonClick = event.target.closest('button') || event.target.closest('[role="button"]');
       if (!isButtonClick) {
           openViewModal(lit);
       }
+  }
+
+  // Function to format time (e.g., 2.5 hrs)
+  function formatTime(hours) {
+    return hours.toFixed(1) + ' hrs';
+  }
+  
+  // Function to get recently read publications
+  function getRecentlyReadPublications() {
+    // Sort by most recent reading session
+    return libraryList
+      .filter(pub => pub.readingSessions && pub.readingSessions.length > 0)
+      .sort((a, b) => {
+        const aDate = new Date(a.readingSessions[a.readingSessions.length - 1].date);
+        const bDate = new Date(b.readingSessions[b.readingSessions.length - 1].date);
+        return bDate - aDate;
+      })
+      .slice(0, 3);
+  }
+  
+  function logout() {
+    signOut(auth)
+      .then(() => {
+        navigate("/login");
+      })
+      .catch((error) => {
+        console.error("Error signing out:", error);
+      });
+  }
+  
+  // For calculating time since last reading session
+  function getTimeSince(dateString) {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now - date;
+    const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60)) % 24;
+    const diffMinutes = Math.floor(diffMs / (1000 * 60)) % 60;
+    
+    if (diffDays > 0) {
+      return `${diffDays}d ago`;
+    } else if (diffHours > 0) {
+      return `${diffHours}h ago`;
+    } else {
+      return `${diffMinutes}m ago`;
+    }
+  }
+  
+  function selectResult(result) {
+      title = result.title;
+      author = result.author;
+      isbn = result.isbn || ""; // Make ISBN/DOI optional
+      if (result.doi) {
+          isbn = result.doi; // Also assign DOI to the isbn field if available
+      }
+      showResults = false; // Hide the search results dropdown after selection
+
+      console.log(`Selected book: ${title}, ISBN/DOI: ${isbn}`);
   }
 
 </script>
@@ -1195,332 +1221,187 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
     <p>Loading...</p>
   </div>
 {:else}
-  <div class="min-h-screen flex flex-col bg-stone-50">
-    <!-- Navbar -->
-    <nav class="bg-white border-neutral-400 shadow h-16 flex items-center justify-between px-12 sticky top-0 z-50">
-      <h1 class="text-lg font-semibold text-neutral-800">TrackMySci</h1>
-      <div class="flex items-center space-x-6">
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger>
-            <button class="border border-neutral-300 py-2 px-4 shadow-sm text-base font-medium rounded hover:bg-neutral-100 flex items-center gap-x-5">
-              {firstName + " " + lastName}
-              <ChevronsUpDown class="w-4 h-4 text-neutral-800" />
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content>
-            <DropdownMenu.Group>
-              <DropdownMenu.Item on:click={() => navigate("/dashboard")} class="text-base">
-                <Gauge class="w-7 pr-1.5" /> Dashboard
-              </DropdownMenu.Item>
-              <DropdownMenu.Item on:click={() => navigate("/library")} class="text-base">
-                <Library class="w-7 pr-1.5" /> Library
-              </DropdownMenu.Item>
-              <DropdownMenu.Separator />
-              <DropdownMenu.Item on:click={logout} class="text-red-500 text-base">
-                <LogOut class="w-7 pr-1.5 text-red-500" /> Logout
-              </DropdownMenu.Item>
-            </DropdownMenu.Group>
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
+  <div class="min-h-screen flex flex-col bg-gray-50">
+    <!-- Top Navigation Bar -->
+    <nav class="bg-white border-b border-gray-200 shadow-sm h-16 flex items-center justify-between px-6 md:px-12 sticky top-0 z-50">
+      <div class="flex items-center gap-8">
+        <h1 class="text-xl font-bold text-blue-600">TrackMySci</h1>
+        
+        <div class="hidden md:flex items-center space-x-6">
+          <button class="text-gray-800 font-medium hover:text-blue-600">Dashboard</button>
+          <button class="text-gray-600 hover:text-blue-600" on:click={() => navigate("/library")}>Library</button>
+          <button class="text-gray-600 hover:text-blue-600">Analytics</button>
+          <button class="text-gray-600 hover:text-blue-600">Notes</button>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-3">
+        <button class="text-gray-600 hover:text-blue-600 flex items-center px-3 py-2" on:click={openLogReadingModal}>
+          <BookOpen class="w-4 h-4 mr-1" /> Log Session
+        </button>
+        
+        <Button class="bg-blue-600 hover:bg-blue-700" on:click={openAddModal}>
+          <Plus class="w-4 h-4 mr-2" /> Add Publication
+        </Button>
+        
+        <button class="size-10 rounded-full bg-gray-200 flex items-center justify-center">
+          <span class="text-sm font-medium">{firstName.charAt(0)}{lastName.charAt(0)}</span>
+        </button>
       </div>
     </nav>
 
-    <!-- Header Area -->
-    <div class="pt-12 px-12 flex justify-between items-center">
-      <h2 class="text-4xl font-bold text-neutral-800">Welcome, {firstName}!</h2>
-      <div class="flex space-x-4">
-        <Button class="bg-white hover:bg-neutral-300 text-neutral-800" on:click={openLogReadingModal}>
-          <BookOpen class="w-5 h-5 mr-2" /> Log Reading
-        </Button>
-        
-        <Button class="bg-blue-600 hover:bg-blue-700" on:click={openAddModal}>
-          <FilePlus2 class="w-4 h-4 mr-2" /> New Publication
-        </Button>
+    <!-- Content Container -->
+    <div class="flex-1 py-8 px-6 md:px-12 max-w-6xl mx-auto w-full">
+      <!-- Welcome Header -->
+      <div class="mb-8">
+        <h1 class="text-3xl font-bold text-gray-800">Welcome back, {firstName}!</h1>
       </div>
-    </div>
-
-    <!-- Main Content -->
-    <div class="flex flex-col md:flex-row flex-1">
-      <!-- Publications Section -->
-      <section class="w-full md:w-1/2 py-6 md:py-12 px-6 md:pl-12 md:pr-3 flex flex-col">
-        <div class="bg-white border border-neutral-200 rounded-lg shadow flex-1 flex flex-col">
-          <div class="p-4 border-b border-neutral-200">
-            <h2 class="text-xl font-semibold flex justify-between items-center text-neutral-700">
-              <div class="flex items-center">
-                <Clock class="w-5 h-5 mr-2 text-neutral-600" />
-                Recently Accessed
-              </div>
-              <Button class="text-sm" variant="outline" on:click={() => navigate("/library")}>
-                View all
-              </Button>
-            </h2>
+      
+      <!-- Metric Cards -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <!-- Pages Read Today -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-sm font-medium text-gray-500">Pages Read Today</p>
+              <p class="text-3xl font-bold mt-1">{todayStats.pagesRead}</p>
+              <p class="text-sm {todayStats.progressFromYesterday > 0 ? 'text-green-600' : todayStats.progressFromYesterday < 0 ? 'text-red-600' : 'text-gray-500'} mt-1">
+                {todayStats.progressFromYesterday > 0 ? `+${todayStats.progressFromYesterday}` : 
+                 todayStats.progressFromYesterday < 0 ? todayStats.progressFromYesterday : 
+                 'Same as yesterday'}
+              </p>
+            </div>
+            <BookMarked class="w-6 h-6 text-blue-600" />
           </div>
-
-          {#if libraryList.length === 0}
-            <div class="flex flex-col items-center justify-center text-center text-gray-500 py-12 flex-1">
-              <p class="text-lg font-medium">No literature added yet.</p>
-              <p class="text-sm mt-2">Start by adding a new publication to track your progress!</p>
+        </div>
+        
+        <!-- Reading Time Today -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-sm font-medium text-gray-500">Reading Time Today</p>
+              <p class="text-3xl font-bold mt-1">{todayStats.readingTime} hrs</p>
+              <p class="text-sm text-gray-500 mt-1">{todayStats.pagesPerHour} pages/hour</p>
+            </div>
+            <Timer class="w-6 h-6 text-purple-600" />
+          </div>
+        </div>
+        
+        <!-- Weekly Pages -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-sm font-medium text-gray-500">Weekly Pages</p>
+              <p class="text-3xl font-bold mt-1">{todayStats.weeklyPages}</p>
+              <p class="text-sm text-gray-500 mt-1">{todayStats.weeklyHours} hrs total</p>
+            </div>
+            <TrendingUp class="w-6 h-6 text-green-600" />
+          </div>
+        </div>
+      </div>
+      
+      <!-- Main Content -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <!-- Recent Reading Sessions -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <div class="flex justify-between items-center mb-6">
+            <h2 class="text-xl font-semibold text-gray-800 flex items-center gap-2">
+              <ClipboardList class="w-5 h-5" /> Recent Reading Sessions
+            </h2>
+            <button class="text-blue-600 hover:text-blue-800 flex items-center text-sm font-medium" on:click={openLogReadingModal}>
+              <Plus class="w-4 h-4 mr-1" /> Log Session
+            </button>
+          </div>
+          
+          {#if libraryList.length === 0 || !libraryList.some(pub => pub.readingSessions && pub.readingSessions.length > 0)}
+            <div class="flex flex-col items-center justify-center text-center text-gray-500 py-12">
+              <p class="text-lg font-medium">No reading sessions yet.</p>
+              <p class="text-sm mt-2">Start by logging your first reading session!</p>
             </div>
           {:else}
-            <ul class="divide-y divide-neutral-200 overflow-y-auto max-h-[500px] flex-1">
-              {#each libraryList as lit, i}
-                {#if i < 5}
-                  <li class="p-4 hover:bg-neutral-50">
-                    <div class="flex justify-between items-start">
-                      <button 
-                        class="text-left flex-1" 
-                        on:click={() => openViewModal(lit)}
-                        on:keydown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            openViewModal(lit);
-                          }
-                        }}
-                      >
-                        <h3 class="font-medium text-neutral-900">{lit.title}</h3>
-                        <p class="text-sm text-neutral-500">{lit.author}</p>
-                        
-                        {#if lit.tags?.length > 0}
-                          <div class="flex flex-wrap gap-1 mt-2">
-                            {#each lit.tags as tag}
-                              <span class="bg-blue-100 text-blue-800 px-2 py-0.5 text-xs rounded-full">{tag}</span>
-                            {/each}
-                          </div>
-                        {/if}
-                      </button>
-                      
-                      <div class="flex items-center space-x-2">
-                        <!-- Log Reading Button -->
-                        <Button 
-                          size="sm" 
-                          variant="outline" 
-                          class="gap-2" 
-                          on:click={() => {
-                            // Set up the current publication for logging
-                            lit.newCurrentPage = lit.currentPage || lit.pageStart;
-                            lit.progressComment = "";
-                            lit.isUpdating = true;
-                          }}
-                        >
-                          <BookOpen class="w-5 h-5" />
-                          <span>Log Reading</span>
-                        </Button>
-                        
-                        <!-- Menu Button -->
-                        <DropdownMenu.Root>
-                          <DropdownMenu.Trigger>
-                            <Button size="icon" variant="ghost">
-                              <MoreVertical class="h-4 w-4" />
-                            </Button>
-                          </DropdownMenu.Trigger>
-                          <DropdownMenu.Content>
-                            <DropdownMenu.Group>
-                              <DropdownMenu.Item on:click={() => openEditModal(lit)} class="text-sm">
-                                <Edit class="w-4 h-4 mr-2" /> Edit
-                              </DropdownMenu.Item>
-                              <DropdownMenu.Item on:click={() => deletePublication(lit.id)} class="text-sm text-red-600">
-                                <Trash2 class="w-4 h-4 mr-2" /> Delete
-                              </DropdownMenu.Item>
-                            </DropdownMenu.Group>
-                          </DropdownMenu.Content>
-                        </DropdownMenu.Root>
-                      </div>
+            <div class="space-y-4">
+              {#each getRecentlyReadPublications() as pub}
+                {#if pub.readingSessions && pub.readingSessions.length > 0}
+                  {@const lastSession = pub.readingSessions[pub.readingSessions.length - 1]}
+                  <div class="border border-gray-100 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors" 
+                       on:click={() => openViewModal(pub)}
+                       on:keydown={(e) => {if (e.key === 'Enter') openViewModal(pub)}}>
+                    <div class="flex justify-between items-start mb-2">
+                      <h3 class="font-medium text-gray-800">{pub.title}</h3>
+                      <span class="text-xs text-gray-500">{getTimeSince(lastSession.date)}</span>
                     </div>
-                    
-                    <!-- Progress Section -->
-                    <button 
-                      class="w-full mt-3 text-left"
-                      on:click={() => openViewModal(lit)}
-                      on:keydown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          openViewModal(lit);
-                        }
-                      }}
-                    >
-                      <div class="flex justify-between text-xs text-neutral-500 mb-1">
-                        <span>
-                          {Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))}% Complete
-                        </span>
-                        <span>
-                          {lit.currentPage || lit.pageStart} of {lit.pageEnd} pages
-                        </span>
+                    <p class="text-sm text-gray-600 mb-3">{pub.author}</p>
+                    <div class="flex justify-between items-center">
+                      <div class="flex items-center gap-2">
+                        <BookOpen class="w-4 h-4 text-gray-500" />
+                        <span class="text-sm text-gray-600">{lastSession.pagesRead} pages</span>
                       </div>
-                      <Progress value={Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))} />
-                    </button>
-                    
-                    <!-- Log Reading Popover -->
-                    {#if lit.isUpdating}
-                      <Dialog.Root open={lit.isUpdating}>
-                        <Dialog.Content class="w-[400px]">
-                          <Dialog.Header>
-                            <Dialog.Title>Update Reading Progress</Dialog.Title>
-                            <Dialog.Description>
-                              Update your reading progress for "{lit.title}"
-                            </Dialog.Description>
-                          </Dialog.Header>
-                          <div class="p-4">
-                            <div class="space-y-4">
-                              <div>
-                                <label for="current-page-{lit.id}" class="block text-sm font-medium text-neutral-700 mb-1">
-                                  Current Page:
-                                </label>
-                                <input 
-                                  id="current-page-{lit.id}"
-                                  type="number" 
-                                  min={lit.pageStart} 
-                                  max={lit.pageEnd} 
-                                  bind:value={lit.newCurrentPage} 
-                                  class="w-full p-2 border rounded border-neutral-300 shadow-sm" 
-                                />
-                              </div>
-                              <div>
-                                <label for="comment-{lit.id}" class="block text-sm font-medium text-neutral-700 mb-1">
-                                  Comment:
-                                </label>
-                                <textarea 
-                                  id="comment-{lit.id}"
-                                  bind:value={lit.progressComment} 
-                                  class="w-full p-2 border rounded border-neutral-300 shadow-sm" 
-                                  placeholder="Add a note about your reading progress"
-                                  rows="3"
-                                ></textarea>
-                              </div>
-                            </div>
-                            <div class="flex justify-end mt-6 space-x-2">
-                              <Button 
-                                variant="outline" 
-                                on:click={() => {
-                                  lit.isUpdating = false;
-                                }}
-                              >
-                                Cancel
-                              </Button>
-                              <Button 
-                                on:click={async () => {
-                                  await updateProgress(lit.id, lit.newCurrentPage, lit.pageStart, lit.progressComment);
-                                  lit.isUpdating = false;
-                                }} 
-                                class="bg-blue-600 hover:bg-blue-700 text-white"
-                              >
-                                Save Progress
-                              </Button>
-                            </div>
-                          </div>
-                        </Dialog.Content>
-                      </Dialog.Root>
-                    {/if}
-                  </li>
+                      {#if lastSession.duration}
+                        <div class="flex items-center gap-2">
+                          <Clock class="w-4 h-4 text-gray-500" />
+                          <span class="text-sm text-gray-600">{lastSession.duration} min</span>
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
                 {/if}
               {/each}
-            </ul>
+              
+              <div class="mt-4 text-center">
+                <button class="text-blue-600 text-sm font-medium hover:text-blue-800" on:click={() => navigate("/library")}>
+                  VIEW LIBRARY
+                </button>
+              </div>
+            </div>
           {/if}
         </div>
-      </section>
-
-      <!-- Analytics Section -->
-      <section class="w-full md:w-1/2 py-6 md:py-12 px-6 md:pl-3 md:pr-12 flex flex-col">
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 h-full">
-          <!-- Row 1: Timeline & Streak -->
-          <div class="col-span-1 lg:col-span-3 p-6 min-h-[18rem] bg-white border border-neutral-300 rounded-md shadow">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <p class="text-lg font-semibold">Pages Read</p>
-              </div>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger>
-                  <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
-                    {$selectedTimeline}
-                    <ChevronDown class="w-4" />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content>
-                  <DropdownMenu.Group>
-                    {#each timelineOptions as option}
-                      <DropdownMenu.Item on:click={() => selectedTimeline.set(option)} class="text-sm">
-                        {option}
-                      </DropdownMenu.Item>
-                    {/each}
-                  </DropdownMenu.Group>
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-            </div>
-            <div class="flex-1 flex items-center justify-center">
-              <TimelineChart selectedRange={$selectedTimeline} chartRefreshKey={$chartRefreshKey} />
+        
+        <!-- Reading Analytics -->
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+          <h2 class="text-xl font-semibold text-gray-800 flex items-center gap-2 mb-6">
+            <PieChartIcon class="w-5 h-5" /> Reading Analytics
+          </h2>
+          
+          <!-- Topic Distribution -->
+          <div class="mb-12">
+            <h3 class="text-base font-medium text-gray-700 mb-4">Topic Distribution</h3>
+            <div class="h-60 flex items-center justify-center">
+              <PieChart type="Tags" chartKey={$chartRefreshKey} />
             </div>
           </div>
-          <div class="col-span-1 lg:col-span-2 p-6 min-h-[18rem] bg-white border border-neutral-300 rounded-md shadow flex flex-col items-center justify-center">
-            <p class="text-lg font-semibold text-neutral-800">Current Streak</p>
-            <p class="text-5xl font-bold text-blue-500 mt-2">{$currentStreak}</p>
-            <p class="text-sm text-gray-500">days in a row</p>
-          </div>
-          <!-- Row 2: Progress & Distribution -->
-          <div class="col-span-1 lg:col-span-2 p-6 min-h-[18rem] bg-white border border-neutral-300 rounded-md shadow flex flex-col">
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="text-lg font-semibold">Distribution</p>
+          
+          <!-- Separator -->
+          <div class="border-t border-gray-100 my-6"></div>
+          
+          <!-- Reading Streak -->
+          <div class="mt-8">
+            <div class="flex justify-between items-center mb-4">
+              <h3 class="text-base font-medium text-gray-700">Reading Streak</h3>
+              <div class="flex items-center gap-1 text-orange-500 font-medium text-sm">
+                <Flame class="w-4 h-4" />
+                <span>{$currentStreak} days</span>
               </div>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger>
-                  <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
-                    {$selectedPieChart}
-                    <ChevronDown class="w-4" />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content>
-                  <DropdownMenu.Group>
-                    {#each pieChartOptions as option}
-                      <DropdownMenu.Item on:click={() => selectedPieChart.set(option)} class="text-sm">
-                        {option}
-                      </DropdownMenu.Item>
-                    {/each}
-                  </DropdownMenu.Group>
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
             </div>
-            <div class="flex-1 flex items-center justify-center max-h-64 w-full">
-              <PieChart type={$selectedPieChart} chartKey={$chartKey} />
+            
+            <!-- Dynamic Streak Visualization based on real data -->
+            <div class="flex w-full gap-2 my-5 px-2">
+              {#each Array(7) as _, i}
+                {@const today = new Date().getDay() || 7}
+                {@const dayNumber = i + 1}
+                {@const daysAgo = today >= dayNumber ? today - dayNumber : today + 7 - dayNumber}
+                {@const isActive = daysAgo < $currentStreak}
+                <div class="flex-1">
+                  <div class={`h-4 rounded ${isActive ? 'bg-orange-500' : 'bg-gray-200'}`}></div>
+                </div>
+              {/each}
             </div>
-          </div>
-          <!-- Progress Section -->
-          <div class="col-span-1 lg:col-span-3 p-6 min-h-[18rem] bg-white border border-neutral-300 rounded-md shadow flex flex-col">
-            <div class="flex items-center justify-between mb-4">
-              <div>
-                <p class="text-lg font-semibold">Progress</p>
-              </div>
-              <DropdownMenu.Root>
-                <DropdownMenu.Trigger>
-                  <button class="border border-neutral-300 py-1 px-2 shadow-sm text-xs font-medium rounded-full hover:bg-neutral-100 flex items-center">
-                    {$selectedProgress}
-                    <ChevronDown class="w-4" />
-                  </button>
-                </DropdownMenu.Trigger>
-                <DropdownMenu.Content>
-                  <DropdownMenu.Group>
-                    {#each progressOptions as option}
-                      <DropdownMenu.Item on:click={() => selectedProgress.set(option)} class="text-sm">
-                        {option}
-                      </DropdownMenu.Item>
-                    {/each}
-                  </DropdownMenu.Group>
-                </DropdownMenu.Content>
-              </DropdownMenu.Root>
-            </div>
-
-            <!-- Display progress percentage -->
-            <div class="text-center mb-3">
-              <p class="text-4xl font-bold text-blue-600">{$progressPercentage}%</p>
-              <p class="text-sm text-gray-500">of total reading completed</p>
-            </div>
-
-            <!-- Progress Chart (Calculates but does NOT display) -->
-            <ProgressChart selectedView={$selectedProgress} updateProgress={val => progressPercentage.set(val)} chartKey={$chartRefreshKey} />
-
-            <!-- Simple Progress Bar -->
-            <div class="relative w-full h-6 bg-gray-200 rounded-full">
-              <div class="absolute top-0 left-0 h-6 bg-blue-500 rounded-full transition-all" style="width: {$progressPercentage}%;"></div>
-            </div>
+            
+            {#if $currentStreak >= 7}
+              <p class="text-sm text-center text-orange-600 mt-3 font-medium">Perfect week!</p>
+            {/if}
           </div>
         </div>
-      </section>
+      </div>
     </div>
   </div>
 {/if}
@@ -1548,6 +1429,17 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
             {/each}
         </div>
         
+        <div class="mb-4">
+            <label class="flex items-center cursor-pointer">
+                <input 
+                    type="checkbox" 
+                    bind:checked={markCompletedWithRating} 
+                    class="form-checkbox h-5 w-5 text-blue-600 rounded focus:ring-blue-500"
+                />
+                <span class="ml-2 text-sm text-gray-700">Mark publication as completed</span>
+            </label>
+        </div>
+        
         <div class="flex justify-end space-x-3">
             <button 
                 class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
@@ -1571,7 +1463,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
 <Dialog.Root bind:open={logReadingModalOpen}>
   <Dialog.Content class="w-[500px]">
     <Dialog.Header>
-      <Dialog.Title>Log Your Reading</Dialog.Title>
+      <Dialog.Title>Log Reading Session</Dialog.Title>
       <Dialog.Description>
         <form on:submit|preventDefault={saveReadingLog} class="space-y-4 mt-4">
           <!-- Publication Selection -->
@@ -1595,15 +1487,24 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
             </select>
           </div>
 
-          <!-- Current Page Input -->
+          <!-- Pages Read Input -->
           <div class="space-y-2">
-            <label for="current-page" class="block text-sm font-medium">
-              Current Page
+            <label for="pages-read" class="block text-sm font-medium">
+              Pages Read in This Session
             </label>
-            <input id="current-page" type="number" bind:value={logReadingNewPage} 
+            <input id="pages-read" type="number" bind:value={logReadingPagesRead} 
               class="w-full p-2 border border-neutral-300 rounded"
-              min={libraryList.find(p => p.id === logReadingPublication)?.pageStart || 1}
-              max={libraryList.find(p => p.id === logReadingPublication)?.pageEnd || 1000} />
+              min="1" />
+          </div>
+          
+          <!-- Reading Duration (Optional) -->
+          <div class="space-y-2">
+            <label for="reading-duration" class="block text-sm font-medium">
+              Reading Duration (Minutes, Optional)
+            </label>
+            <input id="reading-duration" type="number" bind:value={logReadingDuration} 
+              class="w-full p-2 border border-neutral-300 rounded"
+              min="0" />
           </div>
 
           <!-- Reading Notes -->
@@ -1623,7 +1524,7 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
           <div class="flex justify-end space-x-3 pt-4">
             <Button 
               type="button" 
-              variant="outline" 
+              variant="outline"
               on:click={() => logReadingModalOpen = false}
             >
               Cancel
@@ -1632,12 +1533,157 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
               type="submit" 
               class="bg-blue-600 hover:bg-blue-700"
             >
-              Save Reading
+              Save Session
             </Button>
           </div>
         </form>
       </Dialog.Description>
     </Dialog.Header>
+  </Dialog.Content>
+</Dialog.Root>
+
+<!-- View Publication Dialog -->
+<Dialog.Root bind:open={viewModalOpen}>
+  <Dialog.Content class="w-full max-w-2xl">
+      <Dialog.Header>
+          <Dialog.Title class="text-2xl font-bold">
+              {#if viewingPublication}
+                  {viewingPublication.title}
+              {/if}
+          </Dialog.Title>
+          <Dialog.Description>
+              {#if viewingPublication}
+                  <p class="text-lg text-neutral-600 mb-4">{viewingPublication.author}</p>
+                  
+                  {#if viewingPublication.isbn}
+                      <p class="text-sm text-neutral-600">ISBN/DOI: {viewingPublication.isbn}</p>
+                  {/if}
+              
+                  <div class="flex items-center gap-2 mt-4 mb-2">
+                      <Book class="w-5 h-5 text-neutral-600" />
+                      <span class="text-neutral-700">
+                          {viewingPublication.totalPagesRead || 0} pages read in {viewingPublication.readingSessions?.length || 0} sessions
+                      </span>
+                  </div>
+                  
+                  <!-- Status Bar -->
+                  <div class="mb-6">
+                      <div class="flex justify-between items-center mb-2">
+                          <span class="text-sm text-neutral-600">Status:</span>
+                          <span class={`px-3 py-1 rounded-full text-sm ${
+                              viewingPublication.completed ? "bg-green-100 text-green-800" : 
+                              viewingPublication.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
+                              "bg-gray-100 text-gray-800"
+                          }`}>
+                              {viewingPublication.status || (viewingPublication.completed ? "Completed" : viewingPublication.readingSessions?.length > 0 ? "In Progress" : "Unread")}
+                          </span>
+                      </div>
+                  </div>
+                  
+                  <!-- Tags -->
+                  {#if viewingPublication.tags?.length > 0}
+                      <div class="flex flex-wrap gap-2 mb-6">
+                          {#each viewingPublication.tags as tag}
+                              <span class="bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                          {/each}
+                      </div>
+                  {/if}
+                  
+                  <!-- Divider -->
+                  <hr class="my-6 border-neutral-200" />
+                  
+                  <!-- Reading Logs Section -->
+                  <div>
+                      <div class="flex justify-between items-center mb-4">
+                          <h3 class="text-lg font-semibold">Reading Logs</h3>
+                          <Button 
+                            class="flex items-center gap-2" 
+                            variant="outline"
+                            on:click={() => {
+                              logReadingPublication = viewingPublication.id;
+                              logReadingPagesRead = 0;
+                              logReadingComment = "";
+                              logReadingDuration = 0;
+                              logReadingModalOpen = true;
+                              viewModalOpen = false; // Close the view modal when opening the log modal
+                            }}
+                          >
+                              <BookOpen class="w-5 h-5" />
+                              Log Reading
+                          </Button>
+                      </div>
+                      
+                      {#if viewingPublication.readingSessions?.length > 0}
+                          <div class="space-y-4">
+                              <div class="flex justify-between items-center mb-2">
+                                  <h3 class="text-lg font-semibold text-neutral-800">Reading Sessions</h3>
+                                  <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                                      {viewingPublication.status || "Unknown"}
+                                  </div>
+                              </div>
+                          
+                              <div class="bg-neutral-50 p-3 rounded-md mb-4">
+                                  <div class="flex items-center gap-3 text-neutral-700">
+                                      <div>
+                                          <span class="text-3xl font-bold">{viewingPublication.totalPagesRead || 0}</span>
+                                          <span class="text-sm ml-1">total pages read</span>
+                                      </div>
+                                      <Separator orientation="vertical" class="h-8" />
+                                      <div>
+                                          <span class="text-3xl font-bold">{viewingPublication.readingSessions.length}</span>
+                                          <span class="text-sm ml-1">sessions</span>
+                                      </div>
+                                  </div>
+                              </div>
+                          
+                              {#each viewingPublication.readingSessions as session}
+                                  <div class="bg-white border border-neutral-200 rounded-lg p-4">
+                                      <div class="flex justify-between mb-2">
+                                          <div class="flex items-center gap-2 text-neutral-600">
+                                              <Calendar class="w-4 h-4" />
+                                              <span>{new Date(session.date).toLocaleDateString()}</span>
+                                          </div>
+                                          {#if session.duration}
+                                          <div class="flex items-center gap-1 text-neutral-600 text-sm">
+                                              <Clock class="w-3 h-3" />
+                                              <span>{session.duration} min</span>
+                                          </div>
+                                          {/if}
+                                      </div>
+                                      
+                                      <div class="flex items-center gap-2 mb-2 text-neutral-600">
+                                          <Book class="w-4 h-4" />
+                                          <span>{session.pagesRead} pages read</span>
+                                      </div>
+                                      
+                                      {#if session.notes}
+                                          <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md mt-2">{session.notes}</p>
+                                      {/if}
+                                  </div>
+                              {/each}
+                          </div>
+                      {:else}
+                          <div class="text-center p-6 bg-neutral-50 rounded-lg">
+                              <p class="text-neutral-500">No reading sessions yet.</p>
+                              <p class="text-sm text-neutral-400 mt-1">Start tracking your reading by clicking "Log Reading".</p>
+                          </div>
+                      {/if}
+
+                      <!-- Mark as Complete button -->
+                      {#if viewingPublication && !viewingPublication.completed}
+                          <div class="mt-6">
+                              <Button 
+                                  class="w-full bg-green-600 hover:bg-green-700"
+                                  on:click={() => markAsCompleted(viewingPublication.id)}
+                              >
+                                  Mark as Complete
+                              </Button>
+                          </div>
+                      {/if}
+                  </div>
+              {/if}
+          </Dialog.Description>
+      </Dialog.Header>
   </Dialog.Content>
 </Dialog.Root>
 
@@ -1658,82 +1704,60 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                 type="text" 
                 id="searchQuery" 
                 bind:value={searchQuery}
-                on:keydown={e => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    searchLiterature();
-                  }
-                }}
-                class="w-full pl-4 pr-16 py-4 text-neutral-700 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
-                placeholder="Search by DOI, ISBN, or Title" 
-                autocomplete="off" 
+                class="w-full p-2.5 pl-10 border rounded-md border-neutral-300 shadow-sm text-neutral-700 disabled:bg-neutral-100" 
+                placeholder="Search for a book by title, ISBN, or DOI"
+                disabled={editMode}
               />
+              <Search class="absolute top-3 left-3 w-4 h-4 text-neutral-400" />
               <button 
-                class="absolute inset-y-0 right-0 px-4 flex items-center rounded-r-full bg-blue-500 hover:bg-blue-600 text-white"
+                type="button" 
+                class="absolute right-2 top-1/2 transform -translate-y-1/2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-neutral-400"
                 on:click={searchLiterature}
+                disabled={editMode || !searchQuery.trim() || isSearching}
               >
                 {#if isSearching}
-                  <div class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                  Searching...
                 {:else}
-                  <Search class="w-6 h-6" />
+                  Search
                 {/if}
               </button>
             </div>
           </div>
 
-          {#if showResults}
-          <div class="absolute mt-0.5 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2 bg-white z-50">
-              {#each searchResults as result}
-                  <button type="button" 
-                      class="p-3 bg-neutral-100 rounded shadow cursor-pointer hover:bg-neutral-200 text-left w-full"
-                      on:click={() => selectResult(result)}
-                  >
-                      <strong>{result.title}</strong><br />
-                      <small>Author: {result.author}</small><br />
-                      {#if result.isbn && result.isbn !== "No ISBN"}
-                          <em>ISBN: {result.isbn}</em>
-                      {/if}
-                      {#if result.doi}
-                          <br /><em>DOI: {result.doi}</em>
-                      {/if}
-                      {#if (!result.isbn || result.isbn === "No ISBN") && !result.doi}
-                          <em>No ISBN or DOI available</em>
-                      {/if}
-                  </button>
-              {/each}
-          </div>
+          <!-- Search Results -->
+          {#if showResults && searchResults.length > 0}
+            <div class="mb-6 bg-neutral-50 border border-neutral-300 rounded-md shadow-sm max-h-64 overflow-y-auto">
+              <ul class="divide-y divide-neutral-200">
+                {#each searchResults as result}
+                  <li class="p-3 hover:bg-neutral-100 cursor-pointer" on:click={() => selectResult(result)}>
+                    <div class="font-medium">{result.title}</div>
+                    <div class="text-sm text-neutral-600">{result.author}</div>
+                    {#if result.isbn}
+                      <div class="text-xs text-neutral-500 mt-1">ISBN: {result.isbn}</div>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+            </div>
           {/if}
 
-          <!-- Form Fields -->
-          <div class="flex flex-col gap-4 mt-4">
-            <div class="flex flex-col">
+          <!-- Publication Details -->
+          <div class="space-y-4 mt-6">
+            <h3 class="text-lg font-semibold mb-2">{editMode ? "Edit Publication Details" : "Publication Details"}</h3>
+            <div class="flex items-center">
               <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title *</label>
               <input id="title" type="text" bind:value={title}
-                class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
+                class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" required />
             </div>
-            <div class="flex flex-col">
+            <div class="flex items-center">
               <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author *</label>
               <input id="author" type="text" bind:value={author}
-                class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
+                class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" required />
             </div>
-            <Separator />
             <div class="flex items-center">
               <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI</label>
               <input id="isbn-doi" type="text" bind:value={isbn}
                 class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" autocomplete="off" />
-            </div>
-            <Separator />
-            <div class="flex gap-4 items-center">
-              <div class="flex-1">
-                <label for="page-start" class="text-sm font-medium text-neutral-700">Page Start *</label>
-                <input id="page-start" type="number" bind:value={pageStart}
-                  class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min="1" />
-              </div>
-              <div class="flex-1">
-                <label for="page-end" class="text-sm font-medium text-neutral-700">Page End *</label>
-                <input id="page-end" type="number" bind:value={pageEnd}
-                  class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min={pageStart} />
-              </div>
             </div>
             <Separator />
             <!-- Tag Input Section -->
@@ -1748,143 +1772,38 @@ async function updateChartsAfterDeletion(userId, author, tags, deletedTitle, del
                       e.preventDefault();
                       addTag();
                     }
-                  }} />
-                <Button type="button" class="ml-2 bg-blue-500 hover:bg-blue-600" on:click={addTag}>Add Tag</Button>
+                  }}
+                />
+                <button type="button"
+                  class="ml-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  on:click={addTag}>
+                  Add
+                </button>
               </div>
-              <div class="flex flex-wrap gap-2 mt-3">
-                {#each tags as tag, index}
-                  <div class="flex items-center bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                    <span>{tag}</span>
-                    <button type="button" class="ml-2 text-blue-500 hover:text-blue-700" on:click={() => removeTag(index)}>
-                      &times;
-                    </button>
-                  </div>
-                {/each}
-              </div>
-            </div>
-            <Separator />
-            <div class="flex items-center">
-              <label for="comment" class="w-1/4 text-sm font-medium text-neutral-700">Comment</label>
-              <textarea id="comment" bind:value={comment}
-                class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300"></textarea>
+              {#if tags.length > 0}
+                <div class="flex flex-wrap gap-2 mt-3">
+                  {#each tags as tag, index}
+                    <div class="flex items-center gap-1 bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full">
+                      <span>{tag}</span>
+                      <button type="button" class="text-neutral-500 hover:text-neutral-800" on:click={() => removeTag(index)}>
+                        &times;
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
             </div>
           </div>
 
-          <!-- Footer Buttons -->
-          <div class="flex justify-end space-x-4 mt-4">
-            <Button type="button" on:click={resetFields} class="bg-neutral-200 text-neutral-700 hover:bg-neutral-300">Clear</Button>
-            <Button type="submit" class="bg-blue-600 text-white hover:bg-blue-700">{editMode ? "Update" : "Add"}</Button>
+          <!-- Submit Button -->
+          <div class="flex justify-end mt-6">
+            <Button type="button" variant="outline" class="mr-3" on:click={closeModal}>Cancel</Button>
+            <Button type="submit" class="bg-blue-600 hover:bg-blue-700">
+              {editMode ? "Update Publication" : "Add to Library"}
+            </Button>
           </div>
         </form>
       </Dialog.Description>
     </Dialog.Header>
-  </Dialog.Content>
-</Dialog.Root>
-
-<!-- View Publication Dialog -->
-<Dialog.Root bind:open={viewModalOpen}>
-  <Dialog.Content class="w-[300px] max-w-[60%] max-h-[80vh] overflow-y-auto bg-white">
-      <div class="flex justify-between items-start mb-2">
-          <div>
-              <Dialog.Title class="text-2xl font-bold">
-                  {viewingPublication?.title || "Publication Details"}
-              </Dialog.Title>
-              <p class="text-neutral-600 mt-1">
-                  {viewingPublication?.author || ""}
-              </p>
-          </div>
-      </div>
-      
-      <Dialog.Description class="mt-4">
-          {#if viewingPublication}
-              <div class="flex items-center gap-2 mb-4">
-                  <Book class="w-5 h-5 text-neutral-600" />
-                  <span class="text-neutral-700">
-                      {viewingPublication.currentPage || viewingPublication.pageStart} / {viewingPublication.pageEnd} pages
-                  </span>
-              </div>
-              
-              <!-- Progress Bar -->
-              <div class="mb-6">
-                  <div class="h-2 bg-blue-100 rounded-full mb-1">
-                      <div class="h-2 bg-black rounded-full" style="width: {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%"></div>
-                  </div>
-                  <div class="text-sm text-neutral-600">
-                      {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}% complete
-                  </div>
-              </div>
-              
-              <!-- Tags -->
-              {#if viewingPublication.tags?.length > 0}
-                  <div class="flex flex-wrap gap-2 mb-6">
-                      {#each viewingPublication.tags as tag}
-                          <span class="bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full text-sm">{tag}</span>
-                      {/each}
-                  </div>
-              {/if}
-              
-              <!-- Divider -->
-              <hr class="my-6 border-neutral-200" />
-              
-              <!-- Reading Logs Section -->
-              <div>
-                  <div class="flex justify-between items-center mb-4">
-                      <h3 class="text-lg font-semibold">Reading Logs</h3>
-                      <Button 
-                        class="flex items-center gap-2" 
-                        variant="outline"
-                        on:click={() => {
-                          logReadingPublication = viewingPublication.id;
-                          logReadingNewPage = viewingPublication.currentPage || viewingPublication.pageStart;
-                          logReadingComment = "";
-                          logReadingModalOpen = true;
-                          viewModalOpen = false; // Close the view modal when opening the log modal
-                        }}
-                      >
-                          <BookOpen class="w-5 h-5" />
-                          Log Reading
-                      </Button>
-                  </div>
-                  
-                  {#if viewingPublication.journalLogs?.length > 0}
-                      <div class="space-y-4">
-                          {#each viewingPublication.journalLogs as log}
-                              <div class="bg-white border border-neutral-200 rounded-lg p-4">
-                                  <div class="flex justify-between mb-2">
-                                      <div class="flex items-center gap-2 text-neutral-600">
-                                          <Calendar class="w-4 h-4" />
-                                          <span>{new Date(log.date).toLocaleDateString()}</span>
-                                      </div>
-                                  </div>
-                                  
-                                  <div class="flex items-center gap-2 mb-2 text-neutral-600">
-                                      <Book class="w-4 h-4" />
-                                      <span>{log.pagesRead} pages</span>
-                                  </div>
-                                  
-                                  <div class="mb-3">
-                                      <div class="h-2 bg-blue-100 rounded-full">
-                                          <div class="h-2 bg-black rounded-full" style="width: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%"></div>
-                                      </div>
-                                      <div class="text-xs text-neutral-600 mt-1">
-                                          Progress at this point: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%
-                                      </div>
-                                  </div>
-                                  
-                                  {#if log.comment}
-                                      <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md">{log.comment}</p>
-                                  {/if}
-                              </div>
-                          {/each}
-                      </div>
-                  {:else}
-                      <div class="text-center p-6 bg-neutral-50 rounded-lg">
-                          <p class="text-neutral-500">No reading logs yet.</p>
-                          <p class="text-sm text-neutral-400 mt-1">Start tracking your progress by clicking "Log Reading".</p>
-                      </div>
-                  {/if}
-              </div>
-          {/if}
-      </Dialog.Description>
   </Dialog.Content>
 </Dialog.Root>
