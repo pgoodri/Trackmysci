@@ -37,12 +37,21 @@
     let searchLibraryQuery = ""; // Renamed to avoid conflict with form searchQuery
     let activeFilter = "all"; // Options: all, unread, reading, completed
     
+    // Create a reactive count to force re-rendering
+    const refreshCounter = writable(0);
+    
     // Subscribe to changes in books, selectedTags, or filter criteria
     // and update filteredBooks whenever any of these change
     const unsubscribe = [
         books.subscribe(() => updateFilteredBooks()),
-        selectedTags.subscribe(() => updateFilteredBooks())
+        selectedTags.subscribe(() => updateFilteredBooks()),
+        refreshCounter.subscribe(() => updateFilteredBooks())
     ];
+    
+    // Function to force a UI refresh
+    function forceRefresh() {
+        refreshCounter.update(n => n + 1);
+    }
     
     // We'll use the actual tags from the publications instead of hardcoded ones
     // Just need an "All" option
@@ -175,9 +184,14 @@
     
     // Get filtered books (just returns the current value of the store)
     function getFilteredBooks() {
-        // Force filtering to apply before returning results
-        updateFilteredBooks();
-        return get(filteredBooks);
+        // Make sure we have filtered books
+        const filtered = get(filteredBooks);
+        if (filtered.length === 0 && get(books).length > 0) {
+            // Force refresh if we have books but no filtered books
+            updateFilteredBooks();
+            return get(filteredBooks);
+        }
+        return filtered;
     }
     
     // Set active filter by status
@@ -641,8 +655,14 @@
                     // Add the entry to the books store to immediately show in UI
                     books.update(currentBooks => [newEntry, ...currentBooks]);
                     
-                    // Force update filtered books list
-                    updateFilteredBooks();
+                    // Force refresh the UI
+                    forceRefresh();
+                    
+                    // This is essential - we want to make sure it re-renders
+                    setTimeout(() => {
+                        updateFilteredBooks();
+                        forceRefresh();
+                    }, 100);
                 }
                 
                 // Still do a full reload to ensure everything is synced properly
@@ -735,8 +755,8 @@
             // to avoid duplicate entries that differ only in capitalization
             const allBooks = get(books);
             const titleAuthorExists = allBooks.some(book => 
-                book.title.toLowerCase() === newEntry.title.toLowerCase() && 
-                book.author.toLowerCase() === newEntry.author.toLowerCase()
+                book.title?.toLowerCase() === newEntry.title?.toLowerCase() && 
+                book.author?.toLowerCase() === newEntry.author?.toLowerCase()
             );
             
             if (titleAuthorExists) {
@@ -776,6 +796,9 @@
             
             resetFields();
             modalOpen = false;
+            
+            // Force UI to update
+            forceRefresh();
             
             alert("Publication added successfully!");
             return docRef.id; // Return the document ID so we can use it
@@ -1074,6 +1097,8 @@
 
             <!-- Publications List -->
             <div class="px-12 py-6">
+                <!-- Force reactivity with a reactive value -->
+                {#key $refreshCounter}
                 {#if getFilteredBooks().length > 0}
                     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
                         <!-- List items -->
@@ -1166,6 +1191,7 @@
                         </button>
                     </div>
                 {/if}
+                {/key}
             </div>
         </div>
     </div>
