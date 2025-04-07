@@ -31,10 +31,18 @@
     const books = writable([]);
     const selectedTags = writable([]);
     const uniqueTags = writable([]);
+    const filteredBooks = writable([]);
     
     // Search and filter
     let searchLibraryQuery = ""; // Renamed to avoid conflict with form searchQuery
     let activeFilter = "all"; // Options: all, unread, reading, completed
+    
+    // Subscribe to changes in books, selectedTags, or filter criteria
+    // and update filteredBooks whenever any of these change
+    const unsubscribe = [
+        books.subscribe(() => updateFilteredBooks()),
+        selectedTags.subscribe(() => updateFilteredBooks())
+    ];
     
     // We'll use the actual tags from the publications instead of hardcoded ones
     // Just need an "All" option
@@ -110,18 +118,21 @@
                 }
             });
             uniqueTags.set([...allTags]);
+            
+            // Initialize filtered books
+            updateFilteredBooks();
         } catch (error) {
             console.error("Error loading books:", error);
             books.set([]);
         }
     }
     
-    // Filter books
-    function getFilteredBooks() {
+    // Update filtered books based on current filters
+    function updateFilteredBooks() {
         const allBooks = get(books);
         const tags = get(selectedTags);
         
-        return allBooks.filter(book => {
+        const result = allBooks.filter(book => {
             // Filter by search
             const matchesSearch = !searchLibraryQuery || 
                 book.title?.toLowerCase().includes(searchLibraryQuery.toLowerCase()) ||
@@ -148,11 +159,21 @@
                 
             return matchesSearch && matchesTags && matchesStatus;
         });
+        
+        filteredBooks.set(result);
+        console.log("Filtered books updated:", result.length, "matches");
+        console.log("Selected tags:", tags);
+    }
+    
+    // Get filtered books (just returns the current value of the store)
+    function getFilteredBooks() {
+        return get(filteredBooks);
     }
     
     // Set active filter by status
     function setStatusFilter(status) {
         activeFilter = status;
+        updateFilteredBooks();
     }
     
     // Filter by tag
@@ -702,8 +723,13 @@
             }
         });
         
-        // Return cleanup function to unsubscribe from auth state changes
-        return () => unsubscribe();
+        // Return cleanup function to unsubscribe from auth state changes and store subscriptions
+        return () => {
+            unsubscribe();
+            
+            // Unsubscribe from store subscriptions
+            unsubscribe.forEach(unsub => unsub());
+        };
     });
 </script>
 
@@ -755,6 +781,7 @@
                     <input
                         type="text"
                         bind:value={searchLibraryQuery}
+                        on:input={updateFilteredBooks}
                         class="w-full p-3 pl-10 border border-gray-300 rounded-md shadow-sm"
                         placeholder="Search publications..."
                     />
