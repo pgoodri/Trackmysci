@@ -118,14 +118,22 @@
     // Load books
     async function loadUserLibrary(uid) {
         try {
+            console.log("Loading library for user:", uid);
             const userDocRef = doc(firestore, "users", uid);
             const libraryRef = collection(userDocRef, "library");
             const querySnapshot = await getDocs(libraryRef);
             
-            const loadedBooks = querySnapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
+            console.log(`Found ${querySnapshot.docs.length} books in library`);
+            
+            const loadedBooks = querySnapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    ...data,
+                    // Ensure createdAt is a Date for proper sorting
+                    createdAt: data.createdAt?.toDate?.() || new Date()
+                };
+            });
             
             // Update store
             books.set(loadedBooks);
@@ -141,6 +149,11 @@
             
             // Initialize filtered books
             updateFilteredBooks();
+            
+            // Force a refresh
+            forceRefresh();
+            
+            console.log("Library loaded successfully");
         } catch (error) {
             console.error("Error loading books:", error);
             books.set([]);
@@ -267,10 +280,12 @@
     
     // Get filtered books with reactive rendering
     let filteredBooksCache = [];
-    $: {
-        updateFilteredBooks();
-        filteredBooksCache = get(filteredBooks);
-    }
+    
+    // Make sure we update filters whenever any filter parameter changes
+    $: searchLibraryQuery, selectedStatusFilter, selectedTagFilter, sortOrder, viewMode, $books, updateFilteredBooks();
+    
+    // Update cache when filtered books change
+    $: filteredBooksCache = get(filteredBooks);
     
     // Get current page items for pagination
     function getPaginatedBooks() {
@@ -1035,7 +1050,9 @@
         searchLibraryQuery = "";
         selectedStatusFilter = "all";
         selectedTagFilter = "all";
-        updateFilteredBooks();
+        sortOrder = "newest"; // Reset to default sort as well
+        currentPage = 1; // Reset to first page
+        // The reactive statement will automatically trigger updateFilteredBooks
     }
     
     // Toggle view mode between grid and list
@@ -1168,23 +1185,27 @@
                             <!-- Status Filter -->
                             <DropdownMenu.Root>
                                 <DropdownMenu.Trigger asChild>
-                                    <Button variant="outline" class="flex items-center gap-2">
+                                    <Button variant="outline" class={`flex items-center gap-2 ${selectedStatusFilter !== 'all' ? 'bg-blue-50 border-blue-200' : ''}`}>
                                         <Filter class="h-4 w-4" />
-                                        <span>Status</span>
+                                        <span>
+                                            {selectedStatusFilter === 'all' ? 'Status' : 
+                                             selectedStatusFilter === 'unread' ? 'Unread' :
+                                             selectedStatusFilter === 'in-progress' ? 'In Progress' : 'Completed'}
+                                        </span>
                                         <ChevronDown class="h-4 w-4" />
                                     </Button>
                                 </DropdownMenu.Trigger>
                                 <DropdownMenu.Content>
-                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "all"; updateFilteredBooks();}}>
+                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "all";}}>
                                         <span>All Statuses</span>
                                     </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "unread"; updateFilteredBooks();}}>
+                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "unread";}}>
                                         <span>Unread</span>
                                     </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "in-progress"; updateFilteredBooks();}}>
+                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "in-progress";}}>
                                         <span>In Progress</span>
                                     </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "completed"; updateFilteredBooks();}}>
+                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "completed";}}>
                                         <span>Completed</span>
                                     </DropdownMenu.Item>
                                 </DropdownMenu.Content>
@@ -1193,19 +1214,21 @@
                             <!-- Tags Filter -->
                             <DropdownMenu.Root>
                                 <DropdownMenu.Trigger asChild>
-                                    <Button variant="outline" class="flex items-center gap-2">
+                                    <Button variant="outline" class={`flex items-center gap-2 ${selectedTagFilter !== 'all' ? 'bg-blue-50 border-blue-200' : ''}`}>
                                         <Tag class="h-4 w-4" />
-                                        <span>Tags</span>
+                                        <span>
+                                            {selectedTagFilter === 'all' ? 'Tags' : selectedTagFilter}
+                                        </span>
                                         <ChevronDown class="h-4 w-4" />
                                     </Button>
                                 </DropdownMenu.Trigger>
                                 <DropdownMenu.Content>
-                                    <DropdownMenu.Item on:click={() => {selectedTagFilter = "all"; updateFilteredBooks();}}>
+                                    <DropdownMenu.Item on:click={() => {selectedTagFilter = "all";}}>
                                         <span>All Tags</span>
                                     </DropdownMenu.Item>
                                     <DropdownMenu.Separator />
                                     {#each $uniqueTags as tag}
-                                        <DropdownMenu.Item on:click={() => {selectedTagFilter = tag; updateFilteredBooks();}}>
+                                        <DropdownMenu.Item on:click={() => {selectedTagFilter = tag;}}>
                                             <span>{tag}</span>
                                         </DropdownMenu.Item>
                                     {/each}
@@ -1217,21 +1240,26 @@
                                 <DropdownMenu.Trigger asChild>
                                     <Button variant="outline" class="flex items-center gap-2">
                                         <ArrowUpDown class="h-4 w-4" />
-                                        <span>Sort</span>
+                                        <span>
+                                            {sortOrder === 'newest' ? 'Newest First' : 
+                                             sortOrder === 'oldest' ? 'Oldest First' :
+                                             sortOrder === 'title-asc' ? 'Title (A-Z)' : 
+                                             sortOrder === 'title-desc' ? 'Title (Z-A)' : 'Sort'}
+                                        </span>
                                         <ChevronDown class="h-4 w-4" />
                                     </Button>
                                 </DropdownMenu.Trigger>
                                 <DropdownMenu.Content>
-                                    <DropdownMenu.Item on:click={() => {sortOrder = "newest"; updateFilteredBooks();}}>
+                                    <DropdownMenu.Item on:click={() => {sortOrder = "newest";}}>
                                         <span>Newest First</span>
                                     </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {sortOrder = "oldest"; updateFilteredBooks();}}>
+                                    <DropdownMenu.Item on:click={() => {sortOrder = "oldest";}}>
                                         <span>Oldest First</span>
                                     </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {sortOrder = "title-asc"; updateFilteredBooks();}}>
+                                    <DropdownMenu.Item on:click={() => {sortOrder = "title-asc";}}>
                                         <span>Title (A-Z)</span>
                                     </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {sortOrder = "title-desc"; updateFilteredBooks();}}>
+                                    <DropdownMenu.Item on:click={() => {sortOrder = "title-desc";}}>
                                         <span>Title (Z-A)</span>
                                     </DropdownMenu.Item>
                                 </DropdownMenu.Content>
