@@ -53,12 +53,6 @@
     // View mode state
     let viewMode = localStorage.getItem("library-view-mode") || "grid"; // Options: grid, list
     
-    // Dropdown states for custom dropdowns
-    let statusDropdownOpen = false;
-    let tagsDropdownOpen = false;
-    let sortDropdownOpen = false;
-    let menuDropdownOpen = null; // For book menu dropdowns (will store book ID)
-    
     // Create a reactive count to force re-rendering
     const refreshCounter = writable(0);
     
@@ -288,7 +282,10 @@
     let filteredBooksCache = [];
     
     // Make sure we update filters whenever any filter parameter changes
-    $: searchLibraryQuery, selectedStatusFilter, selectedTagFilter, sortOrder, viewMode, $books, updateFilteredBooks();
+    $: {
+        console.log("Filter changed: ", { searchLibraryQuery, selectedStatusFilter, selectedTagFilter, sortOrder });
+        updateFilteredBooks();
+    }
     
     // Update cache when filtered books change
     $: filteredBooksCache = get(filteredBooks);
@@ -1079,27 +1076,12 @@
         return date.toLocaleDateString();
     }
     
-    // Function to close all dropdowns
-    function closeAllDropdowns() {
-        statusDropdownOpen = false;
-        tagsDropdownOpen = false;
-        sortDropdownOpen = false;
-        menuDropdownOpen = null;
-    }
-    
     // Initialize with proper auth state handling
     onMount(() => {
         isLoading = true;
         
         // Load view mode preference from localStorage or default to grid
         viewMode = localStorage.getItem("library-view-mode") || "grid";
-        
-        // Add document click handler to close dropdowns when clicking outside
-        const documentClickHandler = (event) => {
-            // Close all dropdowns when clicking outside of them
-            closeAllDropdowns();
-        };
-        window.addEventListener('click', documentClickHandler);
         
         // Use Firebase's auth state listener instead of checking currentUser directly
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -1125,9 +1107,6 @@
             
             // Unsubscribe from store subscriptions
             unsubscribe.forEach(unsub => unsub());
-            
-            // Remove document click handler
-            window.removeEventListener('click', documentClickHandler);
         };
     });
 </script>
@@ -1206,174 +1185,125 @@
                                 </button>
                             </div>
 
-                            <!-- Status Filter - Simple Dropdown -->
-                            <div class="relative">
-                                <button 
-                                    class={`flex items-center gap-2 px-3 py-2 rounded-md border ${selectedStatusFilter !== 'all' ? 'bg-blue-50 border-blue-200' : 'border-gray-200'}`}
-                                    on:click|stopPropagation={() => statusDropdownOpen = !statusDropdownOpen}
-                                >
-                                    <Filter class="h-4 w-4" />
-                                    <span>
-                                        {selectedStatusFilter === 'all' ? 'Status' : 
-                                         selectedStatusFilter === 'unread' ? 'Unread' :
-                                         selectedStatusFilter === 'in-progress' ? 'In Progress' : 'Completed'}
-                                    </span>
-                                    <ChevronDown class="h-4 w-4" />
-                                </button>
-                                
-                                {#if statusDropdownOpen}
-                                    <div class="absolute top-full left-0 mt-1 bg-white rounded-md shadow-md z-50 w-48 border border-gray-200 py-1">
-                                        <button 
-                                            class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                            on:click|stopPropagation={() => {
-                                                selectedStatusFilter = "all";
-                                                statusDropdownOpen = false;
-                                            }}
-                                        >
-                                            All Statuses
-                                        </button>
-                                        <button 
-                                            class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                            on:click|stopPropagation={() => {
-                                                selectedStatusFilter = "unread";
-                                                statusDropdownOpen = false;
-                                            }}
-                                        >
-                                            Unread
-                                        </button>
-                                        <button 
-                                            class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                            on:click|stopPropagation={() => {
-                                                selectedStatusFilter = "in-progress";
-                                                statusDropdownOpen = false;
-                                            }}
-                                        >
-                                            In Progress
-                                        </button>
-                                        <button 
-                                            class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                            on:click|stopPropagation={() => {
-                                                selectedStatusFilter = "completed";
-                                                statusDropdownOpen = false;
-                                            }}
-                                        >
-                                            Completed
-                                        </button>
-                                    </div>
-                                {/if}
-                            </div>
+                            <!-- Status Filter -->
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger asChild>
+                                    <Button variant="outline" class={`flex items-center gap-2 ${selectedStatusFilter !== 'all' ? 'bg-blue-50 border-blue-200' : ''}`}>
+                                        <Filter class="h-4 w-4" />
+                                        <span>
+                                            {selectedStatusFilter === 'all' ? 'Status' : 
+                                             selectedStatusFilter === 'unread' ? 'Unread' :
+                                             selectedStatusFilter === 'in-progress' ? 'In Progress' : 'Completed'}
+                                        </span>
+                                        <ChevronDown class="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Content class="z-50">
+                                    <DropdownMenu.Item on:click={() => {
+                                        selectedStatusFilter = "all";
+                                        updateFilteredBooks();
+                                    }}>
+                                        <span>All Statuses</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {
+                                        selectedStatusFilter = "unread";
+                                        updateFilteredBooks();
+                                    }}>
+                                        <span>Unread</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {
+                                        selectedStatusFilter = "in-progress";
+                                        updateFilteredBooks();
+                                    }}>
+                                        <span>In Progress</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {
+                                        selectedStatusFilter = "completed";
+                                        updateFilteredBooks();
+                                    }}>
+                                        <span>Completed</span>
+                                    </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Root>
                             
-                            <!-- Tags Filter - Simple Dropdown -->
-                            <div class="relative">
-                                <button 
-                                    class={`flex items-center gap-2 px-3 py-2 rounded-md border ${selectedTagFilter !== 'all' ? 'bg-blue-50 border-blue-200' : 'border-gray-200'}`}
-                                    on:click|stopPropagation={() => tagsDropdownOpen = !tagsDropdownOpen}
-                                >
-                                    <Tag class="h-4 w-4" />
-                                    <span>
-                                        {selectedTagFilter === 'all' ? 'Tags' : selectedTagFilter}
-                                    </span>
-                                    <ChevronDown class="h-4 w-4" />
-                                </button>
-                                
-                                {#if tagsDropdownOpen}
-                                    <div class="absolute top-full left-0 mt-1 bg-white rounded-md shadow-md z-50 w-48 border border-gray-200 py-1 max-h-64 overflow-y-auto">
-                                        <button 
-                                            class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                            on:click|stopPropagation={() => {
-                                                selectedTagFilter = "all";
-                                                tagsDropdownOpen = false;
-                                            }}
-                                        >
-                                            All Tags
-                                        </button>
-                                        
-                                        {#if $uniqueTags.length > 0}
-                                            <div class="h-px bg-gray-200 my-1"></div>
-                                            
-                                            {#each $uniqueTags as tag}
-                                                <button 
-                                                    class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                                    on:click|stopPropagation={() => {
-                                                        selectedTagFilter = tag;
-                                                        tagsDropdownOpen = false;
-                                                    }}
-                                                >
-                                                    {tag}
-                                                </button>
-                                            {/each}
-                                        {/if}
-                                    </div>
-                                {/if}
-                            </div>
+                            <!-- Tags Filter -->
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger asChild>
+                                    <Button variant="outline" class={`flex items-center gap-2 ${selectedTagFilter !== 'all' ? 'bg-blue-50 border-blue-200' : ''}`}>
+                                        <Tag class="h-4 w-4" />
+                                        <span>
+                                            {selectedTagFilter === 'all' ? 'Tags' : selectedTagFilter}
+                                        </span>
+                                        <ChevronDown class="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Content class="z-50">
+                                    <DropdownMenu.Item on:click={() => {
+                                        selectedTagFilter = "all";
+                                        updateFilteredBooks();
+                                    }}>
+                                        <span>All Tags</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Separator />
+                                    {#each $uniqueTags as tag}
+                                        <DropdownMenu.Item on:click={() => {
+                                            selectedTagFilter = tag;
+                                            updateFilteredBooks();
+                                        }}>
+                                            <span>{tag}</span>
+                                        </DropdownMenu.Item>
+                                    {/each}
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Root>
                             
-                            <!-- Sort Control - Simple Dropdown -->
-                            <div class="relative">
-                                <button 
-                                    class="flex items-center gap-2 px-3 py-2 rounded-md border border-gray-200"
-                                    on:click|stopPropagation={() => sortDropdownOpen = !sortDropdownOpen}
-                                >
-                                    <ArrowUpDown class="h-4 w-4" />
-                                    <span>
-                                        {sortOrder === 'newest' ? 'Newest First' : 
-                                         sortOrder === 'oldest' ? 'Oldest First' :
-                                         sortOrder === 'title-asc' ? 'Title (A-Z)' : 
-                                         sortOrder === 'title-desc' ? 'Title (Z-A)' : 'Sort'}
-                                    </span>
-                                    <ChevronDown class="h-4 w-4" />
-                                </button>
-                                
-                                {#if sortDropdownOpen}
-                                    <div class="absolute top-full left-0 mt-1 bg-white rounded-md shadow-md z-50 w-48 border border-gray-200 py-1">
-                                        <button 
-                                            class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                            on:click|stopPropagation={() => {
-                                                sortOrder = "newest";
-                                                sortDropdownOpen = false;
-                                            }}
-                                        >
-                                            Newest First
-                                        </button>
-                                        <button 
-                                            class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                            on:click|stopPropagation={() => {
-                                                sortOrder = "oldest";
-                                                sortDropdownOpen = false;
-                                            }}
-                                        >
-                                            Oldest First
-                                        </button>
-                                        <button 
-                                            class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                            on:click|stopPropagation={() => {
-                                                sortOrder = "title-asc";
-                                                sortDropdownOpen = false;
-                                            }}
-                                        >
-                                            Title (A-Z)
-                                        </button>
-                                        <button 
-                                            class="w-full text-left px-4 py-2 hover:bg-gray-100"
-                                            on:click|stopPropagation={() => {
-                                                sortOrder = "title-desc";
-                                                sortDropdownOpen = false;
-                                            }}
-                                        >
-                                            Title (Z-A)
-                                        </button>
-                                    </div>
-                                {/if}
-                            </div>
+                            <!-- Sort Control -->
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger asChild>
+                                    <Button variant="outline" class="flex items-center gap-2">
+                                        <ArrowUpDown class="h-4 w-4" />
+                                        <span>
+                                            {sortOrder === 'newest' ? 'Newest First' : 
+                                             sortOrder === 'oldest' ? 'Oldest First' :
+                                             sortOrder === 'title-asc' ? 'Title (A-Z)' : 
+                                             sortOrder === 'title-desc' ? 'Title (Z-A)' : 'Sort'}
+                                        </span>
+                                        <ChevronDown class="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Content class="z-50">
+                                    <DropdownMenu.Item on:click={() => {
+                                        sortOrder = "newest";
+                                        updateFilteredBooks();
+                                    }}>
+                                        <span>Newest First</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {
+                                        sortOrder = "oldest";
+                                        updateFilteredBooks();
+                                    }}>
+                                        <span>Oldest First</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {
+                                        sortOrder = "title-asc";
+                                        updateFilteredBooks();
+                                    }}>
+                                        <span>Title (A-Z)</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {
+                                        sortOrder = "title-desc";
+                                        updateFilteredBooks();
+                                    }}>
+                                        <span>Title (Z-A)</span>
+                                    </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Root>
                             
-                            <!-- Reset Filters Button -->
+                            <!-- Reset Filters -->
                             {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all"}
-                                <button 
-                                    class="flex items-center gap-1 px-3 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-md"
-                                    on:click={resetFilters}
-                                >
-                                    <X class="h-3 w-3" />
-                                    <span>Reset</span>
-                                </button>
+                                <Button variant="ghost" class="text-xs" on:click={resetFilters}>
+                                    <X class="h-3 w-3 mr-1" />
+                                    Reset
+                                </Button>
                             {/if}
                         </div>
                     </div>
@@ -1396,60 +1326,40 @@
                                             aria-label={`View details for ${book.title}`}>
                                             <!-- Card Header with Menu -->
                                             <div class="absolute top-3 right-3 z-10" on:click|stopPropagation on:keydown|stopPropagation role="presentation">
-                                                <div class="relative">
-                                                    <button 
-                                                        class="text-gray-400 hover:text-gray-600 p-1 bg-white rounded-full shadow-sm"
-                                                        on:click|stopPropagation={() => menuDropdownOpen = menuDropdownOpen === book.id ? null : book.id}
-                                                    >
-                                                        <Ellipsis class="h-4 w-4" />
-                                                    </button>
-                                                    
-                                                    {#if menuDropdownOpen === book.id}
-                                                        <div class="absolute top-full right-0 mt-1 bg-white rounded-md shadow-md z-50 w-48 border border-gray-200 py-1">
-                                                            <button 
-                                                                class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
-                                                                on:click|stopPropagation={() => {
-                                                                    openViewModal(book);
-                                                                    menuDropdownOpen = null;
-                                                                }}
-                                                            >
-                                                                <Book class="mr-2 h-4 w-4" />
-                                                                <span>View Details</span>
-                                                            </button>
-                                                            <button 
-                                                                class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
-                                                                on:click|stopPropagation={() => {
-                                                                    openEditModal(book);
-                                                                    menuDropdownOpen = null;
-                                                                }}
-                                                            >
-                                                                <Edit class="mr-2 h-4 w-4" />
-                                                                <span>Edit Details</span>
-                                                            </button>
-                                                            <button 
-                                                                class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
-                                                                on:click|stopPropagation={() => {
-                                                                    toggleCompletionStatus(book.id);
-                                                                    menuDropdownOpen = null;
-                                                                }}
-                                                            >
-                                                                <Book class="mr-2 h-4 w-4" />
-                                                                <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
-                                                            </button>
-                                                            <div class="h-px bg-gray-200 my-1"></div>
-                                                            <button 
-                                                                class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-red-500"
-                                                                on:click|stopPropagation={() => {
-                                                                    deletePublication(book.id);
-                                                                    menuDropdownOpen = null;
-                                                                }}
-                                                            >
-                                                                <Trash2 class="mr-2 h-4 w-4" />
-                                                                <span>Delete</span>
-                                                            </button>
-                                                        </div>
-                                                    {/if}
-                                                </div>
+                                                <DropdownMenu.Root>
+                                                    <DropdownMenu.Trigger asChild>
+                                                        <button class="text-gray-400 hover:text-gray-600 p-1 bg-white rounded-full shadow-sm">
+                                                            <Ellipsis class="h-4 w-4" />
+                                                        </button>
+                                                    </DropdownMenu.Trigger>
+                                                    <DropdownMenu.Content class="z-50">
+                                                        <DropdownMenu.Item on:click={() => {
+                                                            openViewModal(book);
+                                                        }}>
+                                                            <Book class="mr-2 h-4 w-4" />
+                                                            <span>View Details</span>
+                                                        </DropdownMenu.Item>
+                                                        <DropdownMenu.Item on:click={() => {
+                                                            openEditModal(book);
+                                                        }}>
+                                                            <Edit class="mr-2 h-4 w-4" />
+                                                            <span>Edit Details</span>
+                                                        </DropdownMenu.Item>
+                                                        <DropdownMenu.Item on:click={() => {
+                                                            toggleCompletionStatus(book.id);
+                                                        }}>
+                                                            <Book class="mr-2 h-4 w-4" />
+                                                            <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
+                                                        </DropdownMenu.Item>
+                                                        <DropdownMenu.Separator />
+                                                        <DropdownMenu.Item class="text-red-500" on:click={() => {
+                                                            deletePublication(book.id);
+                                                        }}>
+                                                            <Trash2 class="mr-2 h-4 w-4" />
+                                                            <span>Delete</span>
+                                                        </DropdownMenu.Item>
+                                                    </DropdownMenu.Content>
+                                                </DropdownMenu.Root>
                                             </div>
                                             
                                             <!-- Card Content -->
@@ -1557,60 +1467,40 @@
                                                         
                                                         <!-- Menu -->
                                                         <div class="flex-shrink-0" on:click|stopPropagation on:keydown|stopPropagation role="presentation">
-                                                            <div class="relative">
-                                                                <button 
-                                                                    class="text-gray-400 hover:text-gray-600 p-1 bg-white rounded-full shadow-sm"
-                                                                    on:click|stopPropagation={() => menuDropdownOpen = menuDropdownOpen === book.id ? null : book.id}
-                                                                >
-                                                                    <Ellipsis class="h-4 w-4" />
-                                                                </button>
-                                                                
-                                                                {#if menuDropdownOpen === book.id}
-                                                                    <div class="absolute top-full right-0 mt-1 bg-white rounded-md shadow-md z-50 w-48 border border-gray-200 py-1">
-                                                                        <button 
-                                                                            class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
-                                                                            on:click|stopPropagation={() => {
-                                                                                openViewModal(book);
-                                                                                menuDropdownOpen = null;
-                                                                            }}
-                                                                        >
-                                                                            <Book class="mr-2 h-4 w-4" />
-                                                                            <span>View Details</span>
-                                                                        </button>
-                                                                        <button 
-                                                                            class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
-                                                                            on:click|stopPropagation={() => {
-                                                                                openEditModal(book);
-                                                                                menuDropdownOpen = null;
-                                                                            }}
-                                                                        >
-                                                                            <Edit class="mr-2 h-4 w-4" />
-                                                                            <span>Edit Details</span>
-                                                                        </button>
-                                                                        <button 
-                                                                            class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center"
-                                                                            on:click|stopPropagation={() => {
-                                                                                toggleCompletionStatus(book.id);
-                                                                                menuDropdownOpen = null;
-                                                                            }}
-                                                                        >
-                                                                            <Book class="mr-2 h-4 w-4" />
-                                                                            <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
-                                                                        </button>
-                                                                        <div class="h-px bg-gray-200 my-1"></div>
-                                                                        <button 
-                                                                            class="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center text-red-500"
-                                                                            on:click|stopPropagation={() => {
-                                                                                deletePublication(book.id);
-                                                                                menuDropdownOpen = null;
-                                                                            }}
-                                                                        >
-                                                                            <Trash2 class="mr-2 h-4 w-4" />
-                                                                            <span>Delete</span>
-                                                                        </button>
-                                                                    </div>
-                                                                {/if}
-                                                            </div>
+                                                            <DropdownMenu.Root>
+                                                                <DropdownMenu.Trigger asChild>
+                                                                    <button class="text-gray-400 hover:text-gray-600 p-1 bg-white rounded-full shadow-sm">
+                                                                        <Ellipsis class="h-4 w-4" />
+                                                                    </button>
+                                                                </DropdownMenu.Trigger>
+                                                                <DropdownMenu.Content class="z-50">
+                                                                    <DropdownMenu.Item on:click={() => {
+                                                                        openViewModal(book);
+                                                                    }}>
+                                                                        <Book class="mr-2 h-4 w-4" />
+                                                                        <span>View Details</span>
+                                                                    </DropdownMenu.Item>
+                                                                    <DropdownMenu.Item on:click={() => {
+                                                                        openEditModal(book);
+                                                                    }}>
+                                                                        <Edit class="mr-2 h-4 w-4" />
+                                                                        <span>Edit Details</span>
+                                                                    </DropdownMenu.Item>
+                                                                    <DropdownMenu.Item on:click={() => {
+                                                                        toggleCompletionStatus(book.id);
+                                                                    }}>
+                                                                        <Book class="mr-2 h-4 w-4" />
+                                                                        <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
+                                                                    </DropdownMenu.Item>
+                                                                    <DropdownMenu.Separator />
+                                                                    <DropdownMenu.Item class="text-red-500" on:click={() => {
+                                                                        deletePublication(book.id);
+                                                                    }}>
+                                                                        <Trash2 class="mr-2 h-4 w-4" />
+                                                                        <span>Delete</span>
+                                                                    </DropdownMenu.Item>
+                                                                </DropdownMenu.Content>
+                                                            </DropdownMenu.Root>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -1623,37 +1513,21 @@
                             <!-- Pagination Controls -->
                             {#if getTotalPages() > 1}
                                 <div class="flex justify-center mt-8 gap-2">
-                                    <button 
-                                        class="px-3 py-1.5 text-sm rounded-md border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed" 
-                                        on:click={goToFirstPage} 
-                                        disabled={currentPage === 1}
-                                    >
+                                    <Button variant="outline" size="sm" on:click={goToFirstPage} disabled={currentPage === 1}>
                                         First
-                                    </button>
-                                    <button 
-                                        class="px-3 py-1.5 text-sm rounded-md border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed" 
-                                        on:click={goToPrevPage} 
-                                        disabled={currentPage === 1}
-                                    >
+                                    </Button>
+                                    <Button variant="outline" size="sm" on:click={goToPrevPage} disabled={currentPage === 1}>
                                         Previous
-                                    </button>
-                                    <span class="px-4 py-1.5 bg-gray-100 rounded-md text-sm">
+                                    </Button>
+                                    <span class="px-4 py-2 bg-gray-100 rounded-md text-sm">
                                         Page {currentPage} of {getTotalPages()}
                                     </span>
-                                    <button 
-                                        class="px-3 py-1.5 text-sm rounded-md border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed" 
-                                        on:click={goToNextPage} 
-                                        disabled={currentPage === getTotalPages()}
-                                    >
+                                    <Button variant="outline" size="sm" on:click={goToNextPage} disabled={currentPage === getTotalPages()}>
                                         Next
-                                    </button>
-                                    <button 
-                                        class="px-3 py-1.5 text-sm rounded-md border border-gray-200 disabled:opacity-50 disabled:cursor-not-allowed" 
-                                        on:click={goToLastPage} 
-                                        disabled={currentPage === getTotalPages()}
-                                    >
+                                    </Button>
+                                    <Button variant="outline" size="sm" on:click={goToLastPage} disabled={currentPage === getTotalPages()}>
                                         Last
-                                    </button>
+                                    </Button>
                                 </div>
                             {/if}
                         {:else}
@@ -1668,16 +1542,16 @@
                                     <p class="text-sm text-gray-500 mt-2 max-w-md">
                                         No publications match your current filters. Try adjusting your search criteria or reset filters.
                                     </p>
-                                    <button class="mt-4 px-4 py-2 border border-gray-200 rounded-md inline-flex items-center gap-2" on:click={resetFilters}>
-                                        <X class="h-4 w-4" /> Reset Filters
-                                    </button>
+                                    <Button class="mt-4" variant="outline" on:click={resetFilters}>
+                                        <X class="h-4 w-4 mr-2" /> Reset Filters
+                                    </Button>
                                 {:else}
                                     <p class="text-sm text-gray-500 mt-2 max-w-md">
                                         Your library is empty. Add your first publication to get started.
                                     </p>
-                                    <button class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md inline-flex items-center gap-2" on:click={openAddModal}>
-                                        <Plus class="h-4 w-4" /> Add Publication
-                                    </button>
+                                    <Button class="mt-4 bg-blue-600 hover:bg-blue-700 text-white" on:click={openAddModal}>
+                                        <Plus class="h-4 w-4 mr-2" /> Add Publication
+                                    </Button>
                                 {/if}
                             </div>
                         {/if}
