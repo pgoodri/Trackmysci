@@ -1,6 +1,6 @@
 <script>
     import { auth, firestore } from "./firebase";
-    import { doc, collection, getDocs, getDoc, addDoc, updateDoc, setDoc, query, where } from "firebase/firestore";
+    import { doc, collection, getDocs, getDoc, addDoc, updateDoc, setDoc, deleteDoc, query, where } from "firebase/firestore";
     import { onAuthStateChanged, signOut } from "firebase/auth";
     import { onMount } from "svelte";
     import { writable, get } from "svelte/store";
@@ -14,37 +14,52 @@
         Filter,
         Search,
         Clock,
-        Calendar
+        Calendar,
+        ArrowUpDown,
+        ChevronDown,
+        X,
+        CheckCircle2,
+        BookmarkIcon,
+        Tag,
+        LayoutGrid,
+        List
     } from "lucide-svelte";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
     import * as Dialog from "$lib/components/ui/dialog";
     import * as Popover from "$lib/components/ui/popover";
     import { Button } from "$lib/components/ui/button";
     import { Separator } from "$lib/components/ui/separator";
+    import { Progress } from "$lib/components/ui/progress";
+    import { Input } from "$lib/components/ui/input";
 
     // State
     let isLoading = true;
     let firstName = "User";
     let lastName = "";
+    let currentPage = 1;
+    let itemsPerPage = 9; // Default for grid view
     
     // Initialize writable stores
     const books = writable([]);
-    const selectedTags = writable([]);
     const uniqueTags = writable([]);
     const filteredBooks = writable([]);
     
-    // Search and filter
-    let searchLibraryQuery = ""; // Renamed to avoid conflict with form searchQuery
-    let activeFilter = "all"; // Options: all, unread, reading, completed
+    // Search and filter states
+    let searchLibraryQuery = "";
+    let selectedStatusFilter = "all";
+    let selectedTagFilter = "all";
+    let sortOrder = "newest"; // Options: newest, oldest, title-asc, title-desc
+    
+    // View mode state
+    let viewMode = localStorage.getItem("library-view-mode") || "grid"; // Options: grid, list
     
     // Create a reactive count to force re-rendering
     const refreshCounter = writable(0);
     
-    // Subscribe to changes in books, selectedTags, or filter criteria
+    // Subscribe to changes in books or filter criteria
     // and update filteredBooks whenever any of these change
     const unsubscribe = [
         books.subscribe(() => updateFilteredBooks()),
-        selectedTags.subscribe(() => updateFilteredBooks()),
         refreshCounter.subscribe(() => updateFilteredBooks())
     ];
     
@@ -52,10 +67,6 @@
     function forceRefresh() {
         refreshCounter.update(n => n + 1);
     }
-    
-    // We'll use the actual tags from the publications instead of hardcoded ones
-    // Just need an "All" option
-    const allTagsOption = "All";
     
     // Modal states
     let viewModalOpen = false;
@@ -133,117 +144,150 @@
         } catch (error) {
             console.error("Error loading books:", error);
             books.set([]);
+        } finally {
+            isLoading = false;
         }
     }
     
-    // Update filtered books based on current filters
+    // Calculate reading progress percentage
+    function calculateProgress(book) {
+        if (!book) return 0;
+        
+        // If the book is marked as completed, return 100%
+        if (book.completed) return 100;
+        
+        // If the book has totalPagesRead property, use it as progress
+        if (book.totalPagesRead) {
+            // If we don't know the total pages, just show a partial progress
+            return Math.min(Math.max(book.totalPagesRead / 10, 1), 99);
+        }
+        
+        // If the book has reading sessions, show minimal progress
+        if (book.readingSessions && book.readingSessions.length > 0) {
+            return 30; // Default "in progress" percentage
+        }
+        
+        return 0; // Unread
+    }
+    
+    // Get status label
+    function getStatusLabel(book) {
+        if (!book) return "Unread";
+        
+        if (book.completed) return "Completed";
+        if (book.readingSessions && book.readingSessions.length > 0) return "In Progress";
+        return "Unread";
+    }
+    
+    // Get status color class
+    function getStatusColorClass(book) {
+        if (!book) return "bg-gray-100 text-gray-600";
+        
+        if (book.completed) return "bg-green-100 text-green-800";
+        if (book.readingSessions && book.readingSessions.length > 0) return "bg-blue-100 text-blue-800";
+        return "bg-gray-100 text-gray-600";
+    }
+    
+    // Update filtered books based on search, status, and tag filters
     function updateFilteredBooks() {
         const allBooks = get(books);
-        const tags = get(selectedTags);
-        
-        console.log("Running filter with tags:", tags);
-        console.log("Books before filtering:", allBooks.length);
         
         if (allBooks.length === 0) {
             filteredBooks.set([]);
             return;
         }
         
-        // If no filters are active and no search query, return all books
-        if (tags.length === 0 && activeFilter === "all" && !searchLibraryQuery) {
-            filteredBooks.set([...allBooks]);
-            console.log("No filters active, returning all books:", allBooks.length);
-            return;
+        // Start with all books
+        let result = [...allBooks];
+        
+        // Apply search filter if provided
+        if (searchLibraryQuery && searchLibraryQuery.trim() !== '') {
+            const searchTerm = searchLibraryQuery.toLowerCase();
+            result = result.filter(book => {
+                if (!book) return false;
+                
+                return (book.title && book.title.toLowerCase().includes(searchTerm)) || 
+                       (book.author && book.author.toLowerCase().includes(searchTerm));
+            });
         }
         
-        const result = allBooks.filter(book => {
-            // Skip null or undefined books
-            if (!book) return false;
-            
-            // Filter by search
-            const matchesSearch = !searchLibraryQuery || 
-                (book.title?.toLowerCase().includes(searchLibraryQuery.toLowerCase()) ||
-                book.author?.toLowerCase().includes(searchLibraryQuery.toLowerCase()));
-                
-            // Filter by tags
-            let matchesTags = true;
-            if (tags.length > 0) {
-                // Only filter by tags if there are selected tags
-                matchesTags = book.tags && Array.isArray(book.tags) && 
-                              book.tags.some(tag => tags.includes(tag));
-                console.log(`Book: ${book.title}, Tags: ${book.tags}, Match? ${matchesTags}`);
-            }
-            
-            // Filter by status
-            let matchesStatus = true;
-            if (activeFilter !== "all") {
-                if (activeFilter === "completed") {
-                    matchesStatus = book.completed === true || book.status === "completed";
-                } else if (activeFilter === "reading") {
-                    matchesStatus = !book.completed && (book.status === "in progress" || 
-                                   (book.readingSessions && book.readingSessions.length > 0));
-                } else if (activeFilter === "unread") {
-                    matchesStatus = !book.completed && 
-                                   (!book.readingSessions || book.readingSessions.length === 0) &&
-                                   (book.status === "unread" || !book.status);
+        // Apply status filter if not "all"
+        if (selectedStatusFilter !== "all") {
+            result = result.filter(book => {
+                if (selectedStatusFilter === "completed") return book.completed;
+                if (selectedStatusFilter === "in-progress") {
+                    return !book.completed && book.readingSessions && book.readingSessions.length > 0;
                 }
-            }
-                
-            return matchesSearch && matchesTags && matchesStatus;
-        });
+                if (selectedStatusFilter === "unread") {
+                    return !book.completed && (!book.readingSessions || book.readingSessions.length === 0);
+                }
+                return true;
+            });
+        }
         
-        // Use a completely new array to ensure reactivity
-        filteredBooks.set([...result]);
-        console.log("Filtered books updated:", result.length, "matches");
-        console.log("Selected tags:", tags);
+        // Apply tag filter if not "all"
+        if (selectedTagFilter !== "all") {
+            result = result.filter(book => {
+                return book.tags && book.tags.includes(selectedTagFilter);
+            });
+        }
         
-        // Force a refresh to ensure UI updates
-        forceRefresh();
+        // Apply sorting
+        result = sortBooks(result, sortOrder);
+        
+        // Update filtered books store
+        filteredBooks.set(result);
+    }
+    
+    // Sort books by different criteria
+    function sortBooks(books, order) {
+        const sortedBooks = [...books];
+        
+        switch (order) {
+            case "newest":
+                return sortedBooks.sort((a, b) => {
+                    return new Date(b.createdAt) - new Date(a.createdAt);
+                });
+            case "oldest":
+                return sortedBooks.sort((a, b) => {
+                    return new Date(a.createdAt) - new Date(b.createdAt);
+                });
+            case "title-asc":
+                return sortedBooks.sort((a, b) => {
+                    return a.title.localeCompare(b.title);
+                });
+            case "title-desc":
+                return sortedBooks.sort((a, b) => {
+                    return b.title.localeCompare(a.title);
+                });
+            default:
+                return sortedBooks;
+        }
     }
     
     // Get filtered books with reactive rendering
     let filteredBooksCache = [];
     $: {
-        // This is a reactive statement that runs whenever refreshCounter changes
-        // or when books or selectedTags change
         updateFilteredBooks();
         filteredBooksCache = get(filteredBooks);
     }
     
-    function getFilteredBooks() {
-        // This will immediately return the cached value
-        // which is updated reactively via the $: statement above
-        return filteredBooksCache.length > 0 ? filteredBooksCache : get(books);
+    // Get current page items for pagination
+    function getPaginatedBooks() {
+        const filtered = filteredBooksCache.length > 0 ? filteredBooksCache : get(books);
+        // Adjust items per page based on view mode
+        const effectiveItemsPerPage = viewMode === 'list' ? 12 : 9;
+        const startIndex = (currentPage - 1) * effectiveItemsPerPage;
+        const endIndex = startIndex + effectiveItemsPerPage;
+        return filtered.slice(startIndex, endIndex);
     }
     
-    // Set active filter by status
-    function setStatusFilter(status) {
-        activeFilter = status;
-        updateFilteredBooks();
-    }
-    
-    // Filter by tag
-    function setTagFilter(tag) {
-        if (tag === "All") {
-            selectedTags.set([]);
-        } else {
-            selectedTags.set([tag]);
-        }
-        // Explicitly trigger the filter update
-        updateFilteredBooks();
-    }
-    
-    // Toggle a tag filter
-    function toggleTag(tag) {
-        selectedTags.update(tags => {
-            if (tags.includes(tag)) {
-                return tags.filter(t => t !== tag);
-            } else {
-                return [...tags, tag];
-            }
-        });
-        // Explicitly trigger the filter update
-        updateFilteredBooks();
+    // Get total pages for pagination
+    function getTotalPages() {
+        const filtered = filteredBooksCache.length > 0 ? filteredBooksCache : get(books);
+        // Adjust items per page based on view mode
+        const effectiveItemsPerPage = viewMode === 'list' ? 12 : 9;
+        return Math.ceil(filtered.length / effectiveItemsPerPage);
     }
     
     // Modal functions
@@ -399,9 +443,6 @@
                 readingLog: updatedLog
             }, { merge: true });
             
-            console.log(`Updated streak to ${streak} days, streakDate: ${streakDate}`);
-            console.log("Updated reading log for timeline chart:", updatedLog);
-            
             // Ensure UI updates properly
             if (viewingPublication && viewingPublication.id === entryId) {
                 viewingPublication.readingSessions = readingSessions;
@@ -478,23 +519,17 @@
         isbn = "";
         isSearching = true;
         
-        console.log("Search query:", searchQuery);
-        
         try {
             if (/^10\.\d{4,9}\/[-._;()\/:A-Za-z0-9]+$/.test(searchQuery)) {
-                console.log("Query looks like a DOI. Calling fetchDOI...");
                 await fetchDOI();
             } else if (/^(97(8|9))?\d{9}(\d|X)$/.test(searchQuery)) {
-                console.log("Query looks like an ISBN. Calling fetchISBN...");
                 isbn = searchQuery;
                 await fetchISBN();
             } else {
-                console.log("Query treated as Title. Calling fetchTitle...");
                 title = searchQuery;
                 await fetchTitle();
             }
             
-            console.log("Search results after fetch:", searchResults);
             if (searchResults.length > 0) {
                 showResults = true;
             } else {
@@ -513,7 +548,6 @@
         try {
             const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(searchQuery)}`);
             const data = await response.json();
-            console.log("CrossRef response:", data);
             if (data.status === "ok") {
                 const fetchedData = data.message;
                 searchResults = [
@@ -538,19 +572,15 @@
     // Fetch publication by ISBN
     async function fetchISBN() {
         try {
-            console.log("Fetching ISBN:", isbn);
             const response = await fetch(
                 `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`
             );
             const data = await response.json();
-            console.log("Raw ISBN API response:", data);
             if (!data[`ISBN:${isbn}`]) {
-                console.warn("No ISBN data found in response.");
                 searchResults = [];
                 return;
             }
             const bookData = data[`ISBN:${isbn}`];
-            console.log("Book Data:", bookData);
             
             searchResults = [
                 {
@@ -561,7 +591,6 @@
                     isbn: isbn
                 }
             ];
-            console.log("Final Search Result (ISBN):", searchResults);
         } catch (error) {
             console.error("Error fetching ISBN data:", error);
             alert("Failed to retrieve ISBN information.");
@@ -571,20 +600,16 @@
     // Fetch publication by title
     async function fetchTitle() {
         try {
-            console.log("Fetching Title for:", title);
             const response = await fetch(
                 `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}`
             );
             const data = await response.json();
-            console.log("Full API Response (Title):", data);
             if (!data.docs || data.docs.length === 0) {
-                console.warn("No title data found.");
                 searchResults = [];
                 return;
             }
             searchResults = await Promise.all(
                 data.docs.slice(0, 10).map(async (doc) => {
-                    console.log("Processing book:", doc);
                     let isbn = doc.isbn ? doc.isbn[0] : null;
                     
                     if (!isbn && doc.key) {
@@ -599,7 +624,6 @@
                     };
                 })
             );
-            console.log("Final Search Results (Title):", searchResults);
         } catch (error) {
             console.error("Error fetching title data:", error);
             alert("Failed to retrieve title information.");
@@ -609,10 +633,8 @@
     // Helper function to get ISBN from editions when not available in main results
     async function fetchISBNFromEditions(workKey) {
         try {
-            console.log("Fetching ISBN from editions for:", workKey);
             const response = await fetch(`https://openlibrary.org${workKey}/editions.json`);
             const data = await response.json();
-            console.log("Editions Data:", data);
             if (data.entries && data.entries.length > 0) {
                 for (const entry of data.entries) {
                     let isbn = entry.isbn_10 ? entry.isbn_10[0] : entry.isbn_13 ? entry.isbn_13[0] : null;
@@ -621,7 +643,6 @@
                     }
                 }
             }
-            console.warn("No ISBN found in editions for:", workKey);
             return { isbn: null };
         } catch (error) {
             console.error("Error fetching ISBN from editions:", error);
@@ -732,7 +753,6 @@
             
             // Save updated publication data
             await updateDoc(entryDocRef, updatedData);
-            console.log(`Updated publication: ${editingPublication.id}`);
             
             // Update UI by reloading library
             await loadUserLibrary(user.uid);
@@ -820,7 +840,6 @@
             modalOpen = false;
             
             // Force UI to update immediately - we do this directly instead of waiting
-            // 1. Add to books store directly
             books.update(currentBooks => {
                 // Create a completely new array to force reactivity
                 const updatedEntry = {
@@ -841,17 +860,16 @@
                 return [updatedEntry, ...currentBooks];
             });
             
-            // 2. Update filtered books directly too
+            // Update filtered books directly too
             filteredBooks.update(filtered => {
                 if (filtered.length === 0) {
                     return get(books);
                 } else {
-                    // Create a completely new array to force reactivity
                     return [...filtered]; 
                 }
             });
             
-            // 3. Force refresh multiple times
+            // Force refresh multiple times
             forceRefresh();
             setTimeout(() => forceRefresh(), 100);
             setTimeout(() => forceRefresh(), 500);
@@ -863,8 +881,50 @@
         }
     }
     
-    function deletePublication() {
-        alert("Delete publication not implemented in this version");
+    async function deletePublication(publicationId) {
+        if (!publicationId) return;
+        
+        // Confirm deletion with user
+        if (!confirm("Are you sure you want to delete this publication? This action cannot be undone.")) {
+            return;
+        }
+        
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
+        }
+        
+        try {
+            const userDocRef = doc(firestore, "users", user.uid);
+            const publicationDocRef = doc(collection(userDocRef, "library"), publicationId);
+            
+            // Delete from Firestore
+            await deleteDoc(publicationDocRef);
+            
+            // Update local state by removing the deleted publication
+            books.update(currentBooks => 
+                currentBooks.filter(book => book.id !== publicationId)
+            );
+            
+            // Also update filtered books if necessary
+            filteredBooks.update(filtered => 
+                filtered.filter(book => book.id !== publicationId)
+            );
+            
+            // Force refresh the UI
+            forceRefresh();
+            
+            // If viewing the deleted publication, close the modal
+            if (viewingPublication && viewingPublication.id === publicationId) {
+                viewModalOpen = false;
+            }
+            
+            console.log(`Publication ${publicationId} successfully deleted.`);
+        } catch (error) {
+            console.error("Error deleting publication:", error.message);
+            alert("Failed to delete publication. Please try again.");
+        }
     }
     
     // Function to show rating dialog
@@ -949,23 +1009,69 @@
         }
     }
     
+    // Navigation functions
+    function goToFirstPage() {
+        currentPage = 1;
+    }
+    
+    function goToLastPage() {
+        currentPage = getTotalPages();
+    }
+    
+    function goToNextPage() {
+        if (currentPage < getTotalPages()) {
+            currentPage++;
+        }
+    }
+    
+    function goToPrevPage() {
+        if (currentPage > 1) {
+            currentPage--;
+        }
+    }
+    
+    // Reset filters
+    function resetFilters() {
+        searchLibraryQuery = "";
+        selectedStatusFilter = "all";
+        selectedTagFilter = "all";
+        updateFilteredBooks();
+    }
+    
+    // Toggle view mode between grid and list
+    function toggleViewMode(mode) {
+        // Only change if mode is different
+        if (viewMode !== mode) {
+            viewMode = mode;
+            localStorage.setItem("library-view-mode", mode);
+            // Reset to first page when switching views to avoid empty pages
+            currentPage = 1;
+        }
+    }
+    
+    // Format date for display
+    function formatDate(dateStr) {
+        if (!dateStr) return "";
+        const date = new Date(dateStr);
+        return date.toLocaleDateString();
+    }
+    
     // Initialize with proper auth state handling
     onMount(() => {
         isLoading = true;
         
+        // Load view mode preference from localStorage or default to grid
+        viewMode = localStorage.getItem("library-view-mode") || "grid";
+        
         // Use Firebase's auth state listener instead of checking currentUser directly
         const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            console.log("Auth state changed. User:", user);
-            
             try {
                 if (user) {
-                    console.log("User authenticated:", user.uid);
                     await Promise.all([
                         fetchUserData(user.uid),
                         loadUserLibrary(user.uid)
                     ]);
                 } else {
-                    console.log("No authenticated user, redirecting to login");
                     window.location.href = "/login";
                 }
             } catch (error) {
@@ -1017,235 +1123,363 @@
             </div>
         </nav>
 
-        <!-- Main Content -->
-        <div class="flex-1 bg-gray-50">
-            <div class="flex justify-between items-center pt-12 px-12">
-                <h2 class="text-3xl font-bold text-gray-800">My Library</h2>
-                
-                <Button class="bg-blue-600 hover:bg-blue-700" on:click={openAddModal}>
-                    <Plus class="w-4 h-4 mr-2" /> Add Publication
-                </Button>
-            </div>
-            
-            <!-- Search Bar -->
-            <div class="flex items-center justify-between px-12 pt-6 gap-4">
-                <div class="relative flex-1">
-                    <input
-                        type="text"
-                        bind:value={searchLibraryQuery}
-                        on:input={updateFilteredBooks}
-                        class="w-full p-3 pl-10 border border-gray-300 rounded-md shadow-sm"
-                        placeholder="Search publications..."
-                    />
-                    <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                        <svg class="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                        </svg>
+        <!-- Main Content Area -->
+        <div class="flex-1 bg-gray-50 pt-8 pb-12 px-6 md:px-12">
+            <!-- Library Card Container -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                <!-- Header Section -->
+                <div class="p-6 border-b border-gray-100">
+                    <h2 class="text-2xl font-bold text-gray-800 mb-6">My Publications</h2>
+                    
+                    <!-- Search and Filter Controls -->
+                    <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
+                        <!-- Search Bar -->
+                        <div class="relative w-full md:w-1/2">
+                            <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                            <Input 
+                                type="text" 
+                                placeholder="Search by title or author..." 
+                                class="pl-10 w-full"
+                                bind:value={searchLibraryQuery}
+                                on:input={updateFilteredBooks}
+                            />
+                        </div>
+                        
+                        <!-- Filter Controls -->
+                        <div class="flex flex-wrap gap-3 items-center w-full md:w-auto">
+                            <!-- View Toggle -->
+                            <div class="flex rounded-md overflow-hidden border border-gray-200">
+                                <button 
+                                    class={`flex items-center gap-1 px-3 py-1.5 text-sm ${viewMode === 'grid' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                    on:click={() => toggleViewMode('grid')}
+                                >
+                                    <LayoutGrid class="h-4 w-4" />
+                                    <span class="md:inline hidden">Grid</span>
+                                </button>
+                                <button 
+                                    class={`flex items-center gap-1 px-3 py-1.5 text-sm ${viewMode === 'list' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                    on:click={() => toggleViewMode('list')}
+                                >
+                                    <List class="h-4 w-4" />
+                                    <span class="md:inline hidden">List</span>
+                                </button>
+                            </div>
+
+                            <!-- Status Filter -->
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger asChild>
+                                    <Button variant="outline" class="flex items-center gap-2">
+                                        <Filter class="h-4 w-4" />
+                                        <span>Status</span>
+                                        <ChevronDown class="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Content>
+                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "all"; updateFilteredBooks();}}>
+                                        <span>All Statuses</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "unread"; updateFilteredBooks();}}>
+                                        <span>Unread</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "in-progress"; updateFilteredBooks();}}>
+                                        <span>In Progress</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {selectedStatusFilter = "completed"; updateFilteredBooks();}}>
+                                        <span>Completed</span>
+                                    </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Root>
+                            
+                            <!-- Tags Filter -->
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger asChild>
+                                    <Button variant="outline" class="flex items-center gap-2">
+                                        <Tag class="h-4 w-4" />
+                                        <span>Tags</span>
+                                        <ChevronDown class="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Content>
+                                    <DropdownMenu.Item on:click={() => {selectedTagFilter = "all"; updateFilteredBooks();}}>
+                                        <span>All Tags</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Separator />
+                                    {#each $uniqueTags as tag}
+                                        <DropdownMenu.Item on:click={() => {selectedTagFilter = tag; updateFilteredBooks();}}>
+                                            <span>{tag}</span>
+                                        </DropdownMenu.Item>
+                                    {/each}
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Root>
+                            
+                            <!-- Sort Control -->
+                            <DropdownMenu.Root>
+                                <DropdownMenu.Trigger asChild>
+                                    <Button variant="outline" class="flex items-center gap-2">
+                                        <ArrowUpDown class="h-4 w-4" />
+                                        <span>Sort</span>
+                                        <ChevronDown class="h-4 w-4" />
+                                    </Button>
+                                </DropdownMenu.Trigger>
+                                <DropdownMenu.Content>
+                                    <DropdownMenu.Item on:click={() => {sortOrder = "newest"; updateFilteredBooks();}}>
+                                        <span>Newest First</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {sortOrder = "oldest"; updateFilteredBooks();}}>
+                                        <span>Oldest First</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {sortOrder = "title-asc"; updateFilteredBooks();}}>
+                                        <span>Title (A-Z)</span>
+                                    </DropdownMenu.Item>
+                                    <DropdownMenu.Item on:click={() => {sortOrder = "title-desc"; updateFilteredBooks();}}>
+                                        <span>Title (Z-A)</span>
+                                    </DropdownMenu.Item>
+                                </DropdownMenu.Content>
+                            </DropdownMenu.Root>
+                            
+                            <!-- Reset Filters -->
+                            {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all"}
+                                <Button variant="ghost" class="text-xs" on:click={resetFilters}>
+                                    <X class="h-3 w-3 mr-1" />
+                                    Reset
+                                </Button>
+                            {/if}
+                        </div>
                     </div>
                 </div>
                 
-                <!-- Status Filter Dropdown -->
-                <div class="relative">
-                    <Popover.Root>
-                        <Popover.Trigger asChild let:builder>
-                            <button
-                                class="px-4 py-3 border border-gray-300 rounded-md shadow-sm flex items-center gap-2"
-                                use:builder
-                            >
-                                <span>{activeFilter === "all" ? "All Publications" : 
-                                      activeFilter === "completed" ? "Completed" : 
-                                      activeFilter === "reading" ? "In Progress" : "Unread"}</span>
-                                <svg class="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-                                    <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
-                                </svg>
-                            </button>
-                        </Popover.Trigger>
-                        
-                        <Popover.Content class="w-[200px] p-2 bg-white rounded-md shadow-md">
-                            <div class="space-y-1">
-                                <button 
-                                    class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded-md {activeFilter === 'all' ? 'bg-blue-50 text-blue-600 font-medium' : ''}"
-                                    on:click={() => setStatusFilter('all')}
-                                >
-                                    All Publications
-                                </button>
-                                <button 
-                                    class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded-md {activeFilter === 'reading' ? 'bg-blue-50 text-blue-600 font-medium' : ''}"
-                                    on:click={() => setStatusFilter('reading')}
-                                >
-                                    In Progress
-                                </button>
-                                <button 
-                                    class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded-md {activeFilter === 'unread' ? 'bg-blue-50 text-blue-600 font-medium' : ''}"
-                                    on:click={() => setStatusFilter('unread')}
-                                >
-                                    Unread
-                                </button>
-                                <button 
-                                    class="w-full text-left px-3 py-2 text-sm hover:bg-gray-100 rounded-md {activeFilter === 'completed' ? 'bg-blue-50 text-blue-600 font-medium' : ''}"
-                                    on:click={() => setStatusFilter('completed')}
-                                >
-                                    Completed
-                                </button>
-                            </div>
-                        </Popover.Content>
-                    </Popover.Root>
-                </div>
-            </div>
-            
-            <!-- Tag Filters -->
-            <div class="px-12 pt-6">
-                <p class="text-sm text-gray-600 mb-2">Filter by tags:</p>
-                <div class="flex flex-wrap gap-2">
-                    <!-- Always show All option first -->
-                    <button 
-                        class="px-3 py-1.5 text-sm rounded-full border {$selectedTags.length === 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}"
-                        on:click={() => setTagFilter(allTagsOption)}
-                    >
-                        {allTagsOption}
-                    </button>
-                    
-                    <!-- Show first 5 tags directly -->
-                    {#each $uniqueTags.slice(0, 5) as tag}
-                        <button 
-                            class="px-3 py-1.5 text-sm rounded-full border {$selectedTags.includes(tag) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}"
-                            on:click={() => setTagFilter(tag)}
-                        >
-                            {tag}
-                        </button>
-                    {/each}
-                    
-                    <!-- If there are more than 5 tags, show a More button -->
-                    {#if $uniqueTags.length > 5}
-                        <Popover.Root>
-                            <Popover.Trigger asChild let:builder>
-                                <button
-                                    class="px-3 py-1.5 text-sm rounded-full border border-gray-300 bg-white text-gray-700 hover:bg-gray-50"
-                                    use:builder
-                                >
-                                    + More
-                                </button>
-                            </Popover.Trigger>
-                            
-                            <Popover.Content class="w-[225px] max-h-[300px] overflow-y-auto p-4 bg-white rounded-md shadow-md">
-                                <div class="space-y-2">
-                                    <h3 class="font-medium mb-2">All Tags</h3>
-                                    {#each $uniqueTags.slice(5) as tag}
-                                        <div class="flex items-center gap-2">
-                                            <input 
-                                                type="checkbox" 
-                                                id={`more-${tag}`} 
-                                                checked={$selectedTags.includes(tag)}
-                                                on:change={() => toggleTag(tag)}
-                                                class="h-4 w-4 text-blue-600"
-                                            />
-                                            <label for={`more-${tag}`} class="text-sm text-gray-700">{tag}</label>
+                <!-- Publications Display - Grid or List View -->
+                <div class="p-6">
+                    {#key [$refreshCounter, viewMode]}
+                        {#if getPaginatedBooks().length > 0}
+                            {#if viewMode === 'grid'}
+                                <!-- Display as Grid of Cards -->
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                                    {#each getPaginatedBooks() as book}
+                                        <div 
+                                            class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden h-64 flex flex-col relative cursor-pointer hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                            on:click={() => openViewModal(book)}
+                                            on:keydown={e => e.key === 'Enter' && openViewModal(book)}
+                                            tabindex="0"
+                                            role="button"
+                                            aria-label={`View details for ${book.title}`}>
+                                            <!-- Card Header with Menu -->
+                                            <div class="absolute top-3 right-3 z-10" on:click|stopPropagation on:keydown|stopPropagation role="presentation">
+                                                <DropdownMenu.Root>
+                                                    <DropdownMenu.Trigger asChild>
+                                                        <button class="text-gray-400 hover:text-gray-600 p-1 bg-white rounded-full shadow-sm">
+                                                            <Ellipsis class="h-4 w-4" />
+                                                        </button>
+                                                    </DropdownMenu.Trigger>
+                                                    <DropdownMenu.Content>
+                                                        <DropdownMenu.Item on:click={() => openViewModal(book)}>
+                                                            <Book class="mr-2 h-4 w-4" />
+                                                            <span>View Details</span>
+                                                        </DropdownMenu.Item>
+                                                        <DropdownMenu.Item on:click={() => openEditModal(book)}>
+                                                            <Edit class="mr-2 h-4 w-4" />
+                                                            <span>Edit Details</span>
+                                                        </DropdownMenu.Item>
+                                                        <DropdownMenu.Item on:click={() => toggleCompletionStatus(book.id)}>
+                                                            <Book class="mr-2 h-4 w-4" />
+                                                            <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
+                                                        </DropdownMenu.Item>
+                                                        <DropdownMenu.Separator />
+                                                        <DropdownMenu.Item class="text-red-500" on:click={() => deletePublication(book.id)}>
+                                                            <Trash2 class="mr-2 h-4 w-4" />
+                                                            <span>Delete</span>
+                                                        </DropdownMenu.Item>
+                                                    </DropdownMenu.Content>
+                                                </DropdownMenu.Root>
+                                            </div>
+                                            
+                                            <!-- Card Content -->
+                                            <div class="p-4 flex-1 flex flex-col">
+                                                <!-- Status Badge -->
+                                                <div class="mb-3">
+                                                    <span class={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                                                        book.completed ? "bg-green-100 text-green-800" : 
+                                                        book.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
+                                                        "bg-gray-100 text-gray-800"
+                                                    }`}>
+                                                        {getStatusLabel(book)}
+                                                    </span>
+                                                </div>
+                                                
+                                                <!-- Title and Author -->
+                                                <div class="flex-1">
+                                                    <h3 class="text-lg font-semibold line-clamp-2 hover:text-blue-600">
+                                                        {book.title}
+                                                    </h3>
+                                                    <p class="text-sm text-gray-600 mt-1 line-clamp-1">{book.author}</p>
+                                                    
+                                                    <!-- Tags -->
+                                                    <div class="mt-2 min-h-[1.5rem]">
+                                                        {#if book.tags && book.tags.length > 0}
+                                                            <div class="flex flex-wrap gap-1.5">
+                                                                {#each book.tags.slice(0, 3) as tag}
+                                                                    <span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-800 rounded-full">
+                                                                        {tag}
+                                                                    </span>
+                                                                {/each}
+                                                                {#if book.tags.length > 3}
+                                                                    <span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
+                                                                        +{book.tags.length - 3} more
+                                                                    </span>
+                                                                {/if}
+                                                            </div>
+                                                        {/if}
+                                                    </div>
+                                                </div>
+                                                
+                                                <!-- Pages Read Footer -->
+                                                <div class="mt-4 pt-3 border-t border-gray-100">
+                                                    <div class="text-sm text-gray-600">
+                                                        {book.totalPagesRead || 0} pages read
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
                                     {/each}
                                 </div>
-                            </Popover.Content>
-                        </Popover.Root>
-                    {/if}
-                </div>
-            </div>
-
-            <!-- Publications List -->
-            <div class="px-12 py-6">
-                <!-- This whole block is now driven by Svelte's reactivity system -->
-                {#key $refreshCounter}
-                {#if getFilteredBooks().length > 0}
-                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-                        <!-- List items -->
-                        {#each getFilteredBooks() as book}
-                            <div class="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors" on:click={() => openViewModal(book)}>
-                                <div class="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
-                                    <!-- Book Title and Author -->
-                                    <div class="flex-1">
-                                        <h3 class="font-medium text-lg text-gray-800">{book.title}</h3>
-                                        <p class="text-sm text-gray-600 mt-1">{book.author}</p>
-                                        
-                                        <!-- Tags -->
-                                        {#if book.tags && book.tags.length > 0}
-                                            <div class="flex flex-wrap gap-1.5 mt-2">
-                                                {#each book.tags.slice(0, 3) as tag}
-                                                    <span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-800 rounded-full">
-                                                        {tag}
-                                                    </span>
-                                                {/each}
-                                                {#if book.tags.length > 3}
-                                                    <span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
-                                                        +{book.tags.length - 3} more
-                                                    </span>
-                                                {/if}
-                                            </div>
-                                        {/if}
-                                    </div>
-                                    
-                                    <!-- Reading Stats -->
-                                    <div class="flex flex-row sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
-                                        <div class="flex items-center gap-2">
-                                            <span class={`px-2 py-1 text-xs rounded-full ${
-                                                book.completed ? "bg-green-100 text-green-800" : 
-                                                book.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
-                                                "bg-gray-100 text-gray-800"
-                                            }`}>
-                                                {book.status || (book.completed ? "Completed" : book.readingSessions?.length > 0 ? "In Progress" : "Unread")}
-                                            </span>
-                                            
-                                            {#if book.readingSessions && book.readingSessions.length > 0}
-                                                <span class="text-xs text-gray-500">
-                                                    {book.totalPagesRead || 0} pages read
-                                                </span>
+                            {:else}
+                                <!-- Display as List -->
+                                <div class="border border-gray-200 rounded-lg overflow-hidden bg-white">
+                                    {#each getPaginatedBooks() as book, index}
+                                        <div 
+                                            class="relative hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:bg-blue-50" 
+                                            on:click={() => openViewModal(book)}
+                                            on:keydown={e => e.key === 'Enter' && openViewModal(book)}
+                                            tabindex="0"
+                                            role="button"
+                                            aria-label={`View details for ${book.title}`}>
+                                            {#if index > 0}
+                                                <div class="absolute left-0 right-0 top-0 h-px bg-gray-100"></div>
                                             {/if}
+                                            <div class="p-4">
+                                                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                                    <div class="flex-1">
+                                                        <!-- Title Row with Status Badge -->
+                                                        <div class="flex items-center gap-2 mb-1.5">
+                                                            <h3 class="text-lg font-semibold text-gray-900 line-clamp-1 hover:text-blue-600">
+                                                                {book.title}
+                                                            </h3>
+                                                            <span class={`inline-block px-2 py-0.5 text-xs rounded-full ${
+                                                                book.completed ? "bg-green-100 text-green-800" : 
+                                                                book.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
+                                                                "bg-gray-100 text-gray-800"
+                                                            }`}>
+                                                                {getStatusLabel(book)}
+                                                            </span>
+                                                        </div>
+                                                        
+                                                        <!-- Author -->
+                                                        <p class="text-sm text-gray-600">{book.author}</p>
+                                                        
+                                                        <!-- Tags -->
+                                                        <div class="mt-2 min-h-[1.5rem]">
+                                                            {#if book.tags && book.tags.length > 0}
+                                                                <div class="flex flex-wrap gap-1.5">
+                                                                    {#each book.tags as tag}
+                                                                        <span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-800 rounded-full">
+                                                                            {tag}
+                                                                        </span>
+                                                                    {/each}
+                                                                </div>
+                                                            {/if}
+                                                        </div>
+                                                    </div>
+                                                    
+                                                    <!-- Right Side: Pages and Menu -->
+                                                    <div class="flex items-center gap-4 self-start sm:self-center ml-auto">
+                                                        <div class="text-sm font-medium text-gray-600 whitespace-nowrap">
+                                                            {book.totalPagesRead || 0} pages read
+                                                        </div>
+                                                        
+                                                        <!-- Menu -->
+                                                        <div class="flex-shrink-0" on:click|stopPropagation on:keydown|stopPropagation role="presentation">
+                                                            <DropdownMenu.Root>
+                                                                <DropdownMenu.Trigger asChild>
+                                                                    <button class="text-gray-400 hover:text-gray-600 p-1 bg-white rounded-full shadow-sm">
+                                                                        <Ellipsis class="h-4 w-4" />
+                                                                    </button>
+                                                                </DropdownMenu.Trigger>
+                                                                <DropdownMenu.Content>
+                                                                    <DropdownMenu.Item on:click={() => openViewModal(book)}>
+                                                                        <Book class="mr-2 h-4 w-4" />
+                                                                        <span>View Details</span>
+                                                                    </DropdownMenu.Item>
+                                                                    <DropdownMenu.Item on:click={() => openEditModal(book)}>
+                                                                        <Edit class="mr-2 h-4 w-4" />
+                                                                        <span>Edit Details</span>
+                                                                    </DropdownMenu.Item>
+                                                                    <DropdownMenu.Item on:click={() => toggleCompletionStatus(book.id)}>
+                                                                        <Book class="mr-2 h-4 w-4" />
+                                                                        <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
+                                                                    </DropdownMenu.Item>
+                                                                    <DropdownMenu.Separator />
+                                                                    <DropdownMenu.Item class="text-red-500" on:click={() => deletePublication(book.id)}>
+                                                                        <Trash2 class="mr-2 h-4 w-4" />
+                                                                        <span>Delete</span>
+                                                                    </DropdownMenu.Item>
+                                                                </DropdownMenu.Content>
+                                                            </DropdownMenu.Root>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
                                         </div>
-                                        
-                                        <div class="flex items-center gap-2">
-                                            <button class="text-sm text-blue-600 hover:text-blue-800" on:click={(e) => {e.stopPropagation(); openViewModal(book);}}>
-                                                View
-                                            </button>
-                                            
-                                            <DropdownMenu.Root>
-                                                <DropdownMenu.Trigger asChild>
-                                                    <button class="text-gray-400 hover:text-gray-600" on:click={(e) => e.stopPropagation()}>
-                                                        <Ellipsis class="h-5 w-5" />
-                                                    </button>
-                                                </DropdownMenu.Trigger>
-                                                <DropdownMenu.Content>
-                                                    <DropdownMenu.Item on:click={() => openViewModal(book)}>
-                                                        <Book class="mr-2 h-4 w-4" />
-                                                        <span>View Details</span>
-                                                    </DropdownMenu.Item>
-                                                    <DropdownMenu.Item on:click={() => openEditModal(book)}>
-                                                        <Edit class="mr-2 h-4 w-4" />
-                                                        <span>Edit Details</span>
-                                                    </DropdownMenu.Item>
-                                                    <DropdownMenu.Item on:click={() => toggleCompletionStatus(book.id)}>
-                                                        <Book class="mr-2 h-4 w-4" />
-                                                        <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
-                                                    </DropdownMenu.Item>
-                                                    <DropdownMenu.Separator />
-                                                    <DropdownMenu.Item class="text-red-500" on:click={() => deletePublication(book.id)}>
-                                                        <Trash2 class="mr-2 h-4 w-4" />
-                                                        <span>Delete</span>
-                                                    </DropdownMenu.Item>
-                                                </DropdownMenu.Content>
-                                            </DropdownMenu.Root>
-                                        </div>
-                                    </div>
+                                    {/each}
                                 </div>
+                            {/if}
+                            
+                            <!-- Pagination Controls -->
+                            {#if getTotalPages() > 1}
+                                <div class="flex justify-center mt-8 gap-2">
+                                    <Button variant="outline" size="sm" on:click={goToFirstPage} disabled={currentPage === 1}>
+                                        First
+                                    </Button>
+                                    <Button variant="outline" size="sm" on:click={goToPrevPage} disabled={currentPage === 1}>
+                                        Previous
+                                    </Button>
+                                    <span class="px-4 py-2 bg-gray-100 rounded-md text-sm">
+                                        Page {currentPage} of {getTotalPages()}
+                                    </span>
+                                    <Button variant="outline" size="sm" on:click={goToNextPage} disabled={currentPage === getTotalPages()}>
+                                        Next
+                                    </Button>
+                                    <Button variant="outline" size="sm" on:click={goToLastPage} disabled={currentPage === getTotalPages()}>
+                                        Last
+                                    </Button>
+                                </div>
+                            {/if}
+                        {:else}
+                            <!-- Empty State -->
+                            <div class="flex flex-col items-center justify-center py-12 text-center">
+                                <div class="size-16 rounded-full bg-blue-50 flex items-center justify-center mb-4">
+                                    <Book class="h-8 w-8 text-blue-500" />
+                                </div>
+                                <h3 class="text-lg font-medium text-gray-800">No publications found</h3>
+                                
+                                {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all"}
+                                    <p class="text-sm text-gray-500 mt-2 max-w-md">
+                                        No publications match your current filters. Try adjusting your search criteria or reset filters.
+                                    </p>
+                                    <Button class="mt-4" variant="outline" on:click={resetFilters}>
+                                        <X class="h-4 w-4 mr-2" /> Reset Filters
+                                    </Button>
+                                {:else}
+                                    <p class="text-sm text-gray-500 mt-2 max-w-md">
+                                        Your library is empty. Add your first publication to get started.
+                                    </p>
+                                    <Button class="mt-4 bg-blue-600 hover:bg-blue-700 text-white" on:click={openAddModal}>
+                                        <Plus class="h-4 w-4 mr-2" /> Add Publication
+                                    </Button>
+                                {/if}
                             </div>
-                        {/each}
-                    </div>
-                {:else}
-                    <div class="flex flex-col items-center justify-center py-12 text-center bg-white rounded-xl shadow-sm border border-gray-100">
-                        <p class="text-lg font-medium text-gray-500">No publications found.</p>
-                        <p class="text-sm text-gray-400 mt-2">Try adjusting your search or filter criteria.</p>
-                        <button class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" on:click={openAddModal}>
-                            Add Your First Publication
-                        </button>
-                    </div>
-                {/if}
-                {/key}
+                        {/if}
+                    {/key}
+                </div>
             </div>
         </div>
     </div>
@@ -1576,7 +1810,7 @@
             <div class="mb-6 bg-neutral-50 border border-neutral-300 rounded-md shadow-sm max-h-64 overflow-y-auto">
               <ul class="divide-y divide-neutral-200">
                 {#each searchResults as result}
-                  <li class="p-3 hover:bg-neutral-100 cursor-pointer" on:click={() => selectResult(result)}>
+                  <li class="p-3 hover:bg-neutral-100 cursor-pointer" on:click={() => selectResult(result)} on:keydown={e => e.key === 'Enter' && selectResult(result)} tabindex="0" role="button">
                     <div class="font-medium">{result.title}</div>
                     <div class="text-sm text-neutral-600">{result.author}</div>
                     {#if result.isbn}
