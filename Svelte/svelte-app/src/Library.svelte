@@ -144,17 +144,33 @@
         console.log("Running filter with tags:", tags);
         console.log("Books before filtering:", allBooks.length);
         
+        if (allBooks.length === 0) {
+            filteredBooks.set([]);
+            return;
+        }
+        
+        // If no filters are active and no search query, return all books
+        if (tags.length === 0 && activeFilter === "all" && !searchLibraryQuery) {
+            filteredBooks.set([...allBooks]);
+            console.log("No filters active, returning all books:", allBooks.length);
+            return;
+        }
+        
         const result = allBooks.filter(book => {
+            // Skip null or undefined books
+            if (!book) return false;
+            
             // Filter by search
             const matchesSearch = !searchLibraryQuery || 
-                book.title?.toLowerCase().includes(searchLibraryQuery.toLowerCase()) ||
-                book.author?.toLowerCase().includes(searchLibraryQuery.toLowerCase());
+                (book.title?.toLowerCase().includes(searchLibraryQuery.toLowerCase()) ||
+                book.author?.toLowerCase().includes(searchLibraryQuery.toLowerCase()));
                 
             // Filter by tags
             let matchesTags = true;
             if (tags.length > 0) {
                 // Only filter by tags if there are selected tags
-                matchesTags = book.tags && Array.isArray(book.tags) && book.tags.some(tag => tags.includes(tag));
+                matchesTags = book.tags && Array.isArray(book.tags) && 
+                              book.tags.some(tag => tags.includes(tag));
                 console.log(`Book: ${book.title}, Tags: ${book.tags}, Match? ${matchesTags}`);
             }
             
@@ -176,22 +192,28 @@
             return matchesSearch && matchesTags && matchesStatus;
         });
         
-        // Use the spread operator for books to ensure reactivity
+        // Use a completely new array to ensure reactivity
         filteredBooks.set([...result]);
         console.log("Filtered books updated:", result.length, "matches");
         console.log("Selected tags:", tags);
+        
+        // Force a refresh to ensure UI updates
+        forceRefresh();
     }
     
-    // Get filtered books (just returns the current value of the store)
+    // Get filtered books with reactive rendering
+    let filteredBooksCache = [];
+    $: {
+        // This is a reactive statement that runs whenever refreshCounter changes
+        // or when books or selectedTags change
+        updateFilteredBooks();
+        filteredBooksCache = get(filteredBooks);
+    }
+    
     function getFilteredBooks() {
-        // Make sure we have filtered books
-        const filtered = get(filteredBooks);
-        if (filtered.length === 0 && get(books).length > 0) {
-            // Force refresh if we have books but no filtered books
-            updateFilteredBooks();
-            return get(filteredBooks);
-        }
-        return filtered;
+        // This will immediately return the cached value
+        // which is updated reactively via the $: statement above
+        return filteredBooksCache.length > 0 ? filteredBooksCache : get(books);
     }
     
     // Set active filter by status
@@ -797,10 +819,42 @@
             resetFields();
             modalOpen = false;
             
-            // Force UI to update
-            forceRefresh();
+            // Force UI to update immediately - we do this directly instead of waiting
+            // 1. Add to books store directly
+            books.update(currentBooks => {
+                // Create a completely new array to force reactivity
+                const updatedEntry = {
+                    id: docRef.id,
+                    title: newEntry.title,
+                    author: newEntry.author,
+                    isbn: newEntry.isbn,
+                    comment: newEntry.comment,
+                    tags: newEntry.tags,
+                    readingSessions: newEntry.readingSessions || [],
+                    status: newEntry.status || "unread",
+                    completed: newEntry.completed || false,
+                    totalPagesRead: newEntry.totalPagesRead || 0,
+                    userId: user.uid,
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                };
+                return [updatedEntry, ...currentBooks];
+            });
             
-            alert("Publication added successfully!");
+            // 2. Update filtered books directly too
+            filteredBooks.update(filtered => {
+                if (filtered.length === 0) {
+                    return get(books);
+                } else {
+                    // Create a completely new array to force reactivity
+                    return [...filtered]; 
+                }
+            });
+            
+            // 3. Force refresh multiple times
+            forceRefresh();
+            setTimeout(() => forceRefresh(), 100);
+            setTimeout(() => forceRefresh(), 500);
             return docRef.id; // Return the document ID so we can use it
         } catch (error) {
             console.error("Error saving entry:", error);
@@ -1097,7 +1151,7 @@
 
             <!-- Publications List -->
             <div class="px-12 py-6">
-                <!-- Force reactivity with a reactive value -->
+                <!-- This whole block is now driven by Svelte's reactivity system -->
                 {#key $refreshCounter}
                 {#if getFilteredBooks().length > 0}
                     <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
