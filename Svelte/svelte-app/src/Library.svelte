@@ -199,15 +199,151 @@
         logReadingModalOpen = true;
     }
 
-    // Function to save reading log
+    // Function to save reading log via modal
     async function saveReadingLog() {
         if (!logReadingPublication || !logReadingPagesRead) {
             alert("Please select a publication and enter pages read");
             return;
         }
         
-        alert("Logging functionality will be implemented in future version");
-        logReadingModalOpen = false;
+        const publication = get(books).find(p => p.id === logReadingPublication);
+        if (publication) {
+            await updateProgress(
+                logReadingPublication, 
+                logReadingPagesRead, 
+                logReadingComment,
+                logReadingDuration
+            );
+            logReadingModalOpen = false;
+        }
+    }
+    
+    // Function to handle publication selection in the log reading modal
+    function handlePublicationSelection(pubId) {
+        logReadingPublication = pubId;
+        logReadingPagesRead = 0; // Reset pages read since this is a new session
+        logReadingDuration = 0; // Reset duration
+    }
+    
+    // Update reading progress for a publication
+    async function updateProgress(entryId, pagesRead, comment, duration = 0) {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
+        }
+        
+        try {
+            const userDocRef = doc(firestore, "users", user.uid);
+            const entryDocRef = doc(collection(userDocRef, "library"), entryId);
+            const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
+            
+            const entryDocSnap = await getDoc(entryDocRef);
+            const summaryDocSnap = await getDoc(summaryDocRef);
+            
+            let readingSessions = [];
+            let streak = 0;
+            let streakDate = null;
+            let today = new Date().toISOString().split("T")[0]; // Get current date (YYYY-MM-DD)
+            let readingLog = [];
+            
+            if (entryDocSnap.exists()) {
+                const entryData = entryDocSnap.data();
+                readingSessions = entryData.readingSessions || [];
+            }
+            
+            if (summaryDocSnap.exists()) {
+                const summaryData = summaryDocSnap.data();
+                streak = summaryData.streak || 0;
+                streakDate = summaryData.streakDate || null;
+                readingLog = summaryData.readingLog || [];
+            }
+            
+            // Create reading session entry
+            const sessionEntry = {
+                dateTitle: new Date().toLocaleDateString(),
+                pagesRead: pagesRead,
+                notes: comment || "",
+                duration: duration,
+                date: new Date().toISOString()
+            };
+            
+            readingSessions.push(sessionEntry);
+            
+            // Streak Logic
+            if (!streakDate) {
+                streak = 1;
+                streakDate = today;
+            } else {
+                const lastLogDate = new Date(streakDate);
+                const timeDiff = Math.floor((new Date(today) - lastLogDate) / (1000 * 60 * 60 * 24));
+                
+                if (timeDiff === 1) {
+                    streak += 1;
+                    streakDate = today;
+                } else if (timeDiff > 1) {
+                    streak = 1; // Reset to 1 since user is reading today
+                    streakDate = today;
+                }
+            }
+            
+            // Update Reading Log (for Timeline Chart)
+            let updatedLog = readingLog.map(log => ({ ...log })); // Clone array to avoid mutation
+            
+            // Check if today already exists in log, update instead of adding duplicate
+            let todayLogIndex = updatedLog.findIndex(log => log.date === today);
+            if (todayLogIndex !== -1) {
+                updatedLog[todayLogIndex].pagesRead += pagesRead; // Aggregate pages read for today
+            } else {
+                updatedLog.unshift({ date: today, pagesRead }); // Add new entry for today
+            }
+            
+            // Ensure we only keep logs within 90 days
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - 90);
+            
+            // Remove outdated logs from Firestore
+            updatedLog = updatedLog.filter(log => new Date(log.date) >= cutoffDate);
+            
+            // Update publication status if not already marked as complete
+            const entryData = entryDocSnap.data();
+            let status = entryData.status || "unread";
+            if (status === "unread" && !entryData.completed) {
+                status = "in progress";
+            }
+            
+            // Update Firestore
+            await updateDoc(entryDocRef, {
+                readingSessions: readingSessions,
+                updatedAt: new Date(),
+                totalPagesRead: (entryData.totalPagesRead || 0) + pagesRead,
+                status: status
+            });
+            
+            await setDoc(summaryDocRef, {
+                mostRecent: entryDocSnap.data().title,
+                updatedAt: new Date(),
+                streak: streak,
+                streakDate: streakDate,
+                readingLog: updatedLog
+            }, { merge: true });
+            
+            console.log(`Updated streak to ${streak} days, streakDate: ${streakDate}`);
+            console.log("Updated reading log for timeline chart:", updatedLog);
+            
+            // Ensure UI updates properly
+            if (viewingPublication && viewingPublication.id === entryId) {
+                viewingPublication.readingSessions = readingSessions;
+                viewingPublication.totalPagesRead = (viewingPublication.totalPagesRead || 0) + pagesRead;
+                viewingPublication.status = status;
+            }
+            
+            // Reload library data to update UI
+            await loadUserLibrary(user.uid);
+            
+        } catch (error) {
+            console.error("Error updating progress:", error.message);
+        }
     }
     
     function logout() {
@@ -1007,6 +1143,7 @@
                             id="publication-select" 
                             class="w-full p-2 border border-neutral-300 rounded"
                             bind:value={logReadingPublication}
+                            on:change={() => handlePublicationSelection(logReadingPublication)}
                         >
                             {#if get(books).length === 0}
                                 <option value="" disabled>No publications available</option>
