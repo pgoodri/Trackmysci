@@ -1,1141 +1,464 @@
 <script>
     import { auth, firestore } from "./firebase";
-    import { getDoc, doc, collection, query, where, getDocs, deleteDoc, updateDoc, setDoc } from "firebase/firestore";
-    import { onAuthStateChanged } from "firebase/auth";
+    import { doc, collection, getDocs, getDoc } from "firebase/firestore";
+    import { onAuthStateChanged, signOut } from "firebase/auth";
     import { onMount } from "svelte";
-    import { writable } from "svelte/store";
-    import { LogOut, Gauge, Library, ChevronsUpDown, Edit, Trash2, Ellipsis, SquarePen, FilePlus2, BookOpen, Book, Calendar, Search } from "lucide-svelte";
-    import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-    import * as Popover from "$lib/components/ui/popover";
-    import * as Dialog from "$lib/components/ui/dialog";
-    import { Button } from "$lib/components/ui/button";
-    import { Separator } from "$lib/components/ui/separator";
-    import { Progress } from "$lib/components/ui/progress";
-    import { signOut } from "firebase/auth";
-    import { get } from "svelte/store"; 
-
-    import {
-      Filter
+    import { writable, get } from "svelte/store";
+    import { 
+        Plus, 
+        BookOpen, 
+        Edit, 
+        Trash2, 
+        Ellipsis, 
+        Book, 
+        Filter 
     } from "lucide-svelte";
-    
+    import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+    import * as Dialog from "$lib/components/ui/dialog";
+    import * as Popover from "$lib/components/ui/popover";
+    import { Button } from "$lib/components/ui/button";
 
-    let firstName = "";
+    // State
+    let isLoading = true;
+    let firstName = "User";
     let lastName = "";
-    let authReady = false;
-    let libraryList = writable([]);
+    
+    // Initialize writable stores
+    const books = writable([]);
+    const selectedTags = writable([]);
+    const uniqueTags = writable([]);
+    
+    // Search and filter
     let searchQuery = "";
-
-    let selectedTags = writable([]);
-    let uniqueTags = writable([]);
-
-    // View Modal variables
+    
+    // Modal states
     let viewModalOpen = false;
     let viewingPublication = null;
-
-    // Log Reading variables
     let logReadingModalOpen = false;
-    let logReadingPublication = null;
-    let logReadingNewPage = 0;
-    let logReadingComment = "";
-
-    // Rating variables
-    let ratingDialogOpen = false;
-    let currentRating = 0;
-    let publicationToRate = null;
-    let publicationTitleToRate = "";
-
-    // Edit Modal variables
-    let modalOpen = false;
-    let editMode = false;
-    let editingPublication = null;
-    let title = "";
-    let author = "";
-    let isbn = "";
-    let pageStart = 1;
-    let pageEnd = 1;
-    let currentPage = 1;
-    let tagInput = "";
-    let tags = [];
-    let comment = "";
-
-    // For the search functionality in the Edit Publication dialog
-    let searchResults = [];
-    let showResults = false;
-
+    
+    // Load user data
     async function fetchUserData(uid) {
         try {
             const userDoc = await getDoc(doc(firestore, "users", uid));
             if (userDoc.exists()) {
                 const userData = userDoc.data();
-                firstName = userData.firstName || "";
+                firstName = userData.firstName || "User";
                 lastName = userData.lastName || "";
             }
         } catch (error) {
             console.error("Error fetching user data:", error);
         }
     }
-
+    
+    // Load books
     async function loadUserLibrary(uid) {
-    try {
-        const userDocRef = doc(firestore, "users", uid);
-        const libraryRef = collection(userDocRef, "library");
-        const q = query(libraryRef, where("userId", "==", uid));
-        const querySnapshot = await getDocs(q);
-
-        const books = querySnapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        }));
-
-        // Fetch ratings from Firestore instead of localStorage
-        const ratingsDocRef = doc(userDocRef, "charts", "ratings");
-        const ratingsSnap = await getDoc(ratingsDocRef);
-        const ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
-
-        // Attach ratings to each book
-        books.forEach(book => {
-            if (book.rating && ratingsData[book.rating]) {
-                book.rating = ratingsData[book.rating];
+        try {
+            const userDocRef = doc(firestore, "users", uid);
+            const libraryRef = collection(userDocRef, "library");
+            const querySnapshot = await getDocs(libraryRef);
+            
+            const loadedBooks = querySnapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            
+            // Update store
+            books.set(loadedBooks);
+            
+            // Extract tags
+            const allTags = new Set();
+            loadedBooks.forEach(book => {
+                if (book.tags && Array.isArray(book.tags)) {
+                    book.tags.forEach(tag => allTags.add(tag));
+                }
+            });
+            uniqueTags.set([...allTags]);
+        } catch (error) {
+            console.error("Error loading books:", error);
+            books.set([]);
+        }
+    }
+    
+    // Filter books
+    function getFilteredBooks() {
+        const allBooks = get(books);
+        const tags = get(selectedTags);
+        
+        return allBooks.filter(book => {
+            // Filter by search
+            const matchesSearch = !searchQuery || 
+                book.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                book.author?.toLowerCase().includes(searchQuery.toLowerCase());
+                
+            // Filter by tags
+            const matchesTags = tags.length === 0 || 
+                (book.tags && book.tags.some(tag => tags.includes(tag)));
+                
+            return matchesSearch && matchesTags;
+        });
+    }
+    
+    // Toggle a tag filter
+    function toggleTag(tag) {
+        selectedTags.update(tags => {
+            if (tags.includes(tag)) {
+                return tags.filter(t => t !== tag);
             } else {
-                book.rating = 0; // Default to zero if no rating exists
+                return [...tags, tag];
             }
         });
-
-        // Update the library list store
-        libraryList.set(books);
-        extractUniqueTags();
-        console.log("📚 Library loaded successfully with ratings from Firestore.");
-    } catch (error) {
-        console.error("❌ Error fetching library from Firestore:", error.message);
     }
-}
-
-
-function extractUniqueTags() {
-    let allTags = new Set();
-    const books = get(libraryList); // ✅ Correctly access the store
-
-    books.forEach(item => {
-        if (item.tags) {
-            item.tags.forEach(tag => allTags.add(tag));
-        }
-    });
-
-    uniqueTags.set([...allTags]); // ✅ Update the store with unique tags
-    console.log("Extracted Tags:", [...allTags]); // Debugging log
-}
-
-
-
-function toggleTag(tag) {
-    selectedTags.update(tags => {
-        let newTags;
-        if (tags.includes(tag)) {
-            newTags = tags.filter(t => t !== tag); // Remove tag if already selected
-        } else {
-            newTags = [...tags, tag]; // Add tag if not selected
-        }
-        console.log("Updated Selected Tags:", newTags); // Debugging log
-        return newTags;
-    });
-
-    filteredLibrary(); // ✅ Force UI update after toggling a tag
-}
-
-async function updatePagesRead(userId, pagesReadIncrement) {
-    if (pagesReadIncrement <= 0) return;
-
-    try {
-        const userDocRef = doc(firestore, "users", userId);
-        const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
-        const summaryDocSnap = await getDoc(summaryDocRef);
-
-        let summaryData = summaryDocSnap.exists() ? summaryDocSnap.data() : {};
-        let readingLog = summaryData.readingLog || [];
-        const currentDate = new Date().toISOString().split("T")[0]; // Correct date format (YYYY-MM-DD)
-
-        // Find today's entry if it exists
-        const todayLogIndex = readingLog.findIndex(log => log.date === currentDate);
-
-        if (todayLogIndex !== -1) {
-            // If today's log already exists, update pagesRead
-            readingLog[todayLogIndex].pagesRead += pagesReadIncrement;
-        } else {
-            // Otherwise, create a new entry for today
-            readingLog.push({ date: currentDate, pagesRead: pagesReadIncrement });
-        }
-
-        // Update the summary with the new or updated reading log
-        summaryData.readingLog = readingLog;
-        await updateDoc(summaryDocRef, summaryData);
-
-        console.log(`✅ Updated pagesRead for ${currentDate} to ${readingLog[todayLogIndex]?.pagesRead || pagesReadIncrement}`);
-    } catch (error) {
-        console.error("❌ Error updating pagesRead:", error.message);
+    
+    // Modal functions
+    function openViewModal(book) {
+        viewingPublication = book;
+        viewModalOpen = true;
     }
-}
-
-async function deletePublication(entryId) {
-    if (!confirm("Are you sure you want to delete this publication?")) return;
-    try {
-        const user = auth.currentUser;
-        if (!user) {
-            console.error("No authenticated user found.");
-            return;
-        }
-
-        const userDocRef = doc(firestore, "users", user.uid);
-        const entryDocRef = doc(collection(userDocRef, "library"), entryId);
-        const entryDocSnap = await getDoc(entryDocRef);
-
-        if (!entryDocSnap.exists()) {
-            console.warn("Publication not found for deletion.");
-            return;
-        }
-
-        const data = entryDocSnap.data();
-        const chartsCollectionRef = collection(userDocRef, "charts");
-
-        // Delete publication
-        await deleteDoc(entryDocRef);
-        console.log(`🗑️ Deleted entry ${entryId}`);
-
-        // Update authors
-        const authorsDocRef = doc(chartsCollectionRef, "authors");
-        const authorsSnap = await getDoc(authorsDocRef);
-        const authorsData = authorsSnap.exists() ? authorsSnap.data() : {};
-
-        if (data.author) {
-            delete authorsData[data.author];
-            await setDoc(authorsDocRef, authorsData);
-        }
-
-        // Update tags
-        const tagsDocRef = doc(chartsCollectionRef, "tags");
-        const tagsSnap = await getDoc(tagsDocRef);
-        const tagsData = tagsSnap.exists() ? tagsSnap.data() : {};
-
-        if (data.tags) {
-            data.tags.forEach(tag => {
-                delete tagsData[tag];
-            });
-            await setDoc(tagsDocRef, tagsData);
-        }
-
-        // Update ratings
-        const ratingsDocRef = doc(chartsCollectionRef, "ratings");
-        const ratingsSnap = await getDoc(ratingsDocRef);
-        const ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
-
-        if (data.rating) {
-            delete ratingsData[data.rating];
-            await setDoc(ratingsDocRef, ratingsData);
-        }
-
-        // Update most recent book
-        await updateMostRecentBook(user.uid, null);
-
-        // Update UI
-        libraryList.update(books => books.filter(book => book.id !== entryId));
-    } catch (error) {
-        console.error("❌ Error deleting publication:", error.message);
+    
+    function openLogReadingModal() {
+        logReadingModalOpen = true;
     }
-}
-
+    
     function logout() {
         signOut(auth).then(() => {
             window.location.href = "/login";
         });
     }
-
-    function filteredLibrary() {
-    const selected = get(selectedTags); // Get selected tags
-    const books = get(libraryList); // Get the latest library data
-
-    return books.filter(lit => {
-        const matchesSearch = lit.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                              lit.author?.toLowerCase().includes(searchQuery.toLowerCase());
-
-        const tags = lit.tags || []; // Ensure it's always an array
-        const matchesTags = selected.length === 0 || tags.some(tag => selected.includes(tag));
-
-        return matchesSearch && matchesTags;
-    });
-}
-
+    
+    function showAddPublicationForm() {
+        alert("Add publication not implemented in this version");
+    }
+    
+    function deletePublication() {
+        alert("Delete publication not implemented in this version");
+    }
+    
+    // Initialize with proper auth state handling
     onMount(() => {
-        onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                await fetchUserData(user.uid);
-                await loadUserLibrary(user.uid);
+        isLoading = true;
+        
+        // Use Firebase's auth state listener instead of checking currentUser directly
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            console.log("Auth state changed. User:", user);
+            
+            try {
+                if (user) {
+                    console.log("User authenticated:", user.uid);
+                    await Promise.all([
+                        fetchUserData(user.uid),
+                        loadUserLibrary(user.uid)
+                    ]);
+                } else {
+                    console.log("No authenticated user, redirecting to login");
+                    window.location.href = "/login";
+                }
+            } catch (error) {
+                console.error("Error during initialization:", error);
+            } finally {
+                isLoading = false;
             }
-            authReady = true;
         });
+        
+        // Return cleanup function to unsubscribe from auth state changes
+        return () => unsubscribe();
     });
-
-    // ----- Modal Functions -----
-    function openViewModal(pub) {
-        viewingPublication = pub;
-        viewModalOpen = true;
-    }
-
-    function closeViewModal() {
-        viewingPublication = null;
-        viewModalOpen = false;
-    }
-
-    function openEditModal(pub) {
-        editMode = true;
-        editingPublication = { ...pub };
-        // Pre-fill modal fields with publication data
-        title = pub.title;
-        author = pub.author;
-        isbn = pub.isbn;
-        pageStart = pub.pageStart;
-        pageEnd = pub.pageEnd;
-        currentPage = pub.currentPage;
-        tags = pub.tags || [];
-        comment = pub.comment || "";
-        modalOpen = true;
-    }
-  
-    function closeModal() {
-        modalOpen = false;
-        editMode = false;
-        editingPublication = null;
-        resetFields();
-    }
-    
-    function resetFields() {
-        title = author = isbn = "";
-        pageStart = pageEnd = currentPage = 1;
-        tagInput = "";
-        tags = [];
-    }
-    
-    // Tag functions
-    function addTag() {
-        if (tagInput.trim() && !tags.includes(tagInput.trim())) {
-            tags = [...tags, tagInput.trim()];
-            tagInput = "";
-        }
-    }
-    
-    function removeTag(index) {
-        tags = tags.filter((_, i) => i !== index);
-    }
-
-    async function updateEditedPublication() {
-    if (!editingPublication) return;
-    const user = auth.currentUser;
-    if (!user) {
-        console.error("No authenticated user found.");
-        return;
-    }
-
-    try {
-        const userDocRef = doc(firestore, "users", user.uid);
-        const entryDocRef = doc(collection(userDocRef, "library"), editingPublication.id);
-
-        // Fetch the existing data before update
-        const entryDocSnap = await getDoc(entryDocRef);
-        if (!entryDocSnap.exists()) {
-            console.warn("Publication not found for editing.");
-            return;
-        }
-
-        const oldData = entryDocSnap.data();
-        const pagesReadIncrement = Math.max(currentPage - (oldData.currentPage || oldData.pageStart), 0);
-        
-        const updatedData = {
-            title,
-            author,
-            isbn,
-            pageStart,
-            pageEnd,
-            currentPage,
-            tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
-            updatedAt: new Date()
-        };
-
-        // Save updated publication data
-        await updateDoc(entryDocRef, updatedData);
-        console.log(`✅ Updated publication: ${editingPublication.id}`);
-
-        // Check if the book is completed and show rating dialog
-        const progress = Math.round(((currentPage - pageStart) / (pageEnd - pageStart)) * 100);
-        if (progress >= 100) {
-            showRatingDialog(editingPublication.id, title);  // Trigger rating dialog
-        }
-
-        // Only update the most recent if the currentPage increased
-        if (currentPage > (oldData.currentPage || oldData.pageStart)) {
-            await updateMostRecentBook(user.uid, updatedData.title);
-            await updatePagesRead(user.uid, pagesReadIncrement);
-        }
-
-        // Update the authors and tags in charts
-        const chartsCollectionRef = collection(userDocRef, "charts");
-
-        // 🔄 Update Authors
-        const authorsDocRef = doc(chartsCollectionRef, "authors");
-        const authorsSnap = await getDoc(authorsDocRef);
-        const authorsData = authorsSnap.exists() ? authorsSnap.data() : {};
-
-        // Remove old author
-        if (oldData.author) {
-            delete authorsData[oldData.author];
-        }
-
-        // Add new author
-        if (updatedData.author) {
-            authorsData[updatedData.author] = (authorsData[updatedData.author] || 0) + 1;
-        }
-
-        await setDoc(authorsDocRef, authorsData);
-
-        // 🔄 Update Tags
-        const tagsDocRef = doc(chartsCollectionRef, "tags");
-        const tagsSnap = await getDoc(tagsDocRef);
-        const tagsData = tagsSnap.exists() ? tagsSnap.data() : {};
-
-        // Remove old tags
-        if (oldData.tags) {
-            oldData.tags.forEach(tag => {
-                if (tagsData[tag]) {
-                    tagsData[tag] = Math.max(0, tagsData[tag] - 1);
-                    if (tagsData[tag] === 0) delete tagsData[tag];
-                }
-            });
-        }
-
-        // Add new tags
-        updatedData.tags.forEach(tag => {
-            tagsData[tag] = (tagsData[tag] || 0) + 1;
-        });
-
-        await setDoc(tagsDocRef, tagsData);
-
-        // Update the UI state
-        libraryList.update(books => books.map(book => 
-            book.id === editingPublication.id ? { ...book, ...updatedData } : book
-        ));
-
-        closeModal();
-    } catch (error) {
-        console.error("❌ Error updating publication:", error.message);
-    }
-}
-
-
-async function updateMostRecentBook(userId, title) {
-    try {
-        const userDocRef = doc(firestore, "users", userId);
-        const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
-
-        await setDoc(summaryDocRef, {
-            mostRecent: title,
-            updatedAt: new Date()
-        }, { merge: true });
-
-        console.log(`✅ Updated most recent book to: ${title}`);
-    } catch (error) {
-        console.error("❌ Error updating most recent book:", error.message);
-    }
-}
-
-
-
-    // Function to open log reading dialog
-    function openLogReading() {
-        if (viewingPublication) {
-            logReadingNewPage = viewingPublication.currentPage || viewingPublication.pageStart;
-            logReadingComment = "";
-            logReadingModalOpen = true;
-        }
-    }
-    
-    // Function to save reading log
-    async function saveReadingLog() {
-    if (!viewingPublication || !logReadingNewPage) return;
-
-    try {
-        const user = auth.currentUser;
-        if (!user) {
-            console.error("No authenticated user found.");
-            return;
-        }
-
-        const userDocRef = doc(firestore, "users", user.uid);
-        const entryDocRef = doc(collection(userDocRef, "library"), viewingPublication.id);
-
-        const entryDocSnap = await getDoc(entryDocRef);
-        if (!entryDocSnap.exists()) {
-            console.warn("Publication not found.");
-            return;
-        }
-
-        const pubData = entryDocSnap.data();
-        const previousPage = pubData.currentPage || pubData.pageStart;
-        const pagesRead = Math.max(logReadingNewPage - previousPage, 0);
-
-        const logEntry = {
-            dateTitle: new Date().toISOString().split("T")[0],  // Correct date format (YYYY-MM-DD)
-            fromPage: previousPage,
-            toPage: logReadingNewPage,
-            pagesRead: pagesRead,
-            comment: logReadingComment || "",
-            date: new Date().toISOString().split("T")[0],  // Correct date format (YYYY-MM-DD)
-        };
-
-        let journalLogs = pubData.journalLogs || [];
-        journalLogs.push(logEntry);
-
-        await updateDoc(entryDocRef, {
-            currentPage: logReadingNewPage,
-            updatedAt: new Date(),
-            journalLogs: journalLogs
-        });
-
-        console.log("✅ Reading log saved successfully");
-
-        // Check if the book is completed and show rating dialog
-        const progress = Math.round(((logReadingNewPage - pubData.pageStart) / (pubData.pageEnd - pubData.pageStart)) * 100);
-        if (progress >= 100) {
-            showRatingDialog(viewingPublication.id, viewingPublication.title);  // Trigger rating dialog
-        }
-
-        // Update most recent book if the current page increased
-        if (logReadingNewPage > previousPage) {
-            await updateMostRecentBook(user.uid, viewingPublication.title);
-            await updatePagesRead(user.uid, pagesRead);
-        }
-
-        // Update UI
-        libraryList.update(books => books.map(book => 
-            book.id === viewingPublication.id ? { ...book, currentPage: logReadingNewPage, journalLogs } : book
-        ));
-        logReadingModalOpen = false;
-    } catch (error) {
-        console.error("❌ Error saving reading log:", error.message);
-    }
-}
-
-
-    // For the search functionality in the Edit Publication dialog
-    async function searchLiterature() {
-        if (!searchQuery.trim()) return;
-        
-        // This is a placeholder - in a real app, you would implement the search
-        // functionality to fetch results from an API or database
-        console.log("Searching for:", searchQuery);
-        
-        // For demonstration, just show a message that this feature needs to be implemented
-        alert("Search functionality would need to be implemented based on your backend API");
-        
-        // Clear the results for now
-        searchResults = [];
-        showResults = false;
-    }
-
-    // Show rating dialog function
-    function showRatingDialog(pubId, pubTitle) {
-        publicationToRate = pubId;
-        publicationTitleToRate = pubTitle;
-        currentRating = 0;
-        ratingDialogOpen = true;
-    }
-
-    async function saveRating() {
-    if (!publicationToRate || currentRating === 0) return;
-
-    const user = auth.currentUser;
-    if (!user) {
-        console.error("No authenticated user found.");
-        return;
-    }
-
-    try {
-        const userDocRef = doc(firestore, "users", user.uid);
-        const libraryRef = doc(userDocRef, "library", publicationToRate);
-        const ratingsDocRef = doc(userDocRef, "charts", "ratings");
-
-        // Fetch existing data
-        const librarySnap = await getDoc(libraryRef);
-        const ratingsSnap = await getDoc(ratingsDocRef);
-        let ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
-
-        // Remove previous rating (if exists)
-        if (librarySnap.exists()) {
-            const prevRating = librarySnap.data().rating;
-            if (prevRating && ratingsData[prevRating]) {
-                ratingsData[prevRating] = Math.max(0, ratingsData[prevRating] - 1);
-                if (ratingsData[prevRating] <= 0) {
-                    delete ratingsData[prevRating];
-                }
-            }
-        }
-
-        // Update with new rating
-        ratingsData[currentRating] = (ratingsData[currentRating] || 0) + 1;
-
-        // Save the updated rating to Firestore
-        await Promise.all([
-            setDoc(libraryRef, { rating: currentRating }, { merge: true }), // Update publication rating
-            setDoc(ratingsDocRef, ratingsData, { merge: true }) // Update overall ratings count
-        ]);
-
-        console.log(`✅ Rating of ${currentRating} saved for publication ${publicationToRate}`);
-
-        // Update the local state to reflect changes
-        libraryList.update(books => 
-            books.map(book => 
-                book.id === publicationToRate ? { ...book, rating: currentRating } : book
-            )
-        );
-        ratingDialogOpen = false;
-        publicationToRate = null;
-
-    } catch (error) {
-        console.error("❌ Error saving rating:", error.message);
-    }
-}
-
-
-    function selectResult(result) {
-        if (!result) return;
-        
-        // Fill in the form fields with the selected result
-        title = result.title || "";
-        author = result.author || "";
-        isbn = result.isbn || result.doi || "";
-        
-        // Hide the results
-        showResults = false;
-    }
 </script>
 
-{#if !authReady}
-    <div class="flex justify-center items-center h-screen bg-white">
-        <p class="text-neutral-500 text-lg">Loading...</p>
+{#if isLoading}
+    <div class="flex justify-center items-center h-screen bg-gray-50">
+        <p class="text-lg">Loading...</p>
     </div>
 {:else}
-    <div class="min-h-screen flex flex-col bg-stone-50">
-        <!-- NAVBAR -->
-        <nav class="bg-white border-neutral-400 shadow h-16 flex items-center justify-between px-12 sticky top-0 z-50">
-            <h1 class="text-lg font-semibold text-neutral-800">TrackMySci</h1>
-            <div class="flex items-center space-x-6">
-                <DropdownMenu.Root>
-                    <DropdownMenu.Trigger>
-                        <button class="border border-neutral-300 py-2 px-4 shadow-sm text-base font-medium rounded hover:bg-neutral-100 flex items-center gap-x-5">
-                            {firstName} {lastName}
-                            <ChevronsUpDown class="w-4 h-4 text-neutral-800" />
-                        </button>
-                    </DropdownMenu.Trigger>
-                    <DropdownMenu.Content>
-                        <DropdownMenu.Group>
-                            <DropdownMenu.Item on:click={() => window.location.href = "/dashboard"} class="text-base">
-                                <Gauge class="w-7 pr-1.5" /> Dashboard
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Item on:click={() => window.location.href = "/library"} class="text-base">
-                                <Library class="w-7 pr-1.5" /> Library
-                            </DropdownMenu.Item>
-                            <DropdownMenu.Separator />
-                            <DropdownMenu.Item on:click={logout} class="text-red-500 text-base">
-                                <LogOut class="w-7 pr-1.5 text-red-500" /> Logout
-                            </DropdownMenu.Item>
-                        </DropdownMenu.Group>
-                    </DropdownMenu.Content>
-                </DropdownMenu.Root>
+    <div class="min-h-screen flex flex-col bg-gray-50">
+        <!-- Top Navigation Bar -->
+        <nav class="bg-white border-b border-gray-200 shadow-sm h-16 flex items-center justify-between px-6 md:px-12 sticky top-0 z-50">
+            <div class="flex items-center gap-8">
+                <h1 class="text-xl font-bold text-blue-600">TrackMySci</h1>
+                
+                <div class="hidden md:flex items-center space-x-6">
+                    <button class="text-gray-600 hover:text-blue-600" on:click={() => window.location.href='/dashboard'}>Dashboard</button>
+                    <button class="text-gray-800 font-medium hover:text-blue-600">Library</button>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <button class="text-gray-600 hover:text-blue-600 flex items-center px-3 py-2" on:click={openLogReadingModal}>
+                    <BookOpen class="w-4 h-4 mr-1" /> Log Session
+                </button>
+                
+                <Button class="bg-blue-600 hover:bg-blue-700" on:click={showAddPublicationForm}>
+                    <Plus class="w-4 h-4 mr-2" /> Add Publication
+                </Button>
+                
+                <button class="size-10 rounded-full bg-gray-200 flex items-center justify-center">
+                    <span class="text-sm font-medium">{firstName.charAt(0)}{lastName.charAt(0)}</span>
+                </button>
             </div>
         </nav>
 
-        <!-- PAGE CONTENT -->
-        <div class="pt-12 px-12">
-            <h2 class="text-4xl font-bold text-neutral-800">Library</h2>
-        </div>
-
-        <!-- Search & Tag Filter Container (Aligned Side by Side) -->
-        <div class="flex items-center px-12 py-4 gap-6">
-        <!-- Search Bar with Icon -->
-        <div class="relative flex-1">
-            <input
-            type="text"
-            bind:value={searchQuery}
-            class="w-full p-3 border border-neutral-300 rounded-md shadow-sm text-neutral-700"
-            placeholder="Search by title or author..."
-        />
-        </div>
-
-        <!-- Filter by Tags Section -->
-        <div class="flex flex-col">
-            <!-- Filter by Tags Title -->
-            <div class="flex items-start gap-2 mb-2">
-                <Filter />
-                <span class="text-gray-700 font-semibold text-base">Filter by Tags</span>
+        <!-- Main Content -->
+        <div class="flex-1 bg-gray-50">
+            <div class="pt-12 px-12">
+                <h2 class="text-4xl font-bold text-gray-800">Library</h2>
             </div>
+            
+            <!-- Search & Filters -->
+            <div class="flex items-center px-12 py-4 gap-6">
+                <!-- Search Bar -->
+                <div class="relative flex-1">
+                    <input
+                        type="text"
+                        bind:value={searchQuery}
+                        class="w-full p-3 border border-gray-300 rounded-md shadow-sm"
+                        placeholder="Search by title or author..."
+                    />
+                </div>
 
-            <!-- Tags Displayed Inline -->
-            <div class="flex flex-wrap gap-2 w-[450px]">
-                {#each $uniqueTags as tag}
-                    <button 
-                        class="px-4 py-1.5 text-sm font-medium rounded-full border transition-all shadow-sm"
-                        class:active={$selectedTags.includes(tag)}
-                        on:click={() => toggleTag(tag)}
-                        style="background-color: {$selectedTags.includes(tag) ? '#2563EB' : '#F3F4F6'}; 
-                            color: {$selectedTags.includes(tag) ? 'white' : '#374151'};
-                            font-weight: 500;">
-                        {tag}
-                    </button>
-                {/each}
-            </div>
-        </div>
-        </div>
-
-        <div class="flex flex-1">
-            <section class="w-full  px-12">
-                {#if filteredLibrary().length === 0}
-                    <div class="flex flex-col items-center justify-center text-center text-gray-500 pt-12">
-                        <p class="text-lg font-medium">No publications found.</p>
-                    </div>
-                {:else}
-                    <!-- Grid layout for 3-column structure -->
-                    <ul class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                        {#each $libraryList.filter(lit => {
-                            const matchesSearch = lit.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                                  lit.author?.toLowerCase().includes(searchQuery.toLowerCase());
-                        
-                            const tags = lit.tags || []; // Ensure it's always an array
-                            const matchesTags = $selectedTags.length === 0 || tags.some(tag => $selectedTags.includes(tag));
-                        
-                            return matchesSearch && matchesTags;
-                        }) as lit}
-                        <li class="p-4 bg-white border border-neutral-300 rounded-md shadow hover:bg-neutral-50 cursor-pointer" on:click={(event) => {
-                            // Check if the click originated from a button or dropdown trigger
-                            const isButtonClick = event.target.closest('button') || event.target.closest('[role="button"]');
-                            if (!isButtonClick) {
-                                openViewModal(lit);
-                            }
-                        }}>
-                            <div class="flex justify-between">
-                                <div>
-                                    <strong>{lit.title}</strong><br />
-                                    <small>{lit.author}</small>
-                                </div>
-                                <div>
-                                    <DropdownMenu.Root>
-                                        <DropdownMenu.Trigger>
-                                            <button class="p-0.5 text-gray-800 hover:bg-gray-200 rounded-sm">
-                                                <Ellipsis class="w-5 h-5" />
-                                            </button>
-                                        </DropdownMenu.Trigger>
-                                        <DropdownMenu.Content>
-                                            <DropdownMenu.Group>
-                                                <DropdownMenu.Item on:click={() => openEditModal(lit)} class="text-sm">
-                                                    <Edit class="w-4 h-4 mr-2" /> Edit
-                                                </DropdownMenu.Item>
-                                                <DropdownMenu.Item class="text-sm text-red-600" on:click={() => deletePublication(lit.id)}>
-                                                    <Trash2 class="w-4 h-4 mr-2" /> Delete
-                                                </DropdownMenu.Item>
-                                            </DropdownMenu.Group>
-                                        </DropdownMenu.Content>
-                                    </DropdownMenu.Root>
-                                </div>
-                            </div>
-
-                            <!-- Rating Display -->
-                            {#if lit.rating !== undefined && lit.rating > 0}
-                            <div class="mt-2">
-                                <div class="flex items-center">
-                                    {#each Array(5) as _, i}
-                                        <span class="text-lg">
-                                            {#if i < lit.rating}
-                                                <span class="text-yellow-400">★</span>
-                                            {:else}
-                                                <span class="text-gray-300">★</span>
-                                            {/if}
-                                        </span>
-                                    {/each}
-                                </div>
-                            </div>
-                            {/if}
-
-                            {#if lit.tags?.length > 0}
-                                <div class="flex flex-wrap gap-2 mt-3">
-                                    {#each lit.tags as tag}
-                                        <span class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">{tag}</span>
-                                    {/each}
-                                </div>
-                            {/if}
-
-                            <div class="mt-1 flex items-center gap-3">
-                                <div class="flex-1">
-                                    <div class="flex justify-between text-sm text-neutral-600 mb-1">
-                                        <span>
-                                            {Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))}%
-                                        </span>
+                <!-- Tag Filter -->
+                <Popover.Root>
+                    <Popover.Trigger asChild let:builder>
+                        <button
+                            class="px-4 py-3 border border-gray-300 rounded-md shadow-sm flex items-center gap-2"
+                            use:builder
+                        >
+                            <Filter class="w-5 h-5" />
+                            <span>Filter</span>
+                        </button>
+                    </Popover.Trigger>
+                    
+                    <Popover.Content class="w-[225px] p-5 bg-white rounded-md shadow-md">
+                        <div class="space-y-4">
+                            <h3 class="font-medium">Filter by Tags</h3>
+                            <div class="space-y-2 max-h-60 overflow-y-auto">
+                                {#each $uniqueTags as tag}
+                                    <div class="flex items-center gap-2">
+                                        <input 
+                                            type="checkbox" 
+                                            id={tag} 
+                                            checked={$selectedTags.includes(tag)}
+                                            on:change={() => toggleTag(tag)}
+                                            class="h-4 w-4 text-blue-600"
+                                        />
+                                        <label for={tag} class="text-sm text-gray-700">{tag}</label>
                                     </div>
-                                    <Progress value={Math.min(100, Math.round(((lit.currentPage || lit.pageStart) - lit.pageStart) / (lit.pageEnd - lit.pageStart) * 100))} />
-                                </div>
+                                {/each}
+                                {#if $uniqueTags.length === 0}
+                                    <p class="text-sm text-gray-500">No tags found</p>
+                                {/if}
                             </div>
-                        </li>
-                        {/each}
-                    </ul>
+                            <div class="pt-2 border-t border-gray-200">
+                                <button
+                                    class="text-sm text-blue-600 hover:text-blue-800"
+                                    on:click={() => selectedTags.set([])}
+                                >
+                                    Clear All Filters
+                                </button>
+                            </div>
+                        </div>
+                    </Popover.Content>
+                </Popover.Root>
+            </div>
+
+            <!-- Publications Grid -->
+            <div class="px-12 py-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {#if getFilteredBooks().length > 0}
+                    {#each getFilteredBooks() as book}
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+                            <div class="flex justify-between items-start mb-4">
+                                <div class="flex-1">
+                                    <h3 class="font-medium text-lg text-gray-800 line-clamp-2">{book.title}</h3>
+                                    <p class="text-sm text-gray-600 mt-1">{book.author}</p>
+                                </div>
+                                
+                                <DropdownMenu.Root>
+                                    <DropdownMenu.Trigger asChild>
+                                        <button class="text-gray-400 hover:text-gray-600">
+                                            <Ellipsis class="h-6 w-6" />
+                                        </button>
+                                    </DropdownMenu.Trigger>
+                                    <DropdownMenu.Content>
+                                        <DropdownMenu.Item on:click={() => openViewModal(book)}>
+                                            <Book class="mr-2 h-4 w-4" />
+                                            <span>View Details</span>
+                                        </DropdownMenu.Item>
+                                        <DropdownMenu.Item on:click={() => alert("Edit not implemented")}>
+                                            <Edit class="mr-2 h-4 w-4" />
+                                            <span>Edit</span>
+                                        </DropdownMenu.Item>
+                                        <DropdownMenu.Separator />
+                                        <DropdownMenu.Item class="text-red-500" on:click={() => deletePublication(book.id)}>
+                                            <Trash2 class="mr-2 h-4 w-4" />
+                                            <span>Delete</span>
+                                        </DropdownMenu.Item>
+                                    </DropdownMenu.Content>
+                                </DropdownMenu.Root>
+                            </div>
+                            
+                            <!-- Tags -->
+                            {#if book.tags && book.tags.length > 0}
+                                <div class="flex flex-wrap gap-2 mt-3 mb-4">
+                                    {#each book.tags as tag}
+                                        <span class="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">
+                                            {tag}
+                                        </span>
+                                    {/each}
+                                </div>
+                            {/if}
+                            
+                            <!-- Status and Action Button -->
+                            <div class="flex justify-between items-center mt-4">
+                                <span class={`px-2 py-1 text-xs rounded-full ${
+                                    book.completed ? "bg-green-100 text-green-800" : 
+                                    book.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
+                                    "bg-gray-100 text-gray-800"
+                                }`}>
+                                    {book.status || (book.completed ? "Completed" : book.readingSessions?.length > 0 ? "In Progress" : "Unread")}
+                                </span>
+                                
+                                <button class="text-sm text-blue-600 hover:text-blue-800" on:click={() => openViewModal(book)}>
+                                    View
+                                </button>
+                            </div>
+                        </div>
+                    {/each}
+                {:else}
+                    <div class="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                        <p class="text-lg font-medium text-gray-500">No publications found.</p>
+                        <p class="text-sm text-gray-400 mt-2">Try adjusting your search or filter criteria.</p>
+                        <button class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" on:click={showAddPublicationForm}>
+                            Add Your First Publication
+                        </button>
+                    </div>
                 {/if}
-            </section>
+            </div>
         </div>
+
+        <!-- View Publication Modal -->
+        <Dialog.Root bind:open={viewModalOpen}>
+            <Dialog.Content class="w-full max-w-2xl">
+                <Dialog.Header>
+                    <Dialog.Title class="text-2xl font-bold">
+                        {#if viewingPublication}
+                            {viewingPublication.title}
+                        {/if}
+                    </Dialog.Title>
+                    <Dialog.Description>
+                        {#if viewingPublication}
+                            <p class="text-lg text-gray-600 mb-4">{viewingPublication.author}</p>
+                            
+                            {#if viewingPublication.isbn}
+                                <p class="text-sm text-gray-600">ISBN/DOI: {viewingPublication.isbn}</p>
+                            {/if}
+                        
+                            <!-- Tags -->
+                            {#if viewingPublication.tags?.length > 0}
+                                <div class="flex flex-wrap gap-2 mt-6">
+                                    {#each viewingPublication.tags as tag}
+                                        <span class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                                    {/each}
+                                </div>
+                            {/if}
+                            
+                            <!-- Divider -->
+                            <hr class="my-6 border-gray-200" />
+                            
+                            <!-- Action Buttons -->
+                            <div class="flex justify-end space-x-3">
+                                <Button variant="outline" on:click={() => viewModalOpen = false}>
+                                    Close
+                                </Button>
+                                <Button class="bg-blue-600 hover:bg-blue-700" on:click={() => alert("Edit not implemented")}>
+                                    <Edit class="w-4 h-4 mr-2" /> Edit
+                                </Button>
+                            </div>
+                        {/if}
+                    </Dialog.Description>
+                </Dialog.Header>
+            </Dialog.Content>
+        </Dialog.Root>
+
+        <!-- Log Reading Modal -->
+        <Dialog.Root bind:open={logReadingModalOpen}>
+            <Dialog.Content class="w-[500px]">
+                <Dialog.Header>
+                    <Dialog.Title>Log Reading Session</Dialog.Title>
+                    <Dialog.Description>
+                        <form class="space-y-4 mt-4">
+                            <!-- Publication Selection -->
+                            <div class="space-y-2">
+                                <label for="publication-select" class="block text-sm font-medium">
+                                    Select Publication
+                                </label>
+                                <select 
+                                    id="publication-select" 
+                                    class="w-full p-2 border border-gray-300 rounded"
+                                >
+                                    {#if get(books).length === 0}
+                                        <option value="" disabled>No publications available</option>
+                                    {:else}
+                                        {#each get(books) as book}
+                                            <option value={book.id}>{book.title}</option>
+                                        {/each}
+                                    {/if}
+                                </select>
+                            </div>
+
+                            <!-- Pages Read Input -->
+                            <div class="space-y-2">
+                                <label for="pages-read" class="block text-sm font-medium">
+                                    Pages Read in This Session
+                                </label>
+                                <input id="pages-read" type="number" 
+                                    class="w-full p-2 border border-gray-300 rounded"
+                                    min="1" />
+                            </div>
+                            
+                            <!-- Reading Duration -->
+                            <div class="space-y-2">
+                                <label for="reading-duration" class="block text-sm font-medium">
+                                    Reading Duration (Minutes, Optional)
+                                </label>
+                                <input id="reading-duration" type="number" 
+                                    class="w-full p-2 border border-gray-300 rounded"
+                                    min="0" />
+                            </div>
+
+                            <!-- Reading Notes -->
+                            <div class="space-y-2">
+                                <label for="reading-notes" class="block text-sm font-medium">
+                                    Reading Notes (Optional)
+                                </label>
+                                <textarea 
+                                    id="reading-notes" 
+                                    class="w-full p-2 border border-gray-300 rounded h-24"
+                                    placeholder="Add notes about your reading session..."
+                                ></textarea>
+                            </div>
+
+                            <!-- Action Buttons -->
+                            <div class="flex justify-end space-x-3 pt-4">
+                                <Button 
+                                    type="button" 
+                                    variant="outline"
+                                    on:click={() => logReadingModalOpen = false}
+                                >
+                                    Cancel
+                                </Button>
+                                <Button 
+                                    type="button" 
+                                    class="bg-blue-600 hover:bg-blue-700"
+                                    on:click={() => {
+                                        alert("Logging functionality not implemented in this version");
+                                        logReadingModalOpen = false;
+                                    }}
+                                >
+                                    Save Session
+                                </Button>
+                            </div>
+                        </form>
+                    </Dialog.Description>
+                </Dialog.Header>
+            </Dialog.Content>
+        </Dialog.Root>
     </div>
 {/if}
-
-<!-- Edit Publication Dialog -->
-<Dialog.Root bind:open={modalOpen}>
-    <Dialog.Content class="w-[90%] max-w-4xl">
-      <Dialog.Header>
-        <Dialog.Title class="text-xl mb-1">
-          {editMode ? "Edit Publication" : "Add Literature"}
-        </Dialog.Title>
-        <Dialog.Description>
-          <form on:submit|preventDefault={editMode ? updateEditedPublication : addLiteratureToLibrary}>
-            <!-- Search Bar -->
-            <div class="mb-4">
-              <div class="relative">
-                <label for="searchQuery" class="sr-only">Search Query</label>
-                <input 
-                  type="text" 
-                  id="searchQuery" 
-                  bind:value={searchQuery}
-                  on:keydown={e => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      searchLiterature();
-                    }
-                  }}
-                  class="w-full pl-4 pr-10 py-4 text-neutral-700 rounded-full border border-neutral-300 focus:ring-blue-500 focus:border-blue-500 shadow-sm placeholder-neutral-400"
-                  placeholder="Search by DOI, ISBN, or Title" 
-                  autocomplete="off" 
-                />
-                <div class="absolute inset-y-0 z-1000 right-3 flex items-center pointer-events-none">
-                  <Search class="w-6 h-6 text-neutral-400" />
-                </div>
-              </div>
-            </div>
-
-            {#if showResults}
-            <div class="absolute mt-0.5 space-y-2 max-h-80 overflow-y-auto border border-neutral-300 rounded p-2 bg-white z-50">
-                {#each searchResults as result}
-                    <button type="button" 
-                        class="p-3 bg-neutral-100 rounded shadow cursor-pointer hover:bg-neutral-200 text-left w-full"
-                        on:click={() => selectResult(result)}
-                    >
-                        <strong>{result.title}</strong><br />
-                        <small>Author: {result.author}</small><br />
-                        {#if result.isbn && result.isbn !== "No ISBN"}
-                            <em>ISBN: {result.isbn}</em>
-                        {/if}
-                        {#if result.doi}
-                            <br /><em>DOI: {result.doi}</em>
-                        {/if}
-                        {#if (!result.isbn || result.isbn === "No ISBN") && !result.doi}
-                            <em>No ISBN or DOI available</em>
-                        {/if}
-                    </button>
-                {/each}
-            </div>
-            {/if}
-
-            <!-- Form Fields -->
-            <div class="flex flex-col gap-4 mt-4">
-              <div class="flex flex-col">
-                <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title *</label>
-                <input id="title" type="text" bind:value={title}
-                  class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
-              </div>
-              <div class="flex flex-col">
-                <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author *</label>
-                <input id="author" type="text" bind:value={author}
-                  class="flex-1 p-1.5 pl-2 border border-neutral-300 shadow-sm rounded-md text-neutral-700" autocomplete="off" />
-              </div>
-              <Separator />
-              <div class="flex items-center">
-                <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI *</label>
-                <input id="isbn-doi" type="text" bind:value={isbn}
-                  class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" autocomplete="off" />
-              </div>
-              <Separator />
-              <div class="flex gap-4 items-center">
-                <div class="flex-1">
-                  <label for="page-start" class="text-sm font-medium text-neutral-700">Page Start *</label>
-                  <input id="page-start" type="number" bind:value={pageStart}
-                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min="1" />
-                </div>
-                <div class="flex-1">
-                  <label for="page-end" class="text-sm font-medium text-neutral-700">Page End *</label>
-                  <input id="page-end" type="number" bind:value={pageEnd}
-                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min={pageStart} />
-                </div>
-                <div class="flex-1">
-                  <label for="current-page" class="text-sm font-medium text-neutral-700">Current Page *</label>
-                  <input id="current-page" type="number" bind:value={currentPage}
-                    class="w-full p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" min={pageStart} max={pageEnd} />
-                </div>
-              </div>
-              <Separator />
-              <!-- Tag Input Section -->
-              <div class="mb-4">
-                <label for="tag-input" class="text-sm font-medium text-neutral-700">Tags</label>
-                <div class="flex items-center mt-2">
-                  <input id="tag-input" type="text" bind:value={tagInput}
-                    class="flex-1 p-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
-                    placeholder="Type a tag and press Enter"
-                    on:keydown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        addTag();
-                      }
-                    }} />
-                  <Button type="button" class="ml-2 bg-blue-500 hover:bg-blue-600" on:click={addTag}>Add Tag</Button>
-                </div>
-                <div class="flex flex-wrap gap-2 mt-3">
-                  {#each tags as tag, index}
-                    <div class="flex items-center bg-blue-100 text-blue-800 px-3 py-1 rounded-full">
-                      <span>{tag}</span>
-                      <button type="button" class="ml-2 text-blue-500 hover:text-blue-700" on:click={() => removeTag(index)}>
-                        &times;
-                      </button>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-              <Separator />
-              <div class="flex items-center">
-                <label for="comment" class="w-1/4 text-sm font-medium text-neutral-700">Comment</label>
-                <textarea id="comment" bind:value={comment}
-                  class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm"></textarea>
-              </div>
-            </div>
-
-            <!-- Footer Buttons -->
-            <div class="flex justify-end space-x-4 mt-4">
-              <Button type="button" on:click={resetFields} class="bg-neutral-200 text-neutral-700 hover:bg-neutral-300">Clear</Button>
-              <Button type="submit" class="bg-blue-600 text-white hover:bg-blue-700">{editMode ? "Update" : "Add"}</Button>
-            </div>
-          </form>
-        </Dialog.Description>
-      </Dialog.Header>
-    </Dialog.Content>
-  </Dialog.Root>
-
-<!-- View Publication Dialog -->
-<Dialog.Root bind:open={viewModalOpen}>
-  <Dialog.Content class="w-[300px] max-w-[60%] max-h-[80vh] overflow-y-auto bg-white">
-      <div class="flex justify-between items-start mb-2">
-          <div>
-              <Dialog.Title class="text-2xl font-bold">
-                  {viewingPublication?.title || "Publication Details"}
-              </Dialog.Title>
-              <p class="text-neutral-600 mt-1">
-                  {viewingPublication?.author || ""}
-              </p>
-          </div>
-      </div>
-      
-      <Dialog.Description class="mt-4">
-          {#if viewingPublication}
-              <div class="flex items-center gap-2 mb-4">
-                  <Book class="w-5 h-5 text-neutral-600" />
-                  <span class="text-neutral-700">
-                      {viewingPublication.currentPage || viewingPublication.pageStart} / {viewingPublication.pageEnd} pages
-                  </span>
-              </div>
-              
-              <!-- Progress Bar -->
-              <div class="mb-6">
-                  <div class="h-2 bg-blue-100 rounded-full mb-1">
-                      <div class="h-2 bg-black rounded-full" style="width: {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}%"></div>
-                  </div>
-                  <div class="text-sm text-neutral-600">
-                      {Math.min(100, Math.round(((viewingPublication.currentPage || viewingPublication.pageStart) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100))}% complete
-                  </div>
-              </div>
-              
-              <!-- Tags -->
-              {#if viewingPublication.tags?.length > 0}
-                  <div class="flex flex-wrap gap-2 mb-6">
-                      {#each viewingPublication.tags as tag}
-                          <span class="bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full text-sm">{tag}</span>
-                      {/each}
-                  </div>
-              {/if}
-              
-              <!-- Divider -->
-              <hr class="my-6 border-neutral-200" />
-              
-              <!-- Reading Logs Section -->
-              <div>
-                  <div class="flex justify-between items-center mb-4">
-                      <h3 class="text-lg font-semibold">Reading Logs</h3>
-                      <Button 
-                        class="flex items-center gap-2" 
-                        variant="outline"
-                        on:click={() => {
-                          logReadingPublication = viewingPublication.id;
-                          logReadingNewPage = viewingPublication.currentPage || viewingPublication.pageStart;
-                          logReadingComment = "";
-                          logReadingModalOpen = true;
-                          viewModalOpen = false; // Close the view modal when opening the log modal
-                        }}
-                      >
-                          <BookOpen class="w-5 h-5" />
-                          Log Reading
-                      </Button>
-                  </div>
-                  
-                  {#if viewingPublication.journalLogs?.length > 0}
-                      <div class="space-y-4">
-                          {#each viewingPublication.journalLogs as log}
-                              <div class="bg-white border border-neutral-200 rounded-lg p-4">
-                                  <div class="flex justify-between mb-2">
-                                      <div class="flex items-center gap-2 text-neutral-600">
-                                          <Calendar class="w-4 h-4" />
-                                          <span>{new Date(log.date).toLocaleDateString()}</span>
-                                      </div>
-                                  </div>
-                                  
-                                  <div class="flex items-center gap-2 mb-2 text-neutral-600">
-                                      <Book class="w-4 h-4" />
-                                      <span>{log.pagesRead} pages</span>
-                                  </div>
-                                  
-                                  <div class="mb-3">
-                                      <div class="h-2 bg-blue-100 rounded-full">
-                                          <div class="h-2 bg-black rounded-full" style="width: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%"></div>
-                                      </div>
-                                      <div class="text-xs text-neutral-600 mt-1">
-                                          Progress at this point: {Math.round(((log.toPage) - viewingPublication.pageStart) / (viewingPublication.pageEnd - viewingPublication.pageStart) * 100)}%
-                                      </div>
-                                  </div>
-                                  
-                                  {#if log.comment}
-                                      <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md">{log.comment}</p>
-                                  {/if}
-                              </div>
-                          {/each}
-                      </div>
-                  {:else}
-                      <div class="text-center p-6 bg-neutral-50 rounded-lg">
-                          <p class="text-neutral-500">No reading logs yet.</p>
-                          <p class="text-sm text-neutral-400 mt-1">Start tracking your progress by clicking "Log Reading".</p>
-                      </div>
-                  {/if}
-              </div>
-          {/if}
-      </Dialog.Description>
-  </Dialog.Content>
-</Dialog.Root>
-
-<!-- Log Reading Modal -->
-<Dialog.Root bind:open={logReadingModalOpen}>
-    <Dialog.Content class="w-[500px]">
-        <Dialog.Header>
-            <Dialog.Title>Log Reading Progress</Dialog.Title>
-            <Dialog.Description>
-                <form on:submit|preventDefault={saveReadingLog} class="space-y-4 mt-4">
-                    <!-- Current Page Input -->
-                    <div class="space-y-2">
-                        <label for="current-page" class="block text-sm font-medium">
-                            Current Page
-                        </label>
-                        <input 
-                            id="current-page" 
-                            type="number" 
-                            bind:value={logReadingNewPage} 
-                            class="w-full p-2 border border-neutral-300 rounded"
-                            min={viewingPublication?.currentPage || viewingPublication?.pageStart || 1}
-                            max={viewingPublication?.pageEnd || 1000} 
-                        />
-                    </div>
-
-                    <!-- Reading Notes -->
-                    <div class="space-y-2">
-                        <label for="reading-notes" class="block text-sm font-medium">
-                            Reading Notes (Optional)
-                        </label>
-                        <textarea 
-                            id="reading-notes" 
-                            bind:value={logReadingComment} 
-                            class="w-full p-2 border border-neutral-300 rounded h-24"
-                            placeholder="Add notes about your reading session..."
-                        ></textarea>
-                    </div>
-
-                    <!-- Action Buttons -->
-                    <div class="flex justify-end space-x-3 pt-4">
-                        <Button 
-                            type="button" 
-                            variant="outline" 
-                            on:click={() => logReadingModalOpen = false}
-                        >
-                            Cancel
-                        </Button>
-                        <Button 
-                            type="submit" 
-                            class="bg-blue-600 hover:bg-blue-700"
-                        >
-                            Save Reading
-                        </Button>
-                    </div>
-                </form>
-            </Dialog.Description>
-        </Dialog.Header>
-    </Dialog.Content>
-</Dialog.Root>
-
-<!-- Rating Dialog -->
-<Dialog.Root bind:open={ratingDialogOpen}>
-    <Dialog.Content class="w-[400px]">
-        <Dialog.Header>
-            <Dialog.Title>Rate This Publication</Dialog.Title>
-            <Dialog.Description>
-                <div class="py-4">
-                    <p class="text-center mb-4">You've completed "{publicationTitleToRate}". How would you rate it?</p>
-                    
-                    <!-- Star Rating -->
-                    <div class="flex justify-center space-x-2 mb-6">
-                        {#each Array(5) as _, i}
-                            <button 
-                                type="button"
-                                class="text-3xl focus:outline-none"
-                                on:click={() => currentRating = i + 1}
-                            >
-                                {#if i < currentRating}
-                                    <span class="text-yellow-400">★</span>
-                                {:else}
-                                    <span class="text-gray-300">★</span>
-                                {/if}
-                            </button>
-                        {/each}
-                    </div>
-                    
-                    <!-- Action Buttons -->
-                    <div class="flex justify-end space-x-3">
-                        <Button 
-                            type="button"
-                            variant="outline"
-                            on:click={() => ratingDialogOpen = false}
-                        >
-                            Skip
-                        </Button>
-                        <Button 
-                            type="button"
-                            class="bg-blue-600 hover:bg-blue-700"
-                            on:click={saveRating}
-                            disabled={currentRating === 0}
-                        >
-                            Save Rating
-                        </Button>
-                    </div>
-                </div>
-            </Dialog.Description>
-        </Dialog.Header>
-    </Dialog.Content>
-</Dialog.Root>

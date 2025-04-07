@@ -1229,9 +1229,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
         
         <div class="hidden md:flex items-center space-x-6">
           <button class="text-gray-800 font-medium hover:text-blue-600">Dashboard</button>
-          <button class="text-gray-600 hover:text-blue-600" on:click={() => navigate("/library")}>Library</button>
-          <button class="text-gray-600 hover:text-blue-600">Analytics</button>
-          <button class="text-gray-600 hover:text-blue-600">Notes</button>
+          <button on:click={() => window.location.href='/library'} class="text-gray-600 hover:text-blue-600">Library</button>
         </div>
       </div>
       
@@ -1348,7 +1346,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
               {/each}
               
               <div class="mt-4 text-center">
-                <button class="text-blue-600 text-sm font-medium hover:text-blue-800" on:click={() => navigate("/library")}>
+                <button on:click={() => window.location.href='/library'} class="text-blue-600 text-sm font-medium hover:text-blue-800">
                   VIEW LIBRARY
                 </button>
               </div>
@@ -1362,11 +1360,11 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
             <PieChartIcon class="w-5 h-5" /> Reading Analytics
           </h2>
           
-          <!-- Topic Distribution -->
+          <!-- Pages Read Over Time -->
           <div class="mb-12">
-            <h3 class="text-base font-medium text-gray-700 mb-4">Topic Distribution</h3>
+            <h3 class="text-base font-medium text-gray-700 mb-4">Pages Read Over Time</h3>
             <div class="h-60 flex items-center justify-center">
-              <PieChart type="Tags" chartKey={$chartRefreshKey} />
+              <TimelineChart period="30 Days" chartKey={$chartRefreshKey} />
             </div>
           </div>
           
