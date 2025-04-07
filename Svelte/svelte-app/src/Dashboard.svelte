@@ -1217,8 +1217,8 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
 </script>
 
 {#if !authReady}
-  <div class="flex justify-center items-center h-screen">
-    <p>Loading...</p>
+  <div class="flex justify-center items-center h-screen bg-gray-50">
+    <div class="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-600"></div>
   </div>
 {:else}
   <div class="min-h-screen flex flex-col bg-gray-50">
