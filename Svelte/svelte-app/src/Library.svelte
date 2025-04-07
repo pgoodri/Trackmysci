@@ -132,6 +132,9 @@
         const allBooks = get(books);
         const tags = get(selectedTags);
         
+        console.log("Running filter with tags:", tags);
+        console.log("Books before filtering:", allBooks.length);
+        
         const result = allBooks.filter(book => {
             // Filter by search
             const matchesSearch = !searchLibraryQuery || 
@@ -139,8 +142,12 @@
                 book.author?.toLowerCase().includes(searchLibraryQuery.toLowerCase());
                 
             // Filter by tags
-            const matchesTags = tags.length === 0 || 
-                (book.tags && book.tags.some(tag => tags.includes(tag)));
+            let matchesTags = true;
+            if (tags.length > 0) {
+                // Only filter by tags if there are selected tags
+                matchesTags = book.tags && Array.isArray(book.tags) && book.tags.some(tag => tags.includes(tag));
+                console.log(`Book: ${book.title}, Tags: ${book.tags}, Match? ${matchesTags}`);
+            }
             
             // Filter by status
             let matchesStatus = true;
@@ -160,13 +167,16 @@
             return matchesSearch && matchesTags && matchesStatus;
         });
         
-        filteredBooks.set(result);
+        // Use the spread operator for books to ensure reactivity
+        filteredBooks.set([...result]);
         console.log("Filtered books updated:", result.length, "matches");
         console.log("Selected tags:", tags);
     }
     
     // Get filtered books (just returns the current value of the store)
     function getFilteredBooks() {
+        // Force filtering to apply before returning results
+        updateFilteredBooks();
         return get(filteredBooks);
     }
     
@@ -183,6 +193,8 @@
         } else {
             selectedTags.set([tag]);
         }
+        // Explicitly trigger the filter update
+        updateFilteredBooks();
     }
     
     // Toggle a tag filter
@@ -194,6 +206,8 @@
                 return [...tags, tag];
             }
         });
+        // Explicitly trigger the filter update
+        updateFilteredBooks();
     }
     
     // Modal functions
@@ -425,27 +439,157 @@
         // Reset previous results
         showResults = false;
         searchResults = [];
+        isbn = "";
         isSearching = true;
         
-        // Simplified placeholder just for visual matching with Dashboard
+        console.log("Search query:", searchQuery);
+        
         try {
-            // Just simulate a search
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            if (/^10\.\d{4,9}\/[-._;()\/:A-Za-z0-9]+$/.test(searchQuery)) {
+                console.log("Query looks like a DOI. Calling fetchDOI...");
+                await fetchDOI();
+            } else if (/^(97(8|9))?\d{9}(\d|X)$/.test(searchQuery)) {
+                console.log("Query looks like an ISBN. Calling fetchISBN...");
+                isbn = searchQuery;
+                await fetchISBN();
+            } else {
+                console.log("Query treated as Title. Calling fetchTitle...");
+                title = searchQuery;
+                await fetchTitle();
+            }
             
-            // Provide a dummy result for demonstration
-            if (searchQuery.trim()) {
-                searchResults = [{
-                    title: `Sample: ${searchQuery}`,
-                    author: "Sample Author",
-                    isbn: "1234567890123"
-                }];
+            console.log("Search results after fetch:", searchResults);
+            if (searchResults.length > 0) {
                 showResults = true;
+            } else {
+                alert("No results found.");
             }
         } catch (error) {
             console.error("Error searching:", error);
-            alert("Search feature not implemented in this version.");
+            alert("Error occurred during search. Please try again.");
         } finally {
             isSearching = false;
+        }
+    }
+    
+    // Fetch publication by DOI
+    async function fetchDOI() {
+        try {
+            const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(searchQuery)}`);
+            const data = await response.json();
+            console.log("CrossRef response:", data);
+            if (data.status === "ok") {
+                const fetchedData = data.message;
+                searchResults = [
+                    {
+                        title: fetchedData.title ? fetchedData.title[0] : "Unknown Title",
+                        author: fetchedData.author
+                            ? fetchedData.author.map((a) => `${a.given} ${a.family}`).join(", ")
+                            : "Unknown Author",
+                        isbn: fetchedData.ISBN ? fetchedData.ISBN[0] : null,
+                        doi: fetchedData.DOI || null
+                    }
+                ];
+            } else {
+                searchResults = [];
+            }
+        } catch (error) {
+            console.error("Error fetching DOI data:", error);
+            alert("Failed to retrieve DOI information.");
+        }
+    }
+    
+    // Fetch publication by ISBN
+    async function fetchISBN() {
+        try {
+            console.log("Fetching ISBN:", isbn);
+            const response = await fetch(
+                `https://openlibrary.org/api/books?bibkeys=ISBN:${isbn}&format=json&jscmd=data`
+            );
+            const data = await response.json();
+            console.log("Raw ISBN API response:", data);
+            if (!data[`ISBN:${isbn}`]) {
+                console.warn("No ISBN data found in response.");
+                searchResults = [];
+                return;
+            }
+            const bookData = data[`ISBN:${isbn}`];
+            console.log("Book Data:", bookData);
+            
+            searchResults = [
+                {
+                    title: bookData.title || "Unknown Title",
+                    author: bookData.authors
+                        ? bookData.authors.map((a) => a.name).join(", ")
+                        : "Unknown Author",
+                    isbn: isbn
+                }
+            ];
+            console.log("Final Search Result (ISBN):", searchResults);
+        } catch (error) {
+            console.error("Error fetching ISBN data:", error);
+            alert("Failed to retrieve ISBN information.");
+        }
+    }
+    
+    // Fetch publication by title
+    async function fetchTitle() {
+        try {
+            console.log("Fetching Title for:", title);
+            const response = await fetch(
+                `https://openlibrary.org/search.json?title=${encodeURIComponent(title)}`
+            );
+            const data = await response.json();
+            console.log("Full API Response (Title):", data);
+            if (!data.docs || data.docs.length === 0) {
+                console.warn("No title data found.");
+                searchResults = [];
+                return;
+            }
+            searchResults = await Promise.all(
+                data.docs.slice(0, 10).map(async (doc) => {
+                    console.log("Processing book:", doc);
+                    let isbn = doc.isbn ? doc.isbn[0] : null;
+                    
+                    if (!isbn && doc.key) {
+                        const editionData = await fetchISBNFromEditions(doc.key);
+                        isbn = editionData?.isbn || null;
+                    }
+                    
+                    return {
+                        title: doc.title || "Unknown Title",
+                        author: doc.author_name ? doc.author_name.join(", ") : "Unknown Author",
+                        isbn: isbn || "No ISBN"
+                    };
+                })
+            );
+            console.log("Final Search Results (Title):", searchResults);
+        } catch (error) {
+            console.error("Error fetching title data:", error);
+            alert("Failed to retrieve title information.");
+        }
+    }
+    
+    // Helper function to get ISBN from editions when not available in main results
+    async function fetchISBNFromEditions(workKey) {
+        try {
+            console.log("Fetching ISBN from editions for:", workKey);
+            const response = await fetch(`https://openlibrary.org${workKey}/editions.json`);
+            const data = await response.json();
+            console.log("Editions Data:", data);
+            if (data.entries && data.entries.length > 0) {
+                for (const entry of data.entries) {
+                    let isbn = entry.isbn_10 ? entry.isbn_10[0] : entry.isbn_13 ? entry.isbn_13[0] : null;
+                    if (isbn) {
+                        return { isbn };
+                    }
+                }
+            }
+            console.warn("No ISBN found in editions for:", workKey);
+            return { isbn: null };
+        } catch (error) {
+            console.error("Error fetching ISBN from editions:", error);
+            return { isbn: null };
         }
     }
     
@@ -474,16 +618,40 @@
                 readingSessions: [],
                 status: "unread",
                 completed: false,
-                totalPagesRead: 0
+                totalPagesRead: 0,
+                createdAt: new Date(),
+                updatedAt: new Date()
             };
             
-            await saveEntryToFirestore(newEntry);
-            await loadUserLibrary(auth.currentUser.uid);
-            
-            // Update tags list
-            const allTags = new Set(get(uniqueTags));
-            tags.forEach(tag => allTags.add(tag));
-            uniqueTags.set([...allTags]);
+            try {
+                // Get document ID from Firestore
+                const docId = await saveEntryToFirestore(newEntry);
+                
+                if (docId) {
+                    // If we have a document ID, update the entry with it
+                    newEntry.id = docId;
+                    
+                    // Update tags list immediately
+                    const allTags = new Set(get(uniqueTags));
+                    if (tags && Array.isArray(tags)) {
+                        tags.forEach(tag => tag && allTags.add(tag.trim()));
+                        uniqueTags.set([...allTags]);
+                    }
+                    
+                    // Add the entry to the books store to immediately show in UI
+                    books.update(currentBooks => [newEntry, ...currentBooks]);
+                    
+                    // Force update filtered books list
+                    updateFilteredBooks();
+                }
+                
+                // Still do a full reload to ensure everything is synced properly
+                // but this happens in the background
+                loadUserLibrary(auth.currentUser.uid);
+            } catch (error) {
+                console.error("Error adding publication:", error);
+                alert("Failed to add publication. Please try again.");
+            }
         } else {
             alert("Please fill in all required fields before adding.");
         }
@@ -551,7 +719,7 @@
         const user = auth.currentUser;
         if (!user) {
             console.error("No authenticated user found.");
-            return;
+            return null;
         }
         
         try {
@@ -563,28 +731,35 @@
             
             const libraryRef = collection(userDocRef, "library");
             
-            // Check if same title and author already exists
-            const titleQuery = query(libraryRef, where("title", "==", newEntry.title), where("author", "==", newEntry.author));
-            const titleQuerySnapshot = await getDocs(titleQuery);
-            if (!titleQuerySnapshot.empty) {
+            // Check if same title and author already exists - use case-insensitive comparison
+            // to avoid duplicate entries that differ only in capitalization
+            const allBooks = get(books);
+            const titleAuthorExists = allBooks.some(book => 
+                book.title.toLowerCase() === newEntry.title.toLowerCase() && 
+                book.author.toLowerCase() === newEntry.author.toLowerCase()
+            );
+            
+            if (titleAuthorExists) {
                 alert("This publication is already in your library!");
                 resetFields();
-                return;
+                return null;
             }
             
-            // Check ISBN if provided
+            // Check ISBN if provided - use case-insensitive comparison
             if (newEntry.isbn) {
-                const isbnQuery = query(libraryRef, where("isbn", "==", newEntry.isbn));
-                const isbnQuerySnapshot = await getDocs(isbnQuery);
-                if (!isbnQuerySnapshot.empty) {
+                const isbnExists = allBooks.some(book => 
+                    book.isbn && book.isbn.toLowerCase() === newEntry.isbn.toLowerCase()
+                );
+                
+                if (isbnExists) {
                     alert("This ISBN is already in your library!");
                     resetFields();
-                    return;
+                    return null;
                 }
             }
             
-            // Add document
-            await addDoc(libraryRef, {
+            // Add document and get the document reference
+            const docRef = await addDoc(libraryRef, {
                 title: newEntry.title,
                 author: newEntry.author,
                 isbn: newEntry.isbn,
@@ -599,15 +774,15 @@
                 updatedAt: new Date()
             });
             
-            // Update local data
-            books.update(currentBooks => [newEntry, ...currentBooks]);
             resetFields();
             modalOpen = false;
             
             alert("Publication added successfully!");
+            return docRef.id; // Return the document ID so we can use it
         } catch (error) {
             console.error("Error saving entry:", error);
             alert("Failed to add publication. Please try again.");
+            return null;
         }
     }
     
