@@ -1,6 +1,6 @@
 <script>
     import { auth, firestore } from "./firebase";
-    import { doc, collection, getDocs, getDoc, addDoc } from "firebase/firestore";
+    import { doc, collection, getDocs, getDoc, addDoc, updateDoc, setDoc, query, where } from "firebase/firestore";
     import { onAuthStateChanged, signOut } from "firebase/auth";
     import { onMount } from "svelte";
     import { writable, get } from "svelte/store";
@@ -11,7 +11,8 @@
         Trash2, 
         Ellipsis, 
         Book, 
-        Filter 
+        Filter,
+        Search 
     } from "lucide-svelte";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
     import * as Dialog from "$lib/components/ui/dialog";
@@ -29,22 +30,32 @@
     const uniqueTags = writable([]);
     
     // Search and filter
-    let searchQuery = "";
+    let searchLibraryQuery = ""; // Renamed to avoid conflict with form searchQuery
     let activeFilter = "all"; // Options: all, unread, reading, completed
     
-    // Popular tags for quick filtering
-    const tagFilters = ["All", "Machine Learning", "Biology", "Neural Networks", "Quantum Computing", "Physics"];
+    // We'll use the actual tags from the publications instead of hardcoded ones
+    // Just need an "All" option
+    const allTagsOption = "All";
     
     // Modal states
     let viewModalOpen = false;
     let viewingPublication = null;
     let logReadingModalOpen = false;
-    let addPublicationModalOpen = false;
+    let modalOpen = false; // For add/edit publication modal (named the same as in Dashboard)
+    let editMode = false;
+    let editingPublication = null;
+    let isSearching = false;
+    
+    // Publication form fields
+    let searchQuery = "";
     let title = "";
     let author = "";
     let isbn = "";
     let tagInput = "";
     let tags = [];
+    let comment = "";
+    let searchResults = [];
+    let showResults = false;
     
     // Load user data
     async function fetchUserData(uid) {
@@ -96,9 +107,9 @@
         
         return allBooks.filter(book => {
             // Filter by search
-            const matchesSearch = !searchQuery || 
-                book.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                book.author?.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesSearch = !searchLibraryQuery || 
+                book.title?.toLowerCase().includes(searchLibraryQuery.toLowerCase()) ||
+                book.author?.toLowerCase().includes(searchLibraryQuery.toLowerCase());
                 
             // Filter by tags
             const matchesTags = tags.length === 0 || 
@@ -166,13 +177,18 @@
     
     function showAddPublicationForm() {
         // Reset form fields
-        title = "";
-        author = "";
-        isbn = "";
-        tags = [];
+        editMode = false;
+        editingPublication = null;
+        resetFields();
+        modalOpen = true;
+    }
+    
+    function resetFields() {
+        searchQuery = title = author = isbn = comment = "";
+        searchResults = [];
+        showResults = false;
         tagInput = "";
-        // Show modal
-        addPublicationModalOpen = true;
+        tags = [];
     }
     
     function addTag() {
@@ -186,51 +202,144 @@
         tags = tags.filter((_, i) => i !== index);
     }
     
-    async function savePublication() {
-        if (!title || !author) {
-            alert("Title and author are required");
+    // Search literature in external APIs
+    async function searchLiterature() {
+        // Reset previous results
+        showResults = false;
+        searchResults = [];
+        isSearching = true;
+        
+        // Simplified placeholder just for visual matching with Dashboard
+        try {
+            // Just simulate a search
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            // Provide a dummy result for demonstration
+            if (searchQuery.trim()) {
+                searchResults = [{
+                    title: `Sample: ${searchQuery}`,
+                    author: "Sample Author",
+                    isbn: "1234567890123"
+                }];
+                showResults = true;
+            }
+        } catch (error) {
+            console.error("Error searching:", error);
+            alert("Search feature not implemented in this version.");
+        } finally {
+            isSearching = false;
+        }
+    }
+    
+    // Select a result from search
+    function selectResult(result) {
+        if (!result) return;
+        
+        // Fill in the form fields with the selected result
+        title = result.title || "";
+        author = result.author || "";
+        isbn = result.isbn || result.doi || "";
+        
+        // Hide the results
+        showResults = false;
+    }
+    
+    // Close modal
+    function closeModal() {
+        modalOpen = false;
+        editMode = false;
+        editingPublication = null;
+        resetFields();
+    }
+    
+    // Add literature to library - matches Dashboard's function
+    async function addLiteratureToLibrary() {
+        if (title && author) { // Only require title and author
+            const newEntry = {
+                title,
+                author,
+                isbn: isbn || "", // Make ISBN/DOI optional
+                comment,
+                tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
+                readingSessions: [],
+                status: "unread",
+                completed: false,
+                totalPagesRead: 0
+            };
+            
+            await saveEntryToFirestore(newEntry);
+            await loadUserLibrary(auth.currentUser.uid);
+            
+            // Update tags list
+            const allTags = new Set(get(uniqueTags));
+            tags.forEach(tag => allTags.add(tag));
+            uniqueTags.set([...allTags]);
+        } else {
+            alert("Please fill in all required fields before adding.");
+        }
+    }
+    
+    // Save entry to Firestore - matches Dashboard's function
+    async function saveEntryToFirestore(newEntry) {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
             return;
         }
         
         try {
-            const user = auth.currentUser;
-            if (!user) {
-                alert("You must be logged in to add publications");
+            const userDocRef = doc(firestore, "users", user.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            if (!userDocSnap.exists()) {
+                await setDoc(userDocRef, { createdAt: new Date() });
+            }
+            
+            const libraryRef = collection(userDocRef, "library");
+            
+            // Check if same title and author already exists
+            const titleQuery = query(libraryRef, where("title", "==", newEntry.title), where("author", "==", newEntry.author));
+            const titleQuerySnapshot = await getDocs(titleQuery);
+            if (!titleQuerySnapshot.empty) {
+                alert("This publication is already in your library!");
+                resetFields();
                 return;
             }
             
-            const userDocRef = doc(firestore, "users", user.uid);
-            const libraryRef = collection(userDocRef, "library");
+            // Check ISBN if provided
+            if (newEntry.isbn) {
+                const isbnQuery = query(libraryRef, where("isbn", "==", newEntry.isbn));
+                const isbnQuerySnapshot = await getDocs(isbnQuery);
+                if (!isbnQuerySnapshot.empty) {
+                    alert("This ISBN is already in your library!");
+                    resetFields();
+                    return;
+                }
+            }
             
-            // Create new publication
-            const newPublication = {
-                title,
-                author,
-                isbn: isbn || "",
-                tags,
-                status: "unread",
+            // Add document
+            await addDoc(libraryRef, {
+                title: newEntry.title,
+                author: newEntry.author,
+                isbn: newEntry.isbn,
+                comment: newEntry.comment,
+                tags: newEntry.tags,
+                readingSessions: newEntry.readingSessions || [],
+                status: newEntry.status || "unread",
+                completed: newEntry.completed || false,
+                totalPagesRead: newEntry.totalPagesRead || 0,
                 userId: user.uid,
                 createdAt: new Date(),
                 updatedAt: new Date()
-            };
-            
-            // Add to Firestore
-            await addDoc(libraryRef, newPublication);
+            });
             
             // Update local data
-            books.update(currentBooks => [newPublication, ...currentBooks]);
-            
-            // Extract any new tags
-            const allTags = new Set(get(uniqueTags));
-            tags.forEach(tag => allTags.add(tag));
-            uniqueTags.set([...allTags]);
-            
-            // Close modal
-            addPublicationModalOpen = false;
+            books.update(currentBooks => [newEntry, ...currentBooks]);
+            resetFields();
+            modalOpen = false;
             
             alert("Publication added successfully!");
         } catch (error) {
-            console.error("Error adding publication:", error);
+            console.error("Error saving entry:", error);
             alert("Failed to add publication. Please try again.");
         }
     }
@@ -317,7 +426,7 @@
                 <div class="relative flex-1">
                     <input
                         type="text"
-                        bind:value={searchQuery}
+                        bind:value={searchLibraryQuery}
                         class="w-full p-3 pl-10 border border-gray-300 rounded-md shadow-sm"
                         placeholder="Search publications..."
                     />
@@ -381,16 +490,26 @@
             <div class="px-12 pt-6">
                 <p class="text-sm text-gray-600 mb-2">Filter by tags:</p>
                 <div class="flex flex-wrap gap-2">
-                    {#each tagFilters as tag}
+                    <!-- Always show All option first -->
+                    <button 
+                        class="px-3 py-1.5 text-sm rounded-full border {$selectedTags.length === 0 ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}"
+                        on:click={() => setTagFilter(allTagsOption)}
+                    >
+                        {allTagsOption}
+                    </button>
+                    
+                    <!-- Show first 5 tags directly -->
+                    {#each $uniqueTags.slice(0, 5) as tag}
                         <button 
-                            class="px-3 py-1.5 text-sm rounded-full border {$selectedTags.length === 0 && tag === 'All' || $selectedTags.includes(tag) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}"
+                            class="px-3 py-1.5 text-sm rounded-full border {$selectedTags.includes(tag) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'}"
                             on:click={() => setTagFilter(tag)}
                         >
                             {tag}
                         </button>
                     {/each}
                     
-                    {#if $uniqueTags.length > tagFilters.length - 1}
+                    <!-- If there are more than 5 tags, show a More button -->
+                    {#if $uniqueTags.length > 5}
                         <Popover.Root>
                             <Popover.Trigger asChild let:builder>
                                 <button
@@ -404,7 +523,7 @@
                             <Popover.Content class="w-[225px] max-h-[300px] overflow-y-auto p-4 bg-white rounded-md shadow-md">
                                 <div class="space-y-2">
                                     <h3 class="font-medium mb-2">All Tags</h3>
-                                    {#each $uniqueTags.filter(tag => !tagFilters.includes(tag)) as tag}
+                                    {#each $uniqueTags.slice(5) as tag}
                                         <div class="flex items-center gap-2">
                                             <input 
                                                 type="checkbox" 
@@ -626,121 +745,124 @@
         </Dialog.Root>
         
         <!-- Add Publication Modal -->
-        <Dialog.Root bind:open={addPublicationModalOpen}>
-            <Dialog.Content class="w-[500px]">
-                <Dialog.Header>
-                    <Dialog.Title>Add Publication</Dialog.Title>
-                    <Dialog.Description>
-                        <form class="space-y-4 mt-4">
-                            <!-- Title -->
-                            <div class="space-y-2">
-                                <label for="pub-title" class="block text-sm font-medium">
-                                    Title *
-                                </label>
-                                <input 
-                                    id="pub-title" 
-                                    type="text" 
-                                    bind:value={title}
-                                    class="w-full p-2 border border-gray-300 rounded"
-                                    placeholder="Enter publication title"
-                                />
+        <Dialog.Root bind:open={modalOpen}>
+          <Dialog.Content class="w-[90%] max-w-4xl">
+            <Dialog.Header>
+              <Dialog.Title class="text-xl mb-1">
+                {editMode ? "Edit Publication" : "Add Literature"}
+              </Dialog.Title>
+              <Dialog.Description>
+                <form on:submit|preventDefault={editMode ? alert("Edit not implemented") : addLiteratureToLibrary}>
+                  <!-- Search Bar -->
+                  <div class="mb-4">
+                    <div class="relative">
+                      <label for="searchQuery" class="sr-only">Search Query</label>
+                      <input 
+                        type="text" 
+                        id="searchQuery" 
+                        bind:value={searchQuery}
+                        class="w-full p-2.5 pl-10 border rounded-md border-neutral-300 shadow-sm text-neutral-700 disabled:bg-neutral-100" 
+                        placeholder="Search for a book by title, ISBN, or DOI"
+                        disabled={editMode}
+                      />
+                      <Search class="absolute top-3 left-3 w-4 h-4 text-neutral-400" />
+                      <button 
+                        type="button" 
+                        class="absolute right-2 top-1/2 transform -translate-y-1/2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-neutral-400"
+                        on:click={searchLiterature}
+                        disabled={editMode || !searchQuery.trim() || isSearching}
+                      >
+                        {#if isSearching}
+                          Searching...
+                        {:else}
+                          Search
+                        {/if}
+                      </button>
+                    </div>
+                  </div>
+
+                  <!-- Search Results -->
+                  {#if showResults && searchResults.length > 0}
+                    <div class="mb-6 bg-neutral-50 border border-neutral-300 rounded-md shadow-sm max-h-64 overflow-y-auto">
+                      <ul class="divide-y divide-neutral-200">
+                        {#each searchResults as result}
+                          <li class="p-3 hover:bg-neutral-100 cursor-pointer" on:click={() => selectResult(result)}>
+                            <div class="font-medium">{result.title}</div>
+                            <div class="text-sm text-neutral-600">{result.author}</div>
+                            {#if result.isbn}
+                              <div class="text-xs text-neutral-500 mt-1">ISBN: {result.isbn}</div>
+                            {/if}
+                          </li>
+                        {/each}
+                      </ul>
+                    </div>
+                  {/if}
+
+                  <!-- Publication Details -->
+                  <div class="space-y-4 mt-6">
+                    <h3 class="text-lg font-semibold mb-2">{editMode ? "Edit Publication Details" : "Publication Details"}</h3>
+                    <div class="flex items-center">
+                      <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title *</label>
+                      <input id="title" type="text" bind:value={title}
+                        class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" required />
+                    </div>
+                    <div class="flex items-center">
+                      <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author *</label>
+                      <input id="author" type="text" bind:value={author}
+                        class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" required />
+                    </div>
+                    <div class="flex items-center">
+                      <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI</label>
+                      <input id="isbn-doi" type="text" bind:value={isbn}
+                        class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" autocomplete="off" />
+                    </div>
+                    <Separator />
+                    <!-- Tag Input Section -->
+                    <div class="mb-4">
+                      <label for="tag-input" class="text-sm font-medium text-neutral-700">Tags</label>
+                      <div class="flex items-center mt-2">
+                        <input id="tag-input" type="text" bind:value={tagInput}
+                          class="flex-1 p-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
+                          placeholder="Type a tag and press Enter"
+                          on:keydown={(e) => {
+                            if (e.key === "Enter") {
+                              e.preventDefault();
+                              addTag();
+                            }
+                          }}
+                        />
+                        <button type="button"
+                          class="ml-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                          on:click={addTag}>
+                          Add
+                        </button>
+                      </div>
+                      {#if tags.length > 0}
+                        <div class="flex flex-wrap gap-2 mt-3">
+                          {#each tags as tag, index}
+                            <div class="flex items-center gap-1 bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full">
+                              <span>{tag}</span>
+                              <button type="button" class="text-neutral-500 hover:text-neutral-800" on:click={() => removeTag(index)}>
+                                &times;
+                              </button>
                             </div>
-                            
-                            <!-- Author -->
-                            <div class="space-y-2">
-                                <label for="pub-author" class="block text-sm font-medium">
-                                    Author *
-                                </label>
-                                <input 
-                                    id="pub-author" 
-                                    type="text" 
-                                    bind:value={author}
-                                    class="w-full p-2 border border-gray-300 rounded"
-                                    placeholder="Enter author name"
-                                />
-                            </div>
-                            
-                            <!-- ISBN/DOI -->
-                            <div class="space-y-2">
-                                <label for="pub-isbn" class="block text-sm font-medium">
-                                    ISBN/DOI (Optional)
-                                </label>
-                                <input 
-                                    id="pub-isbn" 
-                                    type="text" 
-                                    bind:value={isbn}
-                                    class="w-full p-2 border border-gray-300 rounded"
-                                    placeholder="Enter ISBN or DOI"
-                                />
-                            </div>
-                            
-                            <!-- Tags -->
-                            <div class="space-y-2">
-                                <label for="pub-tags" class="block text-sm font-medium">
-                                    Tags
-                                </label>
-                                <div class="flex items-center">
-                                    <input 
-                                        id="pub-tags" 
-                                        type="text" 
-                                        bind:value={tagInput}
-                                        class="flex-1 p-2 border border-gray-300 rounded"
-                                        placeholder="Add tags (e.g., Machine Learning)"
-                                        on:keydown={(e) => {
-                                            if (e.key === "Enter") {
-                                                e.preventDefault();
-                                                addTag();
-                                            }
-                                        }}
-                                    />
-                                    <Button 
-                                        type="button"
-                                        class="ml-2"
-                                        on:click={addTag}
-                                    >
-                                        Add
-                                    </Button>
-                                </div>
-                                
-                                {#if tags.length > 0}
-                                    <div class="flex flex-wrap gap-2 mt-2">
-                                        {#each tags as tag, i}
-                                            <div class="bg-blue-100 text-blue-800 px-2 py-1 rounded-full text-sm flex items-center">
-                                                {tag}
-                                                <button 
-                                                    type="button" 
-                                                    class="ml-1 text-blue-500 hover:text-blue-700"
-                                                    on:click={() => removeTag(i)}
-                                                >
-                                                    ×
-                                                </button>
-                                            </div>
-                                        {/each}
-                                    </div>
-                                {/if}
-                            </div>
-                            
-                            <!-- Buttons -->
-                            <div class="flex justify-end space-x-3 pt-4">
-                                <Button 
-                                    type="button" 
-                                    variant="outline"
-                                    on:click={() => addPublicationModalOpen = false}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button 
-                                    type="button" 
-                                    class="bg-blue-600 hover:bg-blue-700"
-                                    on:click={savePublication}
-                                >
-                                    Add Publication
-                                </Button>
-                            </div>
-                        </form>
-                    </Dialog.Description>
-                </Dialog.Header>
-            </Dialog.Content>
+                          {/each}
+                        </div>
+                      {/if}
+                    </div>
+                  </div>
+
+                  <!-- Submit Button -->
+                  <div class="flex justify-end mt-6">
+                    <Button type="button" variant="outline" class="mr-3" on:click={closeModal}>Cancel</Button>
+                    <Button type="submit" class="bg-blue-600 hover:bg-blue-700">
+                      {editMode ? "Update Publication" : "Add to Library"}
+                    </Button>
+                  </div>
+                </form>
+              </Dialog.Description>
+            </Dialog.Header>
+          </Dialog.Content>
         </Dialog.Root>
     </div>
 {/if}
