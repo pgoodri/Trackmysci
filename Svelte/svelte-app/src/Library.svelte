@@ -49,6 +49,13 @@
     let editingPublication = null;
     let isSearching = false;
     
+    // Rating dialog variables
+    let ratingDialogOpen = false;
+    let currentRating = 0;
+    let publicationToRate = null;
+    let publicationTitleToRate = "";
+    let markCompletedWithRating = false;
+    
     // Log Reading modal variables
     let logReadingPublication = null;
     let logReadingPagesRead = 0;
@@ -381,6 +388,88 @@
         alert("Delete publication not implemented in this version");
     }
     
+    // Function to show rating dialog
+    function showRatingDialog(pubId, pubTitle) {
+        publicationToRate = pubId;
+        publicationTitleToRate = pubTitle;
+        currentRating = 0;
+        ratingDialogOpen = true;
+    }
+    
+    // Function to save rating
+    async function saveRating() {
+        if (currentRating === 0) return;
+        
+        // For now just close the dialog, future implementation will save to Firestore
+        ratingDialogOpen = false;
+        alert("Rating saved!");
+    }
+    
+    // Function to toggle publication completion status
+    async function toggleCompletionStatus(publicationId) {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
+        }
+        
+        try {
+            // Find the publication
+            const booksList = get(books);
+            const publication = booksList.find(p => p.id === publicationId);
+            if (!publication) return;
+            
+            const newStatus = !publication.completed;
+            
+            const userDocRef = doc(firestore, "users", user.uid);
+            const libraryRef = doc(userDocRef, "library", publicationId);
+            
+            // Update Firestore
+            await updateDoc(libraryRef, { 
+                completed: newStatus, 
+                status: newStatus ? "completed" : 
+                        (publication.readingSessions && publication.readingSessions.length > 0) 
+                        ? "in progress" : "unread",
+                updatedAt: new Date()
+            });
+            
+            // Update local state
+            books.update(currentBooks => 
+                currentBooks.map(book => 
+                    book.id === publicationId 
+                    ? { 
+                        ...book, 
+                        completed: newStatus, 
+                        status: newStatus ? "completed" : 
+                                (book.readingSessions && book.readingSessions.length > 0) 
+                                ? "in progress" : "unread"
+                    } 
+                    : book
+                )
+            );
+            
+            // If setting to completed, show rating dialog
+            if (newStatus) {
+                showRatingDialog(publicationId, publication.title);
+            }
+            
+            // If viewing this publication, update the viewing state as well
+            if (viewingPublication && viewingPublication.id === publicationId) {
+                viewingPublication = {
+                    ...viewingPublication,
+                    completed: newStatus,
+                    status: newStatus ? "completed" : 
+                            (viewingPublication.readingSessions && viewingPublication.readingSessions.length > 0) 
+                            ? "in progress" : "unread"
+                };
+            }
+            
+            console.log(`✅ Publication ${publicationId} ${newStatus ? "marked as completed" : "marked as incomplete"}`);
+        } catch (error) {
+            console.error(`❌ Error changing completion status:`, error.message);
+        }
+    }
+    
     // Initialize with proper auth state handling
     onMount(() => {
         isLoading = true;
@@ -575,70 +664,89 @@
                 </div>
             </div>
 
-            <!-- Publications Grid -->
-            <div class="px-12 py-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            <!-- Publications List -->
+            <div class="px-12 py-6">
                 {#if getFilteredBooks().length > 0}
-                    {#each getFilteredBooks() as book}
-                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow cursor-pointer" on:click={() => openViewModal(book)}>
-                            <div class="flex justify-between items-start mb-4">
-                                <div class="flex-1">
-                                    <h3 class="font-medium text-lg text-gray-800 line-clamp-2">{book.title}</h3>
-                                    <p class="text-sm text-gray-600 mt-1">{book.author}</p>
+                    <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                        <!-- List items -->
+                        {#each getFilteredBooks() as book}
+                            <div class="border-b border-gray-100 last:border-b-0 hover:bg-gray-50 cursor-pointer transition-colors" on:click={() => openViewModal(book)}>
+                                <div class="p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-4">
+                                    <!-- Book Title and Author -->
+                                    <div class="flex-1">
+                                        <h3 class="font-medium text-lg text-gray-800">{book.title}</h3>
+                                        <p class="text-sm text-gray-600 mt-1">{book.author}</p>
+                                        
+                                        <!-- Tags -->
+                                        {#if book.tags && book.tags.length > 0}
+                                            <div class="flex flex-wrap gap-1.5 mt-2">
+                                                {#each book.tags.slice(0, 3) as tag}
+                                                    <span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-800 rounded-full">
+                                                        {tag}
+                                                    </span>
+                                                {/each}
+                                                {#if book.tags.length > 3}
+                                                    <span class="inline-block px-2 py-0.5 text-xs bg-gray-100 text-gray-600 rounded-full">
+                                                        +{book.tags.length - 3} more
+                                                    </span>
+                                                {/if}
+                                            </div>
+                                        {/if}
+                                    </div>
+                                    
+                                    <!-- Reading Stats -->
+                                    <div class="flex flex-row sm:flex-col items-center sm:items-end gap-4 sm:gap-1">
+                                        <div class="flex items-center gap-2">
+                                            <span class={`px-2 py-1 text-xs rounded-full ${
+                                                book.completed ? "bg-green-100 text-green-800" : 
+                                                book.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
+                                                "bg-gray-100 text-gray-800"
+                                            }`}>
+                                                {book.status || (book.completed ? "Completed" : book.readingSessions?.length > 0 ? "In Progress" : "Unread")}
+                                            </span>
+                                            
+                                            {#if book.readingSessions && book.readingSessions.length > 0}
+                                                <span class="text-xs text-gray-500">
+                                                    {book.totalPagesRead || 0} pages read
+                                                </span>
+                                            {/if}
+                                        </div>
+                                        
+                                        <div class="flex items-center gap-2">
+                                            <button class="text-sm text-blue-600 hover:text-blue-800" on:click={(e) => {e.stopPropagation(); openViewModal(book);}}>
+                                                View
+                                            </button>
+                                            
+                                            <DropdownMenu.Root>
+                                                <DropdownMenu.Trigger asChild>
+                                                    <button class="text-gray-400 hover:text-gray-600" on:click={(e) => e.stopPropagation()}>
+                                                        <Ellipsis class="h-5 w-5" />
+                                                    </button>
+                                                </DropdownMenu.Trigger>
+                                                <DropdownMenu.Content>
+                                                    <DropdownMenu.Item on:click={() => openViewModal(book)}>
+                                                        <Book class="mr-2 h-4 w-4" />
+                                                        <span>View Details</span>
+                                                    </DropdownMenu.Item>
+                                                    <DropdownMenu.Item on:click={() => toggleCompletionStatus(book.id)}>
+                                                        <Book class="mr-2 h-4 w-4" />
+                                                        <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
+                                                    </DropdownMenu.Item>
+                                                    <DropdownMenu.Separator />
+                                                    <DropdownMenu.Item class="text-red-500" on:click={() => deletePublication(book.id)}>
+                                                        <Trash2 class="mr-2 h-4 w-4" />
+                                                        <span>Delete</span>
+                                                    </DropdownMenu.Item>
+                                                </DropdownMenu.Content>
+                                            </DropdownMenu.Root>
+                                        </div>
+                                    </div>
                                 </div>
-                                
-                                <DropdownMenu.Root>
-                                    <DropdownMenu.Trigger asChild>
-                                        <button class="text-gray-400 hover:text-gray-600" on:click={(e) => e.stopPropagation()}>
-                                            <Ellipsis class="h-6 w-6" />
-                                        </button>
-                                    </DropdownMenu.Trigger>
-                                    <DropdownMenu.Content>
-                                        <DropdownMenu.Item on:click={() => openViewModal(book)}>
-                                            <Book class="mr-2 h-4 w-4" />
-                                            <span>View Details</span>
-                                        </DropdownMenu.Item>
-                                        <DropdownMenu.Item on:click={() => alert("Edit not implemented")}>
-                                            <Edit class="mr-2 h-4 w-4" />
-                                            <span>Edit</span>
-                                        </DropdownMenu.Item>
-                                        <DropdownMenu.Separator />
-                                        <DropdownMenu.Item class="text-red-500" on:click={() => deletePublication(book.id)}>
-                                            <Trash2 class="mr-2 h-4 w-4" />
-                                            <span>Delete</span>
-                                        </DropdownMenu.Item>
-                                    </DropdownMenu.Content>
-                                </DropdownMenu.Root>
                             </div>
-                            
-                            <!-- Tags -->
-                            {#if book.tags && book.tags.length > 0}
-                                <div class="flex flex-wrap gap-2 mt-3 mb-4">
-                                    {#each book.tags as tag}
-                                        <span class="inline-block px-2 py-1 text-xs bg-gray-100 text-gray-800 rounded-full">
-                                            {tag}
-                                        </span>
-                                    {/each}
-                                </div>
-                            {/if}
-                            
-                            <!-- Status and Action Button -->
-                            <div class="flex justify-between items-center mt-4">
-                                <span class={`px-2 py-1 text-xs rounded-full ${
-                                    book.completed ? "bg-green-100 text-green-800" : 
-                                    book.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
-                                    "bg-gray-100 text-gray-800"
-                                }`}>
-                                    {book.status || (book.completed ? "Completed" : book.readingSessions?.length > 0 ? "In Progress" : "Unread")}
-                                </span>
-                                
-                                <button class="text-sm text-blue-600 hover:text-blue-800" on:click={(e) => {e.stopPropagation(); openViewModal(book);}}>
-                                    View
-                                </button>
-                            </div>
-                        </div>
-                    {/each}
+                        {/each}
+                    </div>
                 {:else}
-                    <div class="col-span-full flex flex-col items-center justify-center py-12 text-center">
+                    <div class="flex flex-col items-center justify-center py-12 text-center bg-white rounded-xl shadow-sm border border-gray-100">
                         <p class="text-lg font-medium text-gray-500">No publications found.</p>
                         <p class="text-sm text-gray-400 mt-2">Try adjusting your search or filter criteria.</p>
                         <button class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" on:click={openAddModal}>
@@ -778,17 +886,15 @@
                             </div>
                         {/if}
 
-                        <!-- Mark as Complete button -->
-                        {#if viewingPublication && !viewingPublication.completed}
-                            <div class="mt-6">
-                                <Button 
-                                    class="w-full bg-green-600 hover:bg-green-700"
-                                    on:click={() => alert("Mark as complete not implemented in this version")}
-                                >
-                                    Mark as Complete
-                                </Button>
-                            </div>
-                        {/if}
+                        <!-- Mark as Complete/Incomplete button -->
+                        <div class="mt-6">
+                            <Button 
+                                class="w-full {viewingPublication?.completed ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-green-600 hover:bg-green-700'}"
+                                on:click={() => toggleCompletionStatus(viewingPublication.id)}
+                            >
+                                {viewingPublication?.completed ? 'Mark as Incomplete' : 'Mark as Complete'}
+                            </Button>
+                        </div>
                     </div>
                 {/if}
             </Dialog.Description>
@@ -877,6 +983,48 @@
         </Dialog.Header>
     </Dialog.Content>
 </Dialog.Root>
+
+<!-- Rating Dialog -->
+{#if ratingDialogOpen}
+<div class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white p-6 rounded-lg shadow-xl max-w-md w-full">
+        <h2 class="text-xl font-bold mb-4">Rate this publication</h2>
+        <p class="mb-4">Congratulations on finishing "{publicationTitleToRate}"! How would you rate it?</p>
+        
+        <div class="flex items-center justify-center space-x-2 mb-6">
+            {#each Array(5) as _, i}
+                <button 
+                    type="button"
+                    on:click={() => currentRating = i + 1}
+                    class="text-3xl focus:outline-none transition-transform hover:scale-110"
+                >
+                    {#if i < currentRating}
+                        <span class="text-yellow-400">★</span>
+                    {:else}
+                        <span class="text-gray-300">★</span>
+                    {/if}
+                </button>
+            {/each}
+        </div>
+        
+        <div class="flex justify-end space-x-3">
+            <button 
+                class="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors"
+                on:click={() => ratingDialogOpen = false}
+            >
+                Skip
+            </button>
+            <button 
+                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
+                on:click={saveRating}
+                disabled={currentRating === 0}
+            >
+                Save Rating
+            </button>
+        </div>
+    </div>
+</div>
+{/if}
 
 <!-- Add Publication Modal -->
 <Dialog.Root bind:open={modalOpen}>
