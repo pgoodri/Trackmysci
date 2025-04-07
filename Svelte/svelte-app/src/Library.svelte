@@ -224,6 +224,19 @@
         modalOpen = true;
     }
     
+    // Open modal in "edit" mode (for editing an existing publication)
+    function openEditModal(pub) {
+        editMode = true;
+        editingPublication = { ...pub };
+        // Pre-fill modal fields with publication data
+        searchQuery = pub.title;
+        title = pub.title;
+        author = pub.author;
+        isbn = pub.isbn || "";
+        tags = pub.tags || [];
+        modalOpen = true;
+    }
+    
     function closeModal() {
         modalOpen = false;
         editMode = false;
@@ -316,6 +329,63 @@
             uniqueTags.set([...allTags]);
         } else {
             alert("Please fill in all required fields before adding.");
+        }
+    }
+    
+    // Update an existing publication
+    async function updateEditedPublication() {
+        if (!editingPublication) return;
+        
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found.");
+            return;
+        }
+        
+        try {
+            const userDocRef = doc(firestore, "users", user.uid);
+            const entryDocRef = doc(collection(userDocRef, "library"), editingPublication.id);
+            
+            // Fetch the existing data before update
+            const entryDocSnap = await getDoc(entryDocRef);
+            if (!entryDocSnap.exists()) {
+                console.warn("Publication not found for editing.");
+                return;
+            }
+            
+            const oldData = entryDocSnap.data();
+            
+            const updatedData = {
+                title,
+                author,
+                isbn,
+                tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
+                updatedAt: new Date()
+            };
+            
+            // Save updated publication data
+            await updateDoc(entryDocRef, updatedData);
+            console.log(`Updated publication: ${editingPublication.id}`);
+            
+            // Update UI by reloading library
+            await loadUserLibrary(user.uid);
+            
+            // If the publication is currently being viewed, update the view
+            if (viewingPublication && viewingPublication.id === editingPublication.id) {
+                viewingPublication = {
+                    ...viewingPublication,
+                    title: updatedData.title,
+                    author: updatedData.author,
+                    isbn: updatedData.isbn,
+                    tags: updatedData.tags
+                };
+            }
+            
+            closeModal();
+            
+        } catch (error) {
+            console.error("Error updating publication:", error.message);
+            alert("Failed to update publication. Please try again.");
         }
     }
     
@@ -728,6 +798,10 @@
                                                         <Book class="mr-2 h-4 w-4" />
                                                         <span>View Details</span>
                                                     </DropdownMenu.Item>
+                                                    <DropdownMenu.Item on:click={() => openEditModal(book)}>
+                                                        <Edit class="mr-2 h-4 w-4" />
+                                                        <span>Edit Details</span>
+                                                    </DropdownMenu.Item>
                                                     <DropdownMenu.Item on:click={() => toggleCompletionStatus(book.id)}>
                                                         <Book class="mr-2 h-4 w-4" />
                                                         <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
@@ -813,21 +887,36 @@
                     <div>
                         <div class="flex justify-between items-center mb-4">
                             <h3 class="text-lg font-semibold">Reading Logs</h3>
-                            <Button 
-                                class="flex items-center gap-2" 
-                                variant="outline"
-                                on:click={() => {
-                                    logReadingPublication = viewingPublication.id;
-                                    logReadingPagesRead = 0;
-                                    logReadingComment = "";
-                                    logReadingDuration = 0;
-                                    logReadingModalOpen = true;
-                                    viewModalOpen = false; // Close the view modal when opening the log modal
-                                }}
-                            >
-                                <BookOpen class="w-5 h-5" />
-                                Log Reading
-                            </Button>
+                            <div class="flex items-center gap-2">
+                                <Button 
+                                    class="flex items-center gap-2" 
+                                    variant="outline"
+                                    on:click={() => {
+                                        if (viewingPublication) {
+                                            openEditModal(viewingPublication);
+                                            viewModalOpen = false; // Close the view modal when opening the edit modal
+                                        }
+                                    }}
+                                >
+                                    <Edit class="w-4 h-4" />
+                                    Edit Details
+                                </Button>
+                                <Button 
+                                    class="flex items-center gap-2" 
+                                    variant="outline"
+                                    on:click={() => {
+                                        logReadingPublication = viewingPublication.id;
+                                        logReadingPagesRead = 0;
+                                        logReadingComment = "";
+                                        logReadingDuration = 0;
+                                        logReadingModalOpen = true;
+                                        viewModalOpen = false; // Close the view modal when opening the log modal
+                                    }}
+                                >
+                                    <BookOpen class="w-5 h-5" />
+                                    Log Reading
+                                </Button>
+                            </div>
                         </div>
                         
                         {#if viewingPublication.readingSessions?.length > 0}
@@ -1034,7 +1123,7 @@
         {editMode ? "Edit Publication" : "Add Literature"}
       </Dialog.Title>
       <Dialog.Description>
-        <form on:submit|preventDefault={editMode ? alert("Edit not implemented") : addLiteratureToLibrary}>
+        <form on:submit|preventDefault={editMode ? updateEditedPublication : addLiteratureToLibrary}>
           <!-- Search Bar -->
           <div class="mb-4">
             <div class="relative">

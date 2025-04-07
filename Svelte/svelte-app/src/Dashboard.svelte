@@ -1623,21 +1623,36 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
                   <div>
                       <div class="flex justify-between items-center mb-4">
                           <h3 class="text-lg font-semibold">Reading Logs</h3>
-                          <Button 
-                            class="flex items-center gap-2" 
-                            variant="outline"
-                            on:click={() => {
-                              logReadingPublication = viewingPublication.id;
-                              logReadingPagesRead = 0;
-                              logReadingComment = "";
-                              logReadingDuration = 0;
-                              logReadingModalOpen = true;
-                              viewModalOpen = false; // Close the view modal when opening the log modal
-                            }}
-                          >
-                              <BookOpen class="w-5 h-5" />
-                              Log Reading
-                          </Button>
+                          <div class="flex items-center gap-2">
+                              <Button 
+                                class="flex items-center gap-2" 
+                                variant="outline"
+                                on:click={() => {
+                                  if (viewingPublication) {
+                                    openEditModal(viewingPublication);
+                                    viewModalOpen = false; // Close the view modal when opening the edit modal
+                                  }
+                                }}
+                              >
+                                  <Edit class="w-4 h-4" />
+                                  Edit Details
+                              </Button>
+                              <Button 
+                                class="flex items-center gap-2" 
+                                variant="outline"
+                                on:click={() => {
+                                  logReadingPublication = viewingPublication.id;
+                                  logReadingPagesRead = 0;
+                                  logReadingComment = "";
+                                  logReadingDuration = 0;
+                                  logReadingModalOpen = true;
+                                  viewModalOpen = false; // Close the view modal when opening the log modal
+                                }}
+                              >
+                                  <BookOpen class="w-5 h-5" />
+                                  Log Reading
+                              </Button>
+                          </div>
                       </div>
                       
                       {#if viewingPublication.readingSessions?.length > 0}
