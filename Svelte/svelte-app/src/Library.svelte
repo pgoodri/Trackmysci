@@ -12,12 +12,15 @@
         Ellipsis, 
         Book, 
         Filter,
-        Search 
+        Search,
+        Clock,
+        Calendar
     } from "lucide-svelte";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
     import * as Dialog from "$lib/components/ui/dialog";
     import * as Popover from "$lib/components/ui/popover";
     import { Button } from "$lib/components/ui/button";
+    import { Separator } from "$lib/components/ui/separator";
 
     // State
     let isLoading = true;
@@ -45,6 +48,12 @@
     let editMode = false;
     let editingPublication = null;
     let isSearching = false;
+    
+    // Log Reading modal variables
+    let logReadingPublication = null;
+    let logReadingPagesRead = 0;
+    let logReadingComment = "";
+    let logReadingDuration = 0;
     
     // Publication form fields
     let searchQuery = "";
@@ -165,8 +174,33 @@
         viewModalOpen = true;
     }
     
+    function closeViewModal() {
+        viewingPublication = null;
+        viewModalOpen = false;
+    }
+    
+    // Function to open the log reading modal
     function openLogReadingModal() {
+        // If there are publications in the library, select the first one by default
+        const booksList = get(books);
+        if (booksList.length > 0) {
+            logReadingPublication = booksList[0].id;
+        }
+        logReadingPagesRead = 0;
+        logReadingComment = "";
+        logReadingDuration = 0;
         logReadingModalOpen = true;
+    }
+
+    // Function to save reading log
+    async function saveReadingLog() {
+        if (!logReadingPublication || !logReadingPagesRead) {
+            alert("Please select a publication and enter pages read");
+            return;
+        }
+        
+        alert("Logging functionality will be implemented in future version");
+        logReadingModalOpen = false;
     }
     
     function logout() {
@@ -175,12 +209,19 @@
         });
     }
     
-    function showAddPublicationForm() {
+    function openAddModal() {
         // Reset form fields
         editMode = false;
         editingPublication = null;
         resetFields();
         modalOpen = true;
+    }
+    
+    function closeModal() {
+        modalOpen = false;
+        editMode = false;
+        editingPublication = null;
+        resetFields();
     }
     
     function resetFields() {
@@ -242,14 +283,6 @@
         
         // Hide the results
         showResults = false;
-    }
-    
-    // Close modal
-    function closeModal() {
-        modalOpen = false;
-        editMode = false;
-        editingPublication = null;
-        resetFields();
     }
     
     // Add literature to library - matches Dashboard's function
@@ -401,7 +434,7 @@
                     <BookOpen class="w-4 h-4 mr-1" /> Log Session
                 </button>
                 
-                <Button class="bg-blue-600 hover:bg-blue-700" on:click={showAddPublicationForm}>
+                <Button class="bg-blue-600 hover:bg-blue-700" on:click={openAddModal}>
                     <Plus class="w-4 h-4 mr-2" /> Add Publication
                 </Button>
                 
@@ -416,7 +449,7 @@
             <div class="flex justify-between items-center pt-12 px-12">
                 <h2 class="text-3xl font-bold text-gray-800">My Library</h2>
                 
-                <Button class="bg-blue-600 hover:bg-blue-700" on:click={showAddPublicationForm}>
+                <Button class="bg-blue-600 hover:bg-blue-700" on:click={openAddModal}>
                     <Plus class="w-4 h-4 mr-2" /> Add Publication
                 </Button>
             </div>
@@ -546,7 +579,7 @@
             <div class="px-12 py-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {#if getFilteredBooks().length > 0}
                     {#each getFilteredBooks() as book}
-                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow">
+                        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition-shadow cursor-pointer" on:click={() => openViewModal(book)}>
                             <div class="flex justify-between items-start mb-4">
                                 <div class="flex-1">
                                     <h3 class="font-medium text-lg text-gray-800 line-clamp-2">{book.title}</h3>
@@ -555,7 +588,7 @@
                                 
                                 <DropdownMenu.Root>
                                     <DropdownMenu.Trigger asChild>
-                                        <button class="text-gray-400 hover:text-gray-600">
+                                        <button class="text-gray-400 hover:text-gray-600" on:click={(e) => e.stopPropagation()}>
                                             <Ellipsis class="h-6 w-6" />
                                         </button>
                                     </DropdownMenu.Trigger>
@@ -598,7 +631,7 @@
                                     {book.status || (book.completed ? "Completed" : book.readingSessions?.length > 0 ? "In Progress" : "Unread")}
                                 </span>
                                 
-                                <button class="text-sm text-blue-600 hover:text-blue-800" on:click={() => openViewModal(book)}>
+                                <button class="text-sm text-blue-600 hover:text-blue-800" on:click={(e) => {e.stopPropagation(); openViewModal(book);}}>
                                     View
                                 </button>
                             </div>
@@ -608,261 +641,360 @@
                     <div class="col-span-full flex flex-col items-center justify-center py-12 text-center">
                         <p class="text-lg font-medium text-gray-500">No publications found.</p>
                         <p class="text-sm text-gray-400 mt-2">Try adjusting your search or filter criteria.</p>
-                        <button class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" on:click={showAddPublicationForm}>
+                        <button class="mt-4 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700" on:click={openAddModal}>
                             Add Your First Publication
                         </button>
                     </div>
                 {/if}
             </div>
         </div>
-
-        <!-- View Publication Modal -->
-        <Dialog.Root bind:open={viewModalOpen}>
-            <Dialog.Content class="w-full max-w-2xl">
-                <Dialog.Header>
-                    <Dialog.Title class="text-2xl font-bold">
-                        {#if viewingPublication}
-                            {viewingPublication.title}
-                        {/if}
-                    </Dialog.Title>
-                    <Dialog.Description>
-                        {#if viewingPublication}
-                            <p class="text-lg text-gray-600 mb-4">{viewingPublication.author}</p>
-                            
-                            {#if viewingPublication.isbn}
-                                <p class="text-sm text-gray-600">ISBN/DOI: {viewingPublication.isbn}</p>
-                            {/if}
-                        
-                            <!-- Tags -->
-                            {#if viewingPublication.tags?.length > 0}
-                                <div class="flex flex-wrap gap-2 mt-6">
-                                    {#each viewingPublication.tags as tag}
-                                        <span class="bg-gray-100 text-gray-800 px-3 py-1 rounded-full text-sm">{tag}</span>
-                                    {/each}
-                                </div>
-                            {/if}
-                            
-                            <!-- Divider -->
-                            <hr class="my-6 border-gray-200" />
-                            
-                            <!-- Action Buttons -->
-                            <div class="flex justify-end space-x-3">
-                                <Button variant="outline" on:click={() => viewModalOpen = false}>
-                                    Close
-                                </Button>
-                                <Button class="bg-blue-600 hover:bg-blue-700" on:click={() => alert("Edit not implemented")}>
-                                    <Edit class="w-4 h-4 mr-2" /> Edit
-                                </Button>
-                            </div>
-                        {/if}
-                    </Dialog.Description>
-                </Dialog.Header>
-            </Dialog.Content>
-        </Dialog.Root>
-
-        <!-- Log Reading Modal -->
-        <Dialog.Root bind:open={logReadingModalOpen}>
-            <Dialog.Content class="w-[500px]">
-                <Dialog.Header>
-                    <Dialog.Title>Log Reading Session</Dialog.Title>
-                    <Dialog.Description>
-                        <form class="space-y-4 mt-4">
-                            <!-- Publication Selection -->
-                            <div class="space-y-2">
-                                <label for="publication-select" class="block text-sm font-medium">
-                                    Select Publication
-                                </label>
-                                <select 
-                                    id="publication-select" 
-                                    class="w-full p-2 border border-gray-300 rounded"
-                                >
-                                    {#if get(books).length === 0}
-                                        <option value="" disabled>No publications available</option>
-                                    {:else}
-                                        {#each get(books) as book}
-                                            <option value={book.id}>{book.title}</option>
-                                        {/each}
-                                    {/if}
-                                </select>
-                            </div>
-
-                            <!-- Pages Read Input -->
-                            <div class="space-y-2">
-                                <label for="pages-read" class="block text-sm font-medium">
-                                    Pages Read in This Session
-                                </label>
-                                <input id="pages-read" type="number" 
-                                    class="w-full p-2 border border-gray-300 rounded"
-                                    min="1" />
-                            </div>
-                            
-                            <!-- Reading Duration -->
-                            <div class="space-y-2">
-                                <label for="reading-duration" class="block text-sm font-medium">
-                                    Reading Duration (Minutes, Optional)
-                                </label>
-                                <input id="reading-duration" type="number" 
-                                    class="w-full p-2 border border-gray-300 rounded"
-                                    min="0" />
-                            </div>
-
-                            <!-- Reading Notes -->
-                            <div class="space-y-2">
-                                <label for="reading-notes" class="block text-sm font-medium">
-                                    Reading Notes (Optional)
-                                </label>
-                                <textarea 
-                                    id="reading-notes" 
-                                    class="w-full p-2 border border-gray-300 rounded h-24"
-                                    placeholder="Add notes about your reading session..."
-                                ></textarea>
-                            </div>
-
-                            <!-- Action Buttons -->
-                            <div class="flex justify-end space-x-3 pt-4">
-                                <Button 
-                                    type="button" 
-                                    variant="outline"
-                                    on:click={() => logReadingModalOpen = false}
-                                >
-                                    Cancel
-                                </Button>
-                                <Button 
-                                    type="button" 
-                                    class="bg-blue-600 hover:bg-blue-700"
-                                    on:click={() => {
-                                        alert("Logging functionality not implemented in this version");
-                                        logReadingModalOpen = false;
-                                    }}
-                                >
-                                    Save Session
-                                </Button>
-                            </div>
-                        </form>
-                    </Dialog.Description>
-                </Dialog.Header>
-            </Dialog.Content>
-        </Dialog.Root>
-        
-        <!-- Add Publication Modal -->
-        <Dialog.Root bind:open={modalOpen}>
-          <Dialog.Content class="w-[90%] max-w-4xl">
-            <Dialog.Header>
-              <Dialog.Title class="text-xl mb-1">
-                {editMode ? "Edit Publication" : "Add Literature"}
-              </Dialog.Title>
-              <Dialog.Description>
-                <form on:submit|preventDefault={editMode ? alert("Edit not implemented") : addLiteratureToLibrary}>
-                  <!-- Search Bar -->
-                  <div class="mb-4">
-                    <div class="relative">
-                      <label for="searchQuery" class="sr-only">Search Query</label>
-                      <input 
-                        type="text" 
-                        id="searchQuery" 
-                        bind:value={searchQuery}
-                        class="w-full p-2.5 pl-10 border rounded-md border-neutral-300 shadow-sm text-neutral-700 disabled:bg-neutral-100" 
-                        placeholder="Search for a book by title, ISBN, or DOI"
-                        disabled={editMode}
-                      />
-                      <Search class="absolute top-3 left-3 w-4 h-4 text-neutral-400" />
-                      <button 
-                        type="button" 
-                        class="absolute right-2 top-1/2 transform -translate-y-1/2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-neutral-400"
-                        on:click={searchLiterature}
-                        disabled={editMode || !searchQuery.trim() || isSearching}
-                      >
-                        {#if isSearching}
-                          Searching...
-                        {:else}
-                          Search
-                        {/if}
-                      </button>
-                    </div>
-                  </div>
-
-                  <!-- Search Results -->
-                  {#if showResults && searchResults.length > 0}
-                    <div class="mb-6 bg-neutral-50 border border-neutral-300 rounded-md shadow-sm max-h-64 overflow-y-auto">
-                      <ul class="divide-y divide-neutral-200">
-                        {#each searchResults as result}
-                          <li class="p-3 hover:bg-neutral-100 cursor-pointer" on:click={() => selectResult(result)}>
-                            <div class="font-medium">{result.title}</div>
-                            <div class="text-sm text-neutral-600">{result.author}</div>
-                            {#if result.isbn}
-                              <div class="text-xs text-neutral-500 mt-1">ISBN: {result.isbn}</div>
-                            {/if}
-                          </li>
-                        {/each}
-                      </ul>
-                    </div>
-                  {/if}
-
-                  <!-- Publication Details -->
-                  <div class="space-y-4 mt-6">
-                    <h3 class="text-lg font-semibold mb-2">{editMode ? "Edit Publication Details" : "Publication Details"}</h3>
-                    <div class="flex items-center">
-                      <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title *</label>
-                      <input id="title" type="text" bind:value={title}
-                        class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" required />
-                    </div>
-                    <div class="flex items-center">
-                      <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author *</label>
-                      <input id="author" type="text" bind:value={author}
-                        class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" required />
-                    </div>
-                    <div class="flex items-center">
-                      <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI</label>
-                      <input id="isbn-doi" type="text" bind:value={isbn}
-                        class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" autocomplete="off" />
-                    </div>
-                    <Separator />
-                    <!-- Tag Input Section -->
-                    <div class="mb-4">
-                      <label for="tag-input" class="text-sm font-medium text-neutral-700">Tags</label>
-                      <div class="flex items-center mt-2">
-                        <input id="tag-input" type="text" bind:value={tagInput}
-                          class="flex-1 p-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
-                          placeholder="Type a tag and press Enter"
-                          on:keydown={(e) => {
-                            if (e.key === "Enter") {
-                              e.preventDefault();
-                              addTag();
-                            }
-                          }}
-                        />
-                        <button type="button"
-                          class="ml-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                          on:click={addTag}>
-                          Add
-                        </button>
-                      </div>
-                      {#if tags.length > 0}
-                        <div class="flex flex-wrap gap-2 mt-3">
-                          {#each tags as tag, index}
-                            <div class="flex items-center gap-1 bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full">
-                              <span>{tag}</span>
-                              <button type="button" class="text-neutral-500 hover:text-neutral-800" on:click={() => removeTag(index)}>
-                                &times;
-                              </button>
-                            </div>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
-                  </div>
-
-                  <!-- Submit Button -->
-                  <div class="flex justify-end mt-6">
-                    <Button type="button" variant="outline" class="mr-3" on:click={closeModal}>Cancel</Button>
-                    <Button type="submit" class="bg-blue-600 hover:bg-blue-700">
-                      {editMode ? "Update Publication" : "Add to Library"}
-                    </Button>
-                  </div>
-                </form>
-              </Dialog.Description>
-            </Dialog.Header>
-          </Dialog.Content>
-        </Dialog.Root>
     </div>
 {/if}
+
+<!-- View Publication Modal -->
+<Dialog.Root bind:open={viewModalOpen}>
+    <Dialog.Content class="w-full max-w-2xl">
+        <Dialog.Header>
+            <Dialog.Title class="text-2xl font-bold">
+                {#if viewingPublication}
+                    {viewingPublication.title}
+                {/if}
+            </Dialog.Title>
+            <Dialog.Description>
+                {#if viewingPublication}
+                    <p class="text-lg text-neutral-600 mb-4">{viewingPublication.author}</p>
+                    
+                    {#if viewingPublication.isbn}
+                        <p class="text-sm text-neutral-600">ISBN/DOI: {viewingPublication.isbn}</p>
+                    {/if}
+                
+                    <div class="flex items-center gap-2 mt-4 mb-2">
+                        <Book class="w-5 h-5 text-neutral-600" />
+                        <span class="text-neutral-700">
+                            {viewingPublication.totalPagesRead || 0} pages read in {viewingPublication.readingSessions?.length || 0} sessions
+                        </span>
+                    </div>
+                    
+                    <!-- Status Bar -->
+                    <div class="mb-6">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-sm text-neutral-600">Status:</span>
+                            <span class={`px-3 py-1 rounded-full text-sm ${
+                                viewingPublication.completed ? "bg-green-100 text-green-800" : 
+                                viewingPublication.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
+                                "bg-gray-100 text-gray-800"
+                            }`}>
+                                {viewingPublication.status || (viewingPublication.completed ? "Completed" : viewingPublication.readingSessions?.length > 0 ? "In Progress" : "Unread")}
+                            </span>
+                        </div>
+                    </div>
+                    
+                    <!-- Tags -->
+                    {#if viewingPublication.tags?.length > 0}
+                        <div class="flex flex-wrap gap-2 mb-6">
+                            {#each viewingPublication.tags as tag}
+                                <span class="bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full text-sm">{tag}</span>
+                            {/each}
+                        </div>
+                    {/if}
+                    
+                    <!-- Divider -->
+                    <hr class="my-6 border-neutral-200" />
+                    
+                    <!-- Reading Logs Section -->
+                    <div>
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-lg font-semibold">Reading Logs</h3>
+                            <Button 
+                                class="flex items-center gap-2" 
+                                variant="outline"
+                                on:click={() => {
+                                    logReadingPublication = viewingPublication.id;
+                                    logReadingPagesRead = 0;
+                                    logReadingComment = "";
+                                    logReadingDuration = 0;
+                                    logReadingModalOpen = true;
+                                    viewModalOpen = false; // Close the view modal when opening the log modal
+                                }}
+                            >
+                                <BookOpen class="w-5 h-5" />
+                                Log Reading
+                            </Button>
+                        </div>
+                        
+                        {#if viewingPublication.readingSessions?.length > 0}
+                            <div class="space-y-4">
+                                <div class="flex justify-between items-center mb-2">
+                                    <h3 class="text-lg font-semibold text-neutral-800">Reading Sessions</h3>
+                                    <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
+                                        {viewingPublication.status || "Unknown"}
+                                    </div>
+                                </div>
+                            
+                                <div class="bg-neutral-50 p-3 rounded-md mb-4">
+                                    <div class="flex items-center gap-3 text-neutral-700">
+                                        <div>
+                                            <span class="text-3xl font-bold">{viewingPublication.totalPagesRead || 0}</span>
+                                            <span class="text-sm ml-1">total pages read</span>
+                                        </div>
+                                        <Separator orientation="vertical" class="h-8" />
+                                        <div>
+                                            <span class="text-3xl font-bold">{viewingPublication.readingSessions.length}</span>
+                                            <span class="text-sm ml-1">sessions</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            
+                                {#each viewingPublication.readingSessions as session}
+                                    <div class="bg-white border border-neutral-200 rounded-lg p-4">
+                                        <div class="flex justify-between mb-2">
+                                            <div class="flex items-center gap-2 text-neutral-600">
+                                                <Calendar class="w-4 h-4" />
+                                                <span>{new Date(session.date).toLocaleDateString()}</span>
+                                            </div>
+                                            {#if session.duration}
+                                            <div class="flex items-center gap-1 text-neutral-600 text-sm">
+                                                <Clock class="w-3 h-3" />
+                                                <span>{session.duration} min</span>
+                                            </div>
+                                            {/if}
+                                        </div>
+                                        
+                                        <div class="flex items-center gap-2 mb-2 text-neutral-600">
+                                            <Book class="w-4 h-4" />
+                                            <span>{session.pagesRead} pages read</span>
+                                        </div>
+                                        
+                                        {#if session.notes}
+                                            <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md mt-2">{session.notes}</p>
+                                        {/if}
+                                    </div>
+                                {/each}
+                            </div>
+                        {:else}
+                            <div class="text-center p-6 bg-neutral-50 rounded-lg">
+                                <p class="text-neutral-500">No reading sessions yet.</p>
+                                <p class="text-sm text-neutral-400 mt-1">Start tracking your reading by clicking "Log Reading".</p>
+                            </div>
+                        {/if}
+
+                        <!-- Mark as Complete button -->
+                        {#if viewingPublication && !viewingPublication.completed}
+                            <div class="mt-6">
+                                <Button 
+                                    class="w-full bg-green-600 hover:bg-green-700"
+                                    on:click={() => alert("Mark as complete not implemented in this version")}
+                                >
+                                    Mark as Complete
+                                </Button>
+                            </div>
+                        {/if}
+                    </div>
+                {/if}
+            </Dialog.Description>
+        </Dialog.Header>
+    </Dialog.Content>
+</Dialog.Root>
+
+<!-- Log Reading Modal -->
+<Dialog.Root bind:open={logReadingModalOpen}>
+    <Dialog.Content class="w-[500px]">
+        <Dialog.Header>
+            <Dialog.Title>Log Reading Session</Dialog.Title>
+            <Dialog.Description>
+                <form on:submit|preventDefault={saveReadingLog} class="space-y-4 mt-4">
+                    <!-- Publication Selection -->
+                    <div class="space-y-2">
+                        <label for="publication-select" class="block text-sm font-medium">
+                            Select Publication
+                        </label>
+                        <select 
+                            id="publication-select" 
+                            class="w-full p-2 border border-neutral-300 rounded"
+                            bind:value={logReadingPublication}
+                        >
+                            {#if get(books).length === 0}
+                                <option value="" disabled>No publications available</option>
+                            {:else}
+                                {#each get(books) as book}
+                                    <option value={book.id}>{book.title}</option>
+                                {/each}
+                            {/if}
+                        </select>
+                    </div>
+
+                    <!-- Pages Read Input -->
+                    <div class="space-y-2">
+                        <label for="pages-read" class="block text-sm font-medium">
+                            Pages Read in This Session
+                        </label>
+                        <input id="pages-read" type="number" bind:value={logReadingPagesRead} 
+                            class="w-full p-2 border border-neutral-300 rounded"
+                            min="1" />
+                    </div>
+                    
+                    <!-- Reading Duration (Optional) -->
+                    <div class="space-y-2">
+                        <label for="reading-duration" class="block text-sm font-medium">
+                            Reading Duration (Minutes, Optional)
+                        </label>
+                        <input id="reading-duration" type="number" bind:value={logReadingDuration} 
+                            class="w-full p-2 border border-neutral-300 rounded"
+                            min="0" />
+                    </div>
+
+                    <!-- Reading Notes -->
+                    <div class="space-y-2">
+                        <label for="reading-notes" class="block text-sm font-medium">
+                            Reading Notes (Optional)
+                        </label>
+                        <textarea 
+                            id="reading-notes" 
+                            bind:value={logReadingComment} 
+                            class="w-full p-2 border border-neutral-300 rounded h-24"
+                            placeholder="Add notes about your reading session..."
+                        ></textarea>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex justify-end space-x-3 pt-4">
+                        <Button 
+                            type="button" 
+                            variant="outline"
+                            on:click={() => logReadingModalOpen = false}
+                        >
+                            Cancel
+                        </Button>
+                        <Button 
+                            type="submit" 
+                            class="bg-blue-600 hover:bg-blue-700"
+                        >
+                            Save Session
+                        </Button>
+                    </div>
+                </form>
+            </Dialog.Description>
+        </Dialog.Header>
+    </Dialog.Content>
+</Dialog.Root>
+
+<!-- Add Publication Modal -->
+<Dialog.Root bind:open={modalOpen}>
+  <Dialog.Content class="w-[90%] max-w-4xl">
+    <Dialog.Header>
+      <Dialog.Title class="text-xl mb-1">
+        {editMode ? "Edit Publication" : "Add Literature"}
+      </Dialog.Title>
+      <Dialog.Description>
+        <form on:submit|preventDefault={editMode ? alert("Edit not implemented") : addLiteratureToLibrary}>
+          <!-- Search Bar -->
+          <div class="mb-4">
+            <div class="relative">
+              <label for="searchQuery" class="sr-only">Search Query</label>
+              <input 
+                type="text" 
+                id="searchQuery" 
+                bind:value={searchQuery}
+                class="w-full p-2.5 pl-10 border rounded-md border-neutral-300 shadow-sm text-neutral-700 disabled:bg-neutral-100" 
+                placeholder="Search for a book by title, ISBN, or DOI"
+                disabled={editMode}
+              />
+              <Search class="absolute top-3 left-3 w-4 h-4 text-neutral-400" />
+              <button 
+                type="button" 
+                class="absolute right-2 top-1/2 transform -translate-y-1/2 px-3 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-neutral-400"
+                on:click={searchLiterature}
+                disabled={editMode || !searchQuery.trim() || isSearching}
+              >
+                {#if isSearching}
+                  Searching...
+                {:else}
+                  Search
+                {/if}
+              </button>
+            </div>
+          </div>
+
+          <!-- Search Results -->
+          {#if showResults && searchResults.length > 0}
+            <div class="mb-6 bg-neutral-50 border border-neutral-300 rounded-md shadow-sm max-h-64 overflow-y-auto">
+              <ul class="divide-y divide-neutral-200">
+                {#each searchResults as result}
+                  <li class="p-3 hover:bg-neutral-100 cursor-pointer" on:click={() => selectResult(result)}>
+                    <div class="font-medium">{result.title}</div>
+                    <div class="text-sm text-neutral-600">{result.author}</div>
+                    {#if result.isbn}
+                      <div class="text-xs text-neutral-500 mt-1">ISBN: {result.isbn}</div>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
+            </div>
+          {/if}
+
+          <!-- Publication Details -->
+          <div class="space-y-4 mt-6">
+            <h3 class="text-lg font-semibold mb-2">{editMode ? "Edit Publication Details" : "Publication Details"}</h3>
+            <div class="flex items-center">
+              <label for="title" class="w-1/4 text-sm font-medium text-neutral-700">Title *</label>
+              <input id="title" type="text" bind:value={title}
+                class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" required />
+            </div>
+            <div class="flex items-center">
+              <label for="author" class="w-1/4 text-sm font-medium text-neutral-700">Author *</label>
+              <input id="author" type="text" bind:value={author}
+                class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" required />
+            </div>
+            <div class="flex items-center">
+              <label for="isbn-doi" class="w-1/4 text-sm font-medium text-neutral-700">ISBN/DOI</label>
+              <input id="isbn-doi" type="text" bind:value={isbn}
+                class="flex-1 p-1.5 pl-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700" autocomplete="off" />
+            </div>
+            <Separator />
+            <!-- Tag Input Section -->
+            <div class="mb-4">
+              <label for="tag-input" class="text-sm font-medium text-neutral-700">Tags</label>
+              <div class="flex items-center mt-2">
+                <input id="tag-input" type="text" bind:value={tagInput}
+                  class="flex-1 p-2 border rounded-md border-neutral-300 shadow-sm text-neutral-700"
+                  placeholder="Type a tag and press Enter"
+                  on:keydown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      addTag();
+                    }
+                  }}
+                />
+                <button type="button"
+                  class="ml-2 px-3 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+                  on:click={addTag}>
+                  Add
+                </button>
+              </div>
+              {#if tags.length > 0}
+                <div class="flex flex-wrap gap-2 mt-3">
+                  {#each tags as tag, index}
+                    <div class="flex items-center gap-1 bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full">
+                      <span>{tag}</span>
+                      <button type="button" class="text-neutral-500 hover:text-neutral-800" on:click={() => removeTag(index)}>
+                        &times;
+                      </button>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+            </div>
+          </div>
+
+          <!-- Submit Button -->
+          <div class="flex justify-end mt-6">
+            <Button type="button" variant="outline" class="mr-3" on:click={closeModal}>Cancel</Button>
+            <Button type="submit" class="bg-blue-600 hover:bg-blue-700">
+              {editMode ? "Update Publication" : "Add to Library"}
+            </Button>
+          </div>
+        </form>
+      </Dialog.Description>
+    </Dialog.Header>
+  </Dialog.Content>
+</Dialog.Root>
