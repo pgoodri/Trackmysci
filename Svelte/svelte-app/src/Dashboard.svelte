@@ -661,42 +661,71 @@ function showRatingDialog(pubId, pubTitle) {
   ratingDialogOpen = true;
 }
 
-// Function to mark a publication as completed
+// Function to toggle publication completion status
+async function toggleCompletionStatus(publicationId) {
+    const user = auth.currentUser;
+    if (!user) {
+        console.error("No authenticated user found.");
+        return;
+    }
+    
+    try {
+        // Find the publication
+        const publication = libraryList.find(p => p.id === publicationId);
+        if (!publication) return;
+        
+        const newStatus = !publication.completed;
+        
+        const userDocRef = doc(firestore, "users", user.uid);
+        const libraryRef = doc(userDocRef, "library", publicationId);
+        
+        // Update Firestore
+        await updateDoc(libraryRef, { 
+            completed: newStatus, 
+            status: newStatus ? "completed" : 
+                    (publication.readingSessions && publication.readingSessions.length > 0) 
+                    ? "in progress" : "unread",
+            updatedAt: new Date()
+        });
+        
+        // Update UI
+        libraryList = libraryList.map(entry => 
+            entry.id === publicationId 
+            ? { 
+                ...entry, 
+                completed: newStatus, 
+                status: newStatus ? "completed" : 
+                        (entry.readingSessions && entry.readingSessions.length > 0) 
+                        ? "in progress" : "unread"
+            } 
+            : entry
+        );
+        
+        // If setting to completed, show rating dialog
+        if (newStatus) {
+            showRatingDialog(publicationId, publication.title);
+        }
+        
+        // If viewing this publication, update the viewing state as well
+        if (viewingPublication && viewingPublication.id === publicationId) {
+            viewingPublication = {
+                ...viewingPublication,
+                completed: newStatus,
+                status: newStatus ? "completed" : 
+                        (viewingPublication.readingSessions && viewingPublication.readingSessions.length > 0) 
+                        ? "in progress" : "unread"
+            };
+        }
+        
+        console.log(`✅ Publication ${publicationId} ${newStatus ? "marked as completed" : "marked as incomplete"}`);
+    } catch (error) {
+        console.error(`❌ Error changing completion status:`, error.message);
+    }
+}
+
+// For backward compatibility
 async function markAsCompleted(publicationId) {
-  const user = auth.currentUser;
-  if (!user) {
-      console.error("No authenticated user found.");
-      return;
-  }
-
-  try {
-      const userDocRef = doc(firestore, "users", user.uid);
-      const libraryRef = doc(userDocRef, "library", publicationId);
-      
-      // Update Firestore
-      await updateDoc(libraryRef, { 
-          completed: true, 
-          status: "completed",
-          updatedAt: new Date()
-      });
-
-      // Show rating dialog after marking as complete
-      const publication = libraryList.find(p => p.id === publicationId);
-      if (publication) {
-          showRatingDialog(publicationId, publication.title);
-      }
-
-      // Update UI
-      libraryList = libraryList.map(entry => 
-          entry.id === publicationId 
-              ? { ...entry, completed: true, status: "completed" } 
-              : entry
-      );
-
-      console.log(`✅ Publication ${publicationId} marked as completed`);
-  } catch (error) {
-      console.error("❌ Error marking publication as completed:", error.message);
-  }
+    return toggleCompletionStatus(publicationId);
 }
 
   onAuthStateChanged(auth, async (user) => {
@@ -1667,17 +1696,15 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
                           </div>
                       {/if}
 
-                      <!-- Mark as Complete button -->
-                      {#if viewingPublication && !viewingPublication.completed}
-                          <div class="mt-6">
-                              <Button 
-                                  class="w-full bg-green-600 hover:bg-green-700"
-                                  on:click={() => markAsCompleted(viewingPublication.id)}
-                              >
-                                  Mark as Complete
-                              </Button>
-                          </div>
-                      {/if}
+                      <!-- Mark as Complete/Incomplete button -->
+                      <div class="mt-6">
+                          <Button 
+                              class="w-full {viewingPublication?.completed ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-green-600 hover:bg-green-700'}"
+                              on:click={() => toggleCompletionStatus(viewingPublication.id)}
+                          >
+                              {viewingPublication?.completed ? 'Mark as Incomplete' : 'Mark as Complete'}
+                          </Button>
+                      </div>
                   </div>
               {/if}
           </Dialog.Description>
