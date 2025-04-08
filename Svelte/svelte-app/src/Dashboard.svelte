@@ -445,47 +445,54 @@
 
   // ----- Firestore & Auth Functions -----
   async function fetchUserData() {
-  const user = auth.currentUser;
-  if (!user) {
-      console.error("No authenticated user found.");
-      return;
+    const user = auth.currentUser;
+    if (!user) {
+        console.error("No authenticated user found.");
+        return;
+    }
+    try {
+        const userDoc = await getDoc(doc(firestore, "users", user.uid));
+        if (userDoc.exists()) {
+            const userData = userDoc.data();
+            firstName = userData.firstName || "Guest";
+            lastName = userData.lastName || "";
+        }
+
+        // 🔥 Check Streak Status
+        const summaryDocRef = doc(collection(firestore, "users", user.uid, "charts"), "summary");
+        const summaryDocSnap = await getDoc(summaryDocRef);
+
+        if (summaryDocSnap.exists()) {
+            const summaryData = summaryDocSnap.data();
+            let streak = summaryData.streak || 0;
+            let streakDate = summaryData.streakDate || null;
+            
+            // Use midnight-to-midnight calculation for days
+            let today = new Date();
+            today.setHours(0, 0, 0, 0);
+            let todayString = today.toISOString().split("T")[0];
+
+            if (streakDate) {
+                const lastLogDate = new Date(streakDate);
+                lastLogDate.setHours(0, 0, 0, 0); // Reset to midnight for proper comparison
+                
+                // Calculate time difference in days based on calendar days
+                const timeDiff = Math.round((today - lastLogDate) / (1000 * 60 * 60 * 24));
+
+                if (timeDiff >= 2) {
+                    console.log("⏳ Streak expired. Resetting...");
+                    await setDoc(summaryDocRef, { streak: 0, streakDate: null }, { merge: true });
+                    streak = 0;
+                }
+            }
+            currentStreak.set(streak);
+            console.log(` Current streak: ${streak} days`);
+        }
+
+    } catch (error) {
+        console.error("Error fetching user data:", error.message);
+    }
   }
-  try {
-      const userDoc = await getDoc(doc(firestore, "users", user.uid));
-      if (userDoc.exists()) {
-          const userData = userDoc.data();
-          firstName = userData.firstName || "Guest";
-          lastName = userData.lastName || "";
-      }
-
-      // 🔥 Check Streak Status
-      const summaryDocRef = doc(collection(firestore, "users", user.uid, "charts"), "summary");
-      const summaryDocSnap = await getDoc(summaryDocRef);
-
-      if (summaryDocSnap.exists()) {
-          const summaryData = summaryDocSnap.data();
-          let streak = summaryData.streak || 0;
-          let streakDate = summaryData.streakDate || null;
-          let today = new Date().toISOString().split("T")[0];
-
-          if (streakDate) {
-              const lastLogDate = new Date(streakDate);
-              const timeDiff = Math.floor((new Date(today) - lastLogDate) / (1000 * 60 * 60 * 24));
-
-              if (timeDiff >= 2) {
-                  console.log("⏳ Streak expired. Resetting...");
-                  await setDoc(summaryDocRef, { streak: 0, streakDate: null }, { merge: true });
-                  streak = 0;
-              }
-          }
-          currentStreak.set(streak);
-          console.log(` Current streak: ${streak} days`);
-      }
-
-  } catch (error) {
-      console.error("Error fetching user data:", error.message);
-  }
-}
 
 
 async function loadUserLibrary() {
@@ -538,7 +545,9 @@ async function loadUserLibrary() {
       let readingSessions = [];
       let streak = 0;
       let streakDate = null;
-      let today = new Date().toISOString().split("T")[0]; // Get current date (YYYY-MM-DD)
+      let today = new Date();
+      today.setHours(0, 0, 0, 0); // Reset time to midnight for proper day comparison
+      let todayString = today.toISOString().split('T')[0]; // Get current date (YYYY-MM-DD)
       let readingLog = [];
 
       if (entryDocSnap.exists()) {
@@ -567,17 +576,22 @@ async function loadUserLibrary() {
       // 🔥 **Streak Logic**
       if (!streakDate) {
           streak = 1;
-          streakDate = today;
+          streakDate = todayString;
       } else {
           const lastLogDate = new Date(streakDate);
-          const timeDiff = Math.floor((new Date(today) - lastLogDate) / (1000 * 60 * 60 * 24));
+          lastLogDate.setHours(0, 0, 0, 0); // Reset time to midnight for proper day comparison
+          
+          // Calculate difference in days based on calendar days (midnight to midnight)
+          const timeDiff = Math.round((today - lastLogDate) / (1000 * 60 * 60 * 24));
 
           if (timeDiff === 1) {
               streak += 1;
-              streakDate = today;
+              streakDate = todayString;
+          } else if (timeDiff === 0) {
+              // Same day, don't change streak
           } else if (timeDiff > 1) {
               streak = 1; // Reset to 1 since user is reading today
-              streakDate = today;
+              streakDate = todayString;
           }
       }
 
@@ -1460,7 +1474,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-base font-medium text-gray-700">Reading Streak</h3>
               <div class="flex items-center gap-1 text-orange-500 font-medium text-sm">
-                
+                <Flame class="w-4 h-4" />
                 <span>{$currentStreak} days</span>
               </div>
             </div>
@@ -1468,12 +1482,8 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
             <!-- Dynamic Streak Visualization based on real data -->
             <div class="flex w-full gap-2 my-5 px-2">
               {#each Array(7) as _, i}
-                {@const today = new Date().getDay() || 7}
-                {@const dayNumber = i + 1}
-                {@const daysAgo = today >= dayNumber ? today - dayNumber : today + 7 - dayNumber}
-                {@const isActive = daysAgo < $currentStreak}
                 <div class="flex-1">
-                  <div class={`h-4 rounded ${isActive ? 'bg-orange-500' : 'bg-gray-200'}`}></div>
+                  <div class={`h-4 rounded ${i < $currentStreak ? 'bg-orange-500' : 'bg-gray-200'}`}></div>
                 </div>
               {/each}
             </div>
