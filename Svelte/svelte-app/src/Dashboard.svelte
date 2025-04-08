@@ -1377,7 +1377,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
               <p class="text-sm mt-2">Start by adding your first publication!</p>
             </div>
           {:else}
-            <div class="space-y-4 relative pb-12">
+            <div class="space-y-4 relative pb-12 min-h-[250px]">
               {#each getRecentlyAccessedPublications() as pub}
                   <div class="border border-gray-100 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors h-[120px] flex flex-col justify-between" 
                        on:click={(event) => handleCardClick(event, pub)}
@@ -1460,7 +1460,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-base font-medium text-gray-700">Reading Streak</h3>
               <div class="flex items-center gap-1 text-orange-500 font-medium text-sm">
-                <Flame class="w-4 h-4" />
+                
                 <span>{$currentStreak} days</span>
               </div>
             </div>
