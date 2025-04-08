@@ -1326,28 +1326,34 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
         <!-- Pages Read Today -->
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div class="flex flex-col items-center justify-center text-center h-full">
-            <BookMarked class="w-7 h-7 text-blue-600 mb-2" />
-            <p class="text-sm font-medium text-gray-500 mb-2">Pages Read Today</p>
-            <p class="text-3xl font-bold">{todayStats.pagesRead}</p>
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-sm font-medium text-gray-500">Pages Read Today</p>
+              <p class="text-3xl font-bold mt-1">{todayStats.pagesRead}</p>
+            </div>
+            <BookMarked class="w-6 h-6 text-blue-600" />
           </div>
         </div>
         
         <!-- Reading Time Today -->
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div class="flex flex-col items-center justify-center text-center h-full">
-            <Timer class="w-7 h-7 text-purple-600 mb-2" />
-            <p class="text-sm font-medium text-gray-500 mb-2">Reading Time Today</p>
-            <p class="text-3xl font-bold">{todayStats.readingTime} hrs</p>
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-sm font-medium text-gray-500">Reading Time Today</p>
+              <p class="text-3xl font-bold mt-1">{todayStats.readingTime} hrs</p>
+            </div>
+            <Timer class="w-6 h-6 text-purple-600" />
           </div>
         </div>
         
         <!-- Weekly Pages -->
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div class="flex flex-col items-center justify-center text-center h-full">
-            <TrendingUp class="w-7 h-7 text-green-600 mb-2" />
-            <p class="text-sm font-medium text-gray-500 mb-2">Weekly Pages</p>
-            <p class="text-3xl font-bold">{todayStats.weeklyPages}</p>
+          <div class="flex justify-between items-start">
+            <div>
+              <p class="text-sm font-medium text-gray-500">Weekly Pages</p>
+              <p class="text-3xl font-bold mt-1">{todayStats.weeklyPages}</p>
+            </div>
+            <TrendingUp class="w-6 h-6 text-green-600" />
           </div>
         </div>
       </div>
