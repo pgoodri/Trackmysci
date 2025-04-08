@@ -1361,7 +1361,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
       <!-- Main Content -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
         <!-- Recently Accessed -->
-        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 relative">
           <div class="flex justify-between items-center mb-6">
             <h2 class="text-xl font-semibold text-gray-800 flex items-center gap-2">
               <ClipboardList class="w-5 h-5" /> Recently Accessed
@@ -1377,7 +1377,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
               <p class="text-sm mt-2">Start by adding your first publication!</p>
             </div>
           {:else}
-            <div class="space-y-4 relative pb-12 min-h-[250px]">
+            <div class="space-y-4 pb-12">
               {#each getRecentlyAccessedPublications() as pub}
                   <div class="border border-gray-100 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors h-[120px] flex flex-col justify-between" 
                        on:click={(event) => handleCardClick(event, pub)}
@@ -1428,14 +1428,14 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
                     </div>
                   </div>
               {/each}
-              
-              <div class="absolute bottom-0 left-0 right-0 text-center">
-                <button on:click={() => window.location.href='/library'} class="text-blue-600 text-sm font-medium hover:text-blue-800">
-                  View library
-                </button>
-              </div>
             </div>
           {/if}
+          
+          <div class="absolute bottom-6 left-0 right-0 text-center">
+            <button on:click={() => window.location.href='/library'} class="text-blue-600 text-sm font-medium hover:text-blue-800">
+              View library
+            </button>
+          </div>
         </div>
         
         <!-- Reading Analytics -->
