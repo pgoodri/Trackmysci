@@ -1377,7 +1377,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
               <p class="text-sm mt-2">Start by adding your first publication!</p>
             </div>
           {:else}
-            <div class="space-y-4">
+            <div class="space-y-4 relative pb-12">
               {#each getRecentlyAccessedPublications() as pub}
                   <div class="border border-gray-100 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors h-[120px] flex flex-col justify-between" 
                        on:click={(event) => handleCardClick(event, pub)}
@@ -1429,9 +1429,9 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
                   </div>
               {/each}
               
-              <div class="mt-4 text-center">
+              <div class="absolute bottom-0 left-0 right-0 text-center">
                 <button on:click={() => window.location.href='/library'} class="text-blue-600 text-sm font-medium hover:text-blue-800">
-                  VIEW LIBRARY
+                  View library
                 </button>
               </div>
             </div>
