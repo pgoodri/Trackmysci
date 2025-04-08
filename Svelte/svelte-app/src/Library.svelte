@@ -1154,7 +1154,7 @@
                     <!-- Search and Filter Controls -->
                     <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                         <!-- Search Bar -->
-                        <div class="relative w-full md:w-1/2">
+                        <div class="relative w-full">
                             <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                             <Input 
                                 type="text" 
@@ -1165,146 +1165,20 @@
                             />
                         </div>
                         
-                        <!-- Filter Controls -->
-                        <div class="flex flex-wrap gap-3 items-center w-full md:w-auto">
-                            <!-- View Toggle -->
-                            <div class="flex rounded-md overflow-hidden border border-gray-200">
-                                <button 
-                                    class={`flex items-center gap-1 px-3 py-1.5 text-sm ${viewMode === 'grid' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                                    on:click={() => toggleViewMode('grid')}
-                                >
-                                    <LayoutGrid class="h-4 w-4" />
-                                    <span class="md:inline hidden">Grid</span>
-                                </button>
-                                <button 
-                                    class={`flex items-center gap-1 px-3 py-1.5 text-sm ${viewMode === 'list' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                                    on:click={() => toggleViewMode('list')}
-                                >
-                                    <List class="h-4 w-4" />
-                                    <span class="md:inline hidden">List</span>
-                                </button>
-                            </div>
-
-                            <!-- Status Filter -->
-                            <DropdownMenu.Root>
-                                <DropdownMenu.Trigger asChild>
-                                    <Button variant="outline" class={`flex items-center gap-2 ${selectedStatusFilter !== 'all' ? 'bg-blue-50 border-blue-200' : ''}`}>
-                                        <Filter class="h-4 w-4" />
-                                        <span>
-                                            {selectedStatusFilter === 'all' ? 'Status' : 
-                                             selectedStatusFilter === 'unread' ? 'Unread' :
-                                             selectedStatusFilter === 'in-progress' ? 'In Progress' : 'Completed'}
-                                        </span>
-                                        <ChevronDown class="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenu.Trigger>
-                                <DropdownMenu.Content class="z-50">
-                                    <DropdownMenu.Item on:click={() => {
-                                        selectedStatusFilter = "all";
-                                        updateFilteredBooks();
-                                    }}>
-                                        <span>All Statuses</span>
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {
-                                        selectedStatusFilter = "unread";
-                                        updateFilteredBooks();
-                                    }}>
-                                        <span>Unread</span>
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {
-                                        selectedStatusFilter = "in-progress";
-                                        updateFilteredBooks();
-                                    }}>
-                                        <span>In Progress</span>
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {
-                                        selectedStatusFilter = "completed";
-                                        updateFilteredBooks();
-                                    }}>
-                                        <span>Completed</span>
-                                    </DropdownMenu.Item>
-                                </DropdownMenu.Content>
-                            </DropdownMenu.Root>
-                            
-                            <!-- Tags Filter -->
-                            <DropdownMenu.Root>
-                                <DropdownMenu.Trigger asChild>
-                                    <Button variant="outline" class={`flex items-center gap-2 ${selectedTagFilter !== 'all' ? 'bg-blue-50 border-blue-200' : ''}`}>
-                                        <Tag class="h-4 w-4" />
-                                        <span>
-                                            {selectedTagFilter === 'all' ? 'Tags' : selectedTagFilter}
-                                        </span>
-                                        <ChevronDown class="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenu.Trigger>
-                                <DropdownMenu.Content class="z-50">
-                                    <DropdownMenu.Item on:click={() => {
-                                        selectedTagFilter = "all";
-                                        updateFilteredBooks();
-                                    }}>
-                                        <span>All Tags</span>
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Separator />
-                                    {#each $uniqueTags as tag}
-                                        <DropdownMenu.Item on:click={() => {
-                                            selectedTagFilter = tag;
-                                            updateFilteredBooks();
-                                        }}>
-                                            <span>{tag}</span>
-                                        </DropdownMenu.Item>
-                                    {/each}
-                                </DropdownMenu.Content>
-                            </DropdownMenu.Root>
-                            
-                            <!-- Sort Control -->
-                            <DropdownMenu.Root>
-                                <DropdownMenu.Trigger asChild>
-                                    <Button variant="outline" class="flex items-center gap-2">
-                                        <ArrowUpDown class="h-4 w-4" />
-                                        <span>
-                                            {sortOrder === 'newest' ? 'Newest First' : 
-                                             sortOrder === 'oldest' ? 'Oldest First' :
-                                             sortOrder === 'title-asc' ? 'Title (A-Z)' : 
-                                             sortOrder === 'title-desc' ? 'Title (Z-A)' : 'Sort'}
-                                        </span>
-                                        <ChevronDown class="h-4 w-4" />
-                                    </Button>
-                                </DropdownMenu.Trigger>
-                                <DropdownMenu.Content class="z-50">
-                                    <DropdownMenu.Item on:click={() => {
-                                        sortOrder = "newest";
-                                        updateFilteredBooks();
-                                    }}>
-                                        <span>Newest First</span>
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {
-                                        sortOrder = "oldest";
-                                        updateFilteredBooks();
-                                    }}>
-                                        <span>Oldest First</span>
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {
-                                        sortOrder = "title-asc";
-                                        updateFilteredBooks();
-                                    }}>
-                                        <span>Title (A-Z)</span>
-                                    </DropdownMenu.Item>
-                                    <DropdownMenu.Item on:click={() => {
-                                        sortOrder = "title-desc";
-                                        updateFilteredBooks();
-                                    }}>
-                                        <span>Title (Z-A)</span>
-                                    </DropdownMenu.Item>
-                                </DropdownMenu.Content>
-                            </DropdownMenu.Root>
-                            
-                            <!-- Reset Filters -->
-                            {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all"}
-                                <Button variant="ghost" class="text-xs" on:click={resetFilters}>
-                                    <X class="h-3 w-3 mr-1" />
-                                    Reset
-                                </Button>
-                            {/if}
+                        <!-- View Toggle -->
+                        <div class="flex rounded-md overflow-hidden border border-gray-200">
+                            <button 
+                                class={`flex items-center justify-center w-10 h-10 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                on:click={() => toggleViewMode('grid')}
+                            >
+                                <LayoutGrid class="h-4 w-4" />
+                            </button>
+                            <button 
+                                class={`flex items-center justify-center w-10 h-10 ${viewMode === 'list' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                on:click={() => toggleViewMode('list')}
+                            >
+                                <List class="h-4 w-4" />
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -1319,45 +1193,37 @@
                                     {#each getPaginatedBooks() as book}
                                         <div 
                                             class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden h-64 flex flex-col relative cursor-pointer hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                                            on:click={() => openViewModal(book)}
+                                            on:click={(event) => {
+                                                // Check if the click originated from a button or dropdown/popover trigger
+                                                const isButtonClick = event.target.closest('button') || event.target.closest('[role="button"]');
+                                                if (!isButtonClick) {
+                                                    openViewModal(book);
+                                                }
+                                            }}
                                             on:keydown={e => e.key === 'Enter' && openViewModal(book)}
                                             tabindex="0"
                                             role="button"
                                             aria-label={`View details for ${book.title}`}>
                                             <!-- Card Header with Menu -->
-                                            <div class="absolute top-3 right-3 z-10" on:click|stopPropagation on:keydown|stopPropagation role="presentation">
+                                            <div class="absolute top-2 right-2 z-30">
                                                 <DropdownMenu.Root>
-                                                    <DropdownMenu.Trigger asChild>
-                                                        <button class="text-gray-400 hover:text-gray-600 p-1 bg-white rounded-full shadow-sm">
+                                                    <DropdownMenu.Trigger>
+                                                        <button class="text-gray-400 hover:text-gray-700 bg-white rounded-full p-1.5">
                                                             <Ellipsis class="h-4 w-4" />
                                                         </button>
                                                     </DropdownMenu.Trigger>
-                                                    <DropdownMenu.Content class="z-50">
-                                                        <DropdownMenu.Item on:click={() => {
-                                                            openViewModal(book);
-                                                        }}>
-                                                            <Book class="mr-2 h-4 w-4" />
-                                                            <span>View Details</span>
-                                                        </DropdownMenu.Item>
-                                                        <DropdownMenu.Item on:click={() => {
-                                                            openEditModal(book);
-                                                        }}>
-                                                            <Edit class="mr-2 h-4 w-4" />
-                                                            <span>Edit Details</span>
-                                                        </DropdownMenu.Item>
-                                                        <DropdownMenu.Item on:click={() => {
-                                                            toggleCompletionStatus(book.id);
-                                                        }}>
-                                                            <Book class="mr-2 h-4 w-4" />
-                                                            <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
-                                                        </DropdownMenu.Item>
-                                                        <DropdownMenu.Separator />
-                                                        <DropdownMenu.Item class="text-red-500" on:click={() => {
-                                                            deletePublication(book.id);
-                                                        }}>
-                                                            <Trash2 class="mr-2 h-4 w-4" />
-                                                            <span>Delete</span>
-                                                        </DropdownMenu.Item>
+                                                    <DropdownMenu.Content>
+                                                        <DropdownMenu.Group>
+                                                            <DropdownMenu.Item on:click={() => openViewModal(book)} class="text-sm">
+                                                                <Book class="w-4 h-4 mr-2" /> View Details
+                                                            </DropdownMenu.Item>
+                                                            <DropdownMenu.Item on:click={() => openEditModal(book)} class="text-sm">
+                                                                <Edit class="w-4 h-4 mr-2" /> Edit
+                                                            </DropdownMenu.Item>
+                                                            <DropdownMenu.Item on:click={() => deletePublication(book.id)} class="text-sm text-red-600">
+                                                                <Trash2 class="w-4 h-4 mr-2" /> Delete
+                                                            </DropdownMenu.Item>
+                                                        </DropdownMenu.Group>
                                                     </DropdownMenu.Content>
                                                 </DropdownMenu.Root>
                                             </div>
@@ -1402,8 +1268,8 @@
                                                 </div>
                                                 
                                                 <!-- Pages Read Footer -->
-                                                <div class="mt-4 pt-3 border-t border-gray-100">
-                                                    <div class="text-sm text-gray-600">
+                                                <div class="mt-auto pt-3 border-t border-gray-100">
+                                                    <div class="text-sm text-gray-600 text-right">
                                                         {book.totalPagesRead || 0} pages read
                                                     </div>
                                                 </div>
@@ -1417,7 +1283,13 @@
                                     {#each getPaginatedBooks() as book, index}
                                         <div 
                                             class="relative hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:bg-blue-50" 
-                                            on:click={() => openViewModal(book)}
+                                            on:click={(event) => {
+                                                // Check if the click originated from a button or dropdown/popover trigger
+                                                const isButtonClick = event.target.closest('button') || event.target.closest('[role="button"]');
+                                                if (!isButtonClick) {
+                                                    openViewModal(book);
+                                                }
+                                            }}
                                             on:keydown={e => e.key === 'Enter' && openViewModal(book)}
                                             tabindex="0"
                                             role="button"
@@ -1466,39 +1338,25 @@
                                                         </div>
                                                         
                                                         <!-- Menu -->
-                                                        <div class="flex-shrink-0" on:click|stopPropagation on:keydown|stopPropagation role="presentation">
+                                                        <div class="flex-shrink-0">
                                                             <DropdownMenu.Root>
-                                                                <DropdownMenu.Trigger asChild>
-                                                                    <button class="text-gray-400 hover:text-gray-600 p-1 bg-white rounded-full shadow-sm">
+                                                                <DropdownMenu.Trigger>
+                                                                    <button class="text-gray-400 hover:text-gray-700 bg-white rounded-full p-1.5">
                                                                         <Ellipsis class="h-4 w-4" />
                                                                     </button>
                                                                 </DropdownMenu.Trigger>
-                                                                <DropdownMenu.Content class="z-50">
-                                                                    <DropdownMenu.Item on:click={() => {
-                                                                        openViewModal(book);
-                                                                    }}>
-                                                                        <Book class="mr-2 h-4 w-4" />
-                                                                        <span>View Details</span>
-                                                                    </DropdownMenu.Item>
-                                                                    <DropdownMenu.Item on:click={() => {
-                                                                        openEditModal(book);
-                                                                    }}>
-                                                                        <Edit class="mr-2 h-4 w-4" />
-                                                                        <span>Edit Details</span>
-                                                                    </DropdownMenu.Item>
-                                                                    <DropdownMenu.Item on:click={() => {
-                                                                        toggleCompletionStatus(book.id);
-                                                                    }}>
-                                                                        <Book class="mr-2 h-4 w-4" />
-                                                                        <span>{book.completed ? 'Mark as Incomplete' : 'Mark as Complete'}</span>
-                                                                    </DropdownMenu.Item>
-                                                                    <DropdownMenu.Separator />
-                                                                    <DropdownMenu.Item class="text-red-500" on:click={() => {
-                                                                        deletePublication(book.id);
-                                                                    }}>
-                                                                        <Trash2 class="mr-2 h-4 w-4" />
-                                                                        <span>Delete</span>
-                                                                    </DropdownMenu.Item>
+                                                                <DropdownMenu.Content>
+                                                                    <DropdownMenu.Group>
+                                                                        <DropdownMenu.Item on:click={() => openViewModal(book)} class="text-sm">
+                                                                            <Book class="w-4 h-4 mr-2" /> View Details
+                                                                        </DropdownMenu.Item>
+                                                                        <DropdownMenu.Item on:click={() => openEditModal(book)} class="text-sm">
+                                                                            <Edit class="w-4 h-4 mr-2" /> Edit
+                                                                        </DropdownMenu.Item>
+                                                                        <DropdownMenu.Item on:click={() => deletePublication(book.id)} class="text-sm text-red-600">
+                                                                            <Trash2 class="w-4 h-4 mr-2" /> Delete
+                                                                        </DropdownMenu.Item>
+                                                                    </DropdownMenu.Group>
                                                                 </DropdownMenu.Content>
                                                             </DropdownMenu.Root>
                                                         </div>

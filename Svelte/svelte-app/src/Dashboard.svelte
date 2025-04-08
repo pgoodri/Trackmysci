@@ -362,9 +362,11 @@
   let logReadingDuration = 0;
   
   
-  function openViewModal(pub) {
+  async function openViewModal(pub) {
       viewingPublication = pub;
       viewModalOpen = true;
+      // Update lastAccessed timestamp
+      await updateLastAccessed(pub.id);
   }
 
   function closeViewModal() {
@@ -418,7 +420,7 @@
   }
 
   // Open modal in "edit" mode (for editing an existing publication)
-  function openEditModal(pub) {
+  async function openEditModal(pub) {
     editMode = true;
     editingPublication = { ...pub };
     // Pre-fill modal fields with publication data
@@ -428,6 +430,9 @@
     isbn = pub.isbn;
     tags = pub.tags || [];
     modalOpen = true;
+    
+    // Update lastAccessed timestamp
+    await updateLastAccessed(pub.id);
   }
 
     function closeModal() {
@@ -608,6 +613,7 @@ async function loadUserLibrary() {
       await updateDoc(entryDocRef, {
           readingSessions: readingSessions,
           updatedAt: new Date(),
+          lastAccessed: new Date(),
           totalPagesRead: (entryData.totalPagesRead || 0) + pagesRead,
           status: status
       });
@@ -674,6 +680,9 @@ async function toggleCompletionStatus(publicationId) {
         const publication = libraryList.find(p => p.id === publicationId);
         if (!publication) return;
         
+        // Update lastAccessed timestamp
+        await updateLastAccessed(publicationId);
+        
         const newStatus = !publication.completed;
         
         const userDocRef = doc(firestore, "users", user.uid);
@@ -685,7 +694,8 @@ async function toggleCompletionStatus(publicationId) {
             status: newStatus ? "completed" : 
                     (publication.readingSessions && publication.readingSessions.length > 0) 
                     ? "in progress" : "unread",
-            updatedAt: new Date()
+            updatedAt: new Date(),
+            lastAccessed: new Date()
         });
         
         // Update UI
@@ -901,7 +911,8 @@ async function markAsCompleted(publicationId) {
         totalPagesRead: newEntry.totalPagesRead || 0,
         userId: user.uid,
         createdAt: new Date(),
-        updatedAt: new Date()
+        updatedAt: new Date(),
+        lastAccessed: new Date()
       });
       console.log(`Added publication: "${newEntry.title}" by ${newEntry.author}`);
       libraryList = [newEntry, ...libraryList];
@@ -962,7 +973,8 @@ async function updateEditedPublication() {
           author,
           isbn,
           tags: Array.isArray(tags) ? tags.map(tag => tag.trim()) : [],
-          updatedAt: new Date()
+          updatedAt: new Date(),
+          lastAccessed: new Date()
       };
 
       // ✅ Save updated publication data
@@ -1054,6 +1066,10 @@ async function deletePublication(publicationId) {
   }
 
   console.log("🗑 Deleting publication:", publicationId);
+  
+  // Update lastAccessed timestamp before asking for confirmation
+  // This ensures the publication shows up at the top of recently accessed
+  await updateLastAccessed(publicationId);
 
   const confirmDelete = confirm("Are you sure you want to delete this publication?");
   if (!confirmDelete) return;
@@ -1177,10 +1193,11 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
 }
 
 
-  function handleCardClick(event, lit) {
+  async function handleCardClick(event, lit) {
       // Check if the click originated from a button or dropdown/popover trigger
       const isButtonClick = event.target.closest('button') || event.target.closest('[role="button"]');
       if (!isButtonClick) {
+          await updateLastAccessed(lit.id);
           openViewModal(lit);
       }
   }
@@ -1190,17 +1207,38 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
     return hours.toFixed(1) + ' hrs';
   }
   
-  // Function to get recently read publications
-  function getRecentlyReadPublications() {
-    // Sort by most recent reading session
+  // Function to get recently accessed publications
+  function getRecentlyAccessedPublications() {
+    // Sort by lastAccessed timestamp
     return libraryList
-      .filter(pub => pub.readingSessions && pub.readingSessions.length > 0)
       .sort((a, b) => {
-        const aDate = new Date(a.readingSessions[a.readingSessions.length - 1].date);
-        const bDate = new Date(b.readingSessions[b.readingSessions.length - 1].date);
+        const aDate = new Date(a.lastAccessed || a.updatedAt || a.createdAt);
+        const bDate = new Date(b.lastAccessed || b.updatedAt || b.createdAt);
         return bDate - aDate;
       })
       .slice(0, 3);
+  }
+
+  // Updates the lastAccessed timestamp for a publication
+  async function updateLastAccessed(publicationId) {
+    const user = auth.currentUser;
+    if (!user || !publicationId) return;
+
+    try {
+      const userDocRef = doc(firestore, "users", user.uid);
+      const entryDocRef = doc(collection(userDocRef, "library"), publicationId);
+      await updateDoc(entryDocRef, {
+        lastAccessed: new Date()
+      });
+
+      // Update the publication in the libraryList for UI updates
+      const pubIndex = libraryList.findIndex(p => p.id === publicationId);
+      if (pubIndex !== -1) {
+        libraryList[pubIndex].lastAccessed = new Date();
+      }
+    } catch (error) {
+      console.error("Error updating lastAccessed timestamp:", error);
+    }
   }
   
   function logout() {
@@ -1329,49 +1367,73 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
       
       <!-- Main Content -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <!-- Recent Reading Sessions -->
+        <!-- Recently Accessed -->
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
           <div class="flex justify-between items-center mb-6">
             <h2 class="text-xl font-semibold text-gray-800 flex items-center gap-2">
-              <ClipboardList class="w-5 h-5" /> Recent Reading Sessions
+              <ClipboardList class="w-5 h-5" /> Recently Accessed
             </h2>
             <button class="text-blue-600 hover:text-blue-800 flex items-center text-sm font-medium" on:click={openLogReadingModal}>
               <Plus class="w-4 h-4 mr-1" /> Log Session
             </button>
           </div>
           
-          {#if libraryList.length === 0 || !libraryList.some(pub => pub.readingSessions && pub.readingSessions.length > 0)}
+          {#if libraryList.length === 0}
             <div class="flex flex-col items-center justify-center text-center text-gray-500 py-12">
-              <p class="text-lg font-medium">No reading sessions yet.</p>
-              <p class="text-sm mt-2">Start by logging your first reading session!</p>
+              <p class="text-lg font-medium">No publications yet.</p>
+              <p class="text-sm mt-2">Start by adding your first publication!</p>
             </div>
           {:else}
             <div class="space-y-4">
-              {#each getRecentlyReadPublications() as pub}
-                {#if pub.readingSessions && pub.readingSessions.length > 0}
-                  {@const lastSession = pub.readingSessions[pub.readingSessions.length - 1]}
-                  <div class="border border-gray-100 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors" 
-                       on:click={() => openViewModal(pub)}
+              {#each getRecentlyAccessedPublications() as pub}
+                  <div class="border border-gray-100 rounded-lg p-4 cursor-pointer hover:bg-gray-50 transition-colors h-[120px] flex flex-col justify-between" 
+                       on:click={(event) => handleCardClick(event, pub)}
                        on:keydown={(e) => {if (e.key === 'Enter') openViewModal(pub)}}>
-                    <div class="flex justify-between items-start mb-2">
-                      <h3 class="font-medium text-gray-800">{pub.title}</h3>
-                      <span class="text-xs text-gray-500">{getTimeSince(lastSession.date)}</span>
-                    </div>
-                    <p class="text-sm text-gray-600 mb-3">{pub.author}</p>
-                    <div class="flex justify-between items-center">
-                      <div class="flex items-center gap-2">
-                        <BookOpen class="w-4 h-4 text-gray-500" />
-                        <span class="text-sm text-gray-600">{lastSession.pagesRead} pages</span>
+                    <div>
+                      <div class="flex justify-between items-start">
+                        <div class="overflow-hidden pr-2">
+                          <h3 class="font-medium text-gray-800 truncate">{pub.title}</h3>
+                          <p class="text-sm text-gray-600 mt-1">{pub.author}</p>
+                        </div>
+                        <div class="flex-shrink-0">
+                          <DropdownMenu.Root>
+                            <DropdownMenu.Trigger>
+                              <button class="text-gray-400 hover:text-gray-700">
+                                <Ellipsis class="h-4 w-4" />
+                              </button>
+                            </DropdownMenu.Trigger>
+                            <DropdownMenu.Content>
+                              <DropdownMenu.Group>
+                                <DropdownMenu.Item on:click={() => openViewModal(pub)} class="text-sm">
+                                  <BookOpen class="w-4 h-4 mr-2" /> View Details
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item on:click={() => openEditModal(pub)} class="text-sm">
+                                  <Edit class="w-4 h-4 mr-2" /> Edit
+                                </DropdownMenu.Item>
+                                <DropdownMenu.Item on:click={() => deletePublication(pub.id)} class="text-sm text-red-600">
+                                  <Trash2 class="w-4 h-4 mr-2" /> Delete
+                                </DropdownMenu.Item>
+                              </DropdownMenu.Group>
+                            </DropdownMenu.Content>
+                          </DropdownMenu.Root>
+                        </div>
                       </div>
-                      {#if lastSession.duration}
-                        <div class="flex items-center gap-2">
-                          <Clock class="w-4 h-4 text-gray-500" />
-                          <span class="text-sm text-gray-600">{lastSession.duration} min</span>
+                    </div>
+                    
+                    <div class="overflow-hidden mt-auto">
+                      {#if pub.tags && pub.tags.length > 0}
+                        <div class="flex flex-wrap gap-1 mt-1 overflow-hidden max-h-[28px]">
+                          {#each pub.tags as tag, i}
+                            {#if i < 3}
+                              <span class="bg-blue-100 text-blue-800 px-2 py-0.5 text-xs rounded-full whitespace-nowrap">{tag}</span>
+                            {:else if i === 3}
+                              <span class="bg-blue-100 text-blue-800 px-2 py-0.5 text-xs rounded-full whitespace-nowrap">...</span>
+                            {/if}
+                          {/each}
                         </div>
                       {/if}
                     </div>
                   </div>
-                {/if}
               {/each}
               
               <div class="mt-4 text-center">
