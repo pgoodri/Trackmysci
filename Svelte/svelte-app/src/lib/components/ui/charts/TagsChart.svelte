@@ -15,20 +15,20 @@
     let loaded = false;
     let tagsData = writable({});
 
-    // Predefined colors for the tags - vibrant palette with better contrast
+    // Predefined colors for the tags - blues and purples palette
     const tagColors = [
         "#2563EB", // Royal blue
+        "#3B82F6", // Blue
+        "#1D4ED8", // Darker blue
+        "#60A5FA", // Lighter blue
         "#7C3AED", // Vibrant purple
-        "#DB2777", // Deep pink
-        "#059669", // Emerald
-        "#EA580C", // Burnt orange
-        "#0284C7", // Sky blue
-        "#9333EA", // Purple
-        "#DC2626", // Red
-        "#0D9488", // Teal
-        "#CA8A04", // Amber
-        "#15803D", // Forest green
-        "#6366F1"  // Indigo
+        "#8B5CF6", // Purple
+        "#6D28D9", // Dark purple
+        "#A78BFA", // Light purple
+        "#4F46E5", // Indigo
+        "#6366F1", // Lighter indigo
+        "#4338CA", // Dark indigo
+        "#818CF8"  // Light indigo
     ];
 
     // Function to generate consistent colors for tags

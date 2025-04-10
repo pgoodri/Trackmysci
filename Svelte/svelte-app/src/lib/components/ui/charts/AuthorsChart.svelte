@@ -15,20 +15,20 @@
     let loaded = false;
     let authorsData = writable({});
 
-    // Predefined colors for the authors - vibrant palette with better contrast
+    // Predefined colors for the authors - greens and teals palette
     const authorColors = [
-        "#2563EB", // Royal blue
-        "#7C3AED", // Vibrant purple
-        "#DB2777", // Deep pink
         "#059669", // Emerald
-        "#EA580C", // Burnt orange
-        "#0284C7", // Sky blue
-        "#9333EA", // Purple
-        "#DC2626", // Red
+        "#10B981", // Green
+        "#047857", // Dark green
+        "#34D399", // Light green
         "#0D9488", // Teal
-        "#CA8A04", // Amber
-        "#15803D", // Forest green
-        "#6366F1"  // Indigo
+        "#14B8A6", // Teal blue
+        "#0F766E", // Dark teal
+        "#5EEAD4", // Light teal
+        "#0891B2", // Cyan
+        "#06B6D4", // Sky cyan
+        "#0E7490", // Dark cyan
+        "#67E8F9"  // Light cyan
     ];
 
     // Function to generate consistent colors for authors
