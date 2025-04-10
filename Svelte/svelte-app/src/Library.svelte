@@ -418,23 +418,37 @@
             
             // Streak Logic - Use midnight-to-midnight comparison
             if (!streakDate) {
+                // First reading ever - start streak at 1
                 streak = 1;
                 streakDate = todayString;
             } else {
-                const lastLogDate = new Date(streakDate);
-                lastLogDate.setHours(0, 0, 0, 0); // Reset to midnight for proper comparison
-                
-                // Calculate difference in days based on calendar days
-                const timeDiff = Math.round((today - lastLogDate) / (1000 * 60 * 60 * 24));
-                
-                if (timeDiff === 1) {
-                    streak += 1;
-                    streakDate = todayString;
-                } else if (timeDiff === 0) {
-                    // Same day, don't change streak
-                } else if (timeDiff > 1) {
-                    streak = 1; // Reset to 1 since user is reading today
-                    streakDate = todayString;
+                // Check if the streak date is the same as today
+                if (streakDate === todayString) {
+                    // Reading logged multiple times on the same day - keep streak unchanged
+                    console.log("Same day reading - streak unchanged:", streak);
+                    // streakDate remains unchanged
+                } 
+                else {
+                    // Different day - calculate days between
+                    const lastLogDate = new Date(streakDate);
+                    lastLogDate.setHours(0, 0, 0, 0); // Reset time to midnight for proper comparison
+                    
+                    // Calculate difference in days based on calendar days (midnight to midnight)
+                    const timeDiff = Math.round((today - lastLogDate) / (1000 * 60 * 60 * 24));
+                    console.log(`Day difference between readings: ${timeDiff} days`);
+
+                    if (timeDiff === 1) {
+                        // Reading on consecutive days - increment streak
+                        streak += 1;
+                        console.log(`Consecutive day reading - streak increased to ${streak}`);
+                        streakDate = todayString;
+                    } else if (timeDiff > 1) {
+                        // Gap in reading days - reset streak
+                        streak = 1;
+                        console.log(`Gap in reading (${timeDiff} days) - streak reset to 1`);
+                        streakDate = todayString;
+                    }
+                    // Any other cases shouldn't happen but we'll leave the streak as is
                 }
             }
             
@@ -505,9 +519,11 @@
                 mostRecent: entryData.title,
                 updatedAt: timestamp,
                 streak: streak,
-                streakDate: streakDate,
+                streakDate: streakDate, // This is the ISO date string (YYYY-MM-DD)
                 readingLog: updatedLog
             }, { merge: true });
+            
+            console.log(`✅ Streak updated: ${streak} days, streakDate: ${streakDate}`);
             
             // Commit both updates atomically
             await batch.commit();
