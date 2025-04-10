@@ -357,13 +357,13 @@
 
   // Stores for selected chart options
   let selectedPieChart = writable("Tags"); // Options: "Tags", "Authors", "Ratings"
-  let selectedTimeline = writable("30 Days");
+  let selectedTimeline = writable("7 Days");
   let selectedProgress = writable("All Publications");
   let progressPercentage = writable(0); // Initially 0, will update dynamically
   let visualizationMode = writable("timeline"); // Options: "timeline", "pie"
 
   const pieChartOptions = ["Tags", "Authors", "Ratings"];
-  const timelineOptions = ["30 Days", "60 Days", "90 Days"];
+  const timelineOptions = ["7 Days", "30 Days", "60 Days", "90 Days"];
   const progressOptions = ["All Publications", "Reading Status"];
   
   // Function to toggle visualization mode
@@ -388,6 +388,15 @@
     }
   }
   
+  // Function to change timeline period
+  function changeTimelinePeriod(period) {
+    if ($selectedTimeline !== period) {
+      selectedTimeline.set(period);
+      localStorage.setItem("timeline-period", period);
+      chartRefreshKey.update(n => n + 1);
+    }
+  }
+  
   // Initialize from localStorage if available
   onMount(() => {
     // Load visualization mode preference
@@ -400,6 +409,12 @@
     const savedCategory = localStorage.getItem("pie-chart-category");
     if (savedCategory && pieChartOptions.includes(savedCategory)) {
       selectedPieChart.set(savedCategory);
+    }
+    
+    // Load timeline period preference
+    const savedPeriod = localStorage.getItem("timeline-period");
+    if (savedPeriod && timelineOptions.includes(savedPeriod)) {
+      selectedTimeline.set(savedPeriod);
     }
   });
 
@@ -1800,9 +1815,35 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
           {#if $visualizationMode === 'timeline'}
             <!-- Pages Read Over Time -->
             <div class="mb-12">
-              <h3 class="text-base font-medium text-gray-700 mb-4">Pages Read Over Time</h3>
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-medium text-gray-700">Pages Read Over Time</h3>
+                
+                <!-- Timeline Period Dropdown -->
+                <div class="relative">
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      <button class="flex items-center justify-center px-4 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50 transition-all duration-200">
+                        {$selectedTimeline} <ChevronDown class="w-3 h-3 ml-2 text-gray-500" />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content>
+                      <DropdownMenu.Group>
+                        {#each timelineOptions as option}
+                          <DropdownMenu.Item 
+                            class="text-sm {$selectedTimeline === option ? 'text-blue-600 font-medium' : ''}"
+                            on:click={() => changeTimelinePeriod(option)}
+                          >
+                            <Calendar class="h-4 w-4 mr-2" /> 
+                            {option}
+                          </DropdownMenu.Item>
+                        {/each}
+                      </DropdownMenu.Group>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
+                </div>
+              </div>
               <div class="h-60 flex items-center justify-center">
-                <TimelineChart period="30 Days" chartKey={$chartRefreshKey} />
+                <TimelineChart selectedRange={$selectedTimeline} chartKey={$chartRefreshKey} />
               </div>
             </div>
           {:else}

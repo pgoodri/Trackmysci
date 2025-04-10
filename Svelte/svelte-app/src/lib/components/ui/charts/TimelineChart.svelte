@@ -40,7 +40,17 @@
     }
 
     function getChartData(logData) {
-        let days = selectedRange === "30 Days" ? 30 : selectedRange === "60 Days" ? 60 : 90;
+        let days;
+        if (selectedRange === "7 Days") {
+            days = 7;
+        } else if (selectedRange === "30 Days") {
+            days = 30;
+        } else if (selectedRange === "60 Days") {
+            days = 60;
+        } else {
+            days = 90;
+        }
+        
         let fullDateRange = Array.from({ length: days }, (_, i) => getDateNDaysAgo(i)).reverse();
 
         let dataMap = {};

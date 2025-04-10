@@ -70,13 +70,13 @@
   
   // Stores for selected chart options
   let selectedPieChart = writable("Tags"); // Options: "Tags", "Authors", "Ratings"
-  let selectedTimeline = writable("30 Days");
+  let selectedTimeline = writable("7 Days");
   let selectedProgress = writable("All Publications");
   let progressPercentage = writable(0);
   let visualizationMode = writable("timeline"); // Options: "timeline", "pie"
 
   const pieChartOptions = ["Tags", "Authors", "Ratings"];
-  const timelineOptions = ["30 Days", "60 Days", "90 Days"];
+  const timelineOptions = ["7 Days", "30 Days", "60 Days", "90 Days"];
   const progressOptions = ["All Publications", "Reading Status"];
   
   // Function to toggle visualization mode
@@ -523,7 +523,7 @@
           </div>
           
           <div class="h-80">
-            <TimelineChart period={$selectedTimeline} chartKey={$chartRefreshKey} />
+            <TimelineChart selectedRange={$selectedTimeline} chartKey={$chartRefreshKey} />
           </div>
         </div>
       </div>
