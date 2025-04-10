@@ -15,20 +15,20 @@
     let loaded = false;
     let authorsData = writable({});
 
-    // Predefined colors for the authors (we'll cycle through these)
+    // Predefined colors for the authors - vibrant palette with better contrast
     const authorColors = [
-        "#4361EE", // Primary blue
-        "#3A0CA3", // Dark purple
-        "#7209B7", // Purple
-        "#F72585", // Pink
-        "#4CC9F0", // Light blue
-        "#4895EF", // Blue
-        "#560BAD", // Deep purple
-        "#F3722C", // Orange
-        "#F8961E", // Light orange
-        "#F9C74F", // Yellow
-        "#90BE6D", // Green
-        "#43AA8B"  // Teal
+        "#2563EB", // Royal blue
+        "#7C3AED", // Vibrant purple
+        "#DB2777", // Deep pink
+        "#059669", // Emerald
+        "#EA580C", // Burnt orange
+        "#0284C7", // Sky blue
+        "#9333EA", // Purple
+        "#DC2626", // Red
+        "#0D9488", // Teal
+        "#CA8A04", // Amber
+        "#15803D", // Forest green
+        "#6366F1"  // Indigo
     ];
 
     // Function to generate consistent colors for authors
@@ -110,52 +110,43 @@
         const backgroundColor = entries.map((_, i) => getAuthorColor(i));
 
         chart = new Chart(ctx, {
-            type: 'doughnut', // Changed from pie to doughnut for a more modern look
+            type: 'pie', // Regular pie chart, not doughnut
             data: {
                 labels: labels,
                 datasets: [{
                     data: counts,
                     backgroundColor: backgroundColor,
-                    hoverBackgroundColor: backgroundColor.map(color => {
-                        // Slightly lighten the colors on hover
-                        return color + '99'; // Add transparency for hover effect
-                    }),
-                    borderWidth: 2,
+                    hoverBackgroundColor: backgroundColor,
+                    borderWidth: 1.5,
                     borderColor: '#ffffff',
-                    hoverBorderWidth: 3,
-                    spacing: 2, // Add spacing between segments
-                    borderRadius: 4, // Rounded corners on segments
-                    offset: 2 // Slight offset for 3D-like effect
+                    hoverBorderWidth: 2,
+                    spacing: 1 // Minimal spacing between segments
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                cutout: '60%', // Doughnut hole size
                 layout: {
-                    padding: 8 // Padding around the chart
+                    padding: 5 // Padding around the chart
                 },
                 animation: {
-                    animateRotate: true,
-                    animateScale: true,
-                    duration: 800,
-                    easing: 'easeOutBack'
+                    duration: 300, // Quick animation
+                    easing: 'easeOutQuad' // Simple easing
                 },
                 plugins: {
                     legend: {
                         position: 'right',
-                        align: 'center',
+                        align: 'start',
                         labels: {
                             font: { 
-                                size: 11,
-                                family: "'Inter', sans-serif"
+                                size: 12,
+                                weight: 'normal'
                             },
-                            padding: 14,
-                            usePointStyle: true,
-                            pointStyle: 'circle', // Use circle instead of rectangle for legend
-                            boxWidth: 8, // Smaller legend markers
-                            boxHeight: 8,
-                            color: '#333',
+                            padding: 12,
+                            usePointStyle: false, // Use default rectangle style for clarity
+                            boxWidth: 12, // Slightly larger legend markers
+                            boxHeight: 12,
+                            color: '#000', // Black text for better contrast
                             generateLabels: function(chart) {
                                 const data = chart.data;
                                 if (data.labels.length && data.datasets.length) {
@@ -179,28 +170,26 @@
                         }
                     },
                     tooltip: {
-                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
-                        titleColor: '#333',
-                        bodyColor: '#333',
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)', // Darker background for better contrast
+                        titleColor: '#ffffff', // White text
+                        bodyColor: '#ffffff', // White text
                         bodyFont: {
-                            size: 13
+                            size: 12
                         },
                         titleFont: {
-                            size: 14,
+                            size: 13,
                             weight: 'bold'
                         },
-                        padding: 10,
-                        borderColor: 'rgba(0, 0, 0, 0.1)',
-                        borderWidth: 1,
+                        padding: 8,
                         displayColors: true,
-                        cornerRadius: 6,
+                        cornerRadius: 4,
                         callbacks: {
                             label: function(context) {
                                 const label = context.label || '';
                                 const value = context.raw || 0;
                                 const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
                                 const percentage = Math.round((value / total) * 100);
-                                return `${label}: ${value} publication(s) · ${percentage}%`;
+                                return `${label}: ${value} publications (${percentage}%)`;
                             }
                         }
                     }

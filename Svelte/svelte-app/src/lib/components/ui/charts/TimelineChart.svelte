@@ -53,15 +53,15 @@
             datasets: [{
                 label: "Pages Read",
                 data: fullDateRange.map(date => dataMap[date] || 0),
-                borderColor: "#4361EE",
-                backgroundColor: "rgba(67, 97, 238, 0.15)",
+                borderColor: "#2563EB", // Deeper blue for better contrast
+                backgroundColor: "rgba(37, 99, 235, 0.1)", // Very light blue fill
                 borderWidth: 2,
-                pointBackgroundColor: "#4361EE",
+                pointBackgroundColor: "#2563EB",
                 pointBorderColor: "white",
-                pointRadius: 3,
-                pointHoverRadius: 5,
+                pointRadius: 2.5, // Slightly smaller points
+                pointHoverRadius: 4,
                 fill: true,
-                tension: 0.4
+                tension: 0.3 // Less curved lines
             }]
         };
     }
@@ -77,8 +77,8 @@
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: {
-                    duration: 1000,
-                    easing: 'easeOutQuart'
+                    duration: 300, // Much shorter animation
+                    easing: 'easeOutQuad' // Simpler easing
                 },
                 plugins: { 
                     legend: { 
@@ -86,21 +86,19 @@
                     }, 
                     tooltip: { 
                         enabled: true,
-                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
-                        titleColor: '#333',
-                        bodyColor: '#333',
+                        backgroundColor: 'rgba(0, 0, 0, 0.75)', // Darker background for better contrast
+                        titleColor: '#ffffff', // White text 
+                        bodyColor: '#ffffff', // White text
                         bodyFont: {
-                            size: 13
+                            size: 12
                         },
                         titleFont: {
-                            size: 14,
+                            size: 13,
                             weight: 'bold'
                         },
-                        padding: 10,
-                        borderColor: 'rgba(0, 0, 0, 0.1)',
-                        borderWidth: 1,
+                        padding: 8,
                         displayColors: false,
-                        cornerRadius: 6
+                        cornerRadius: 4
                     } 
                 },
                 scales: {
@@ -115,8 +113,10 @@
                             padding: {top: 8, bottom: 0}
                         },
                         grid: {
-                            display: false,
-                            drawBorder: false
+                            display: true,
+                            drawBorder: false,
+                            color: 'rgba(0, 0, 0, 0.03)', // Very light grid
+                            lineWidth: 0.5 // Thin lines
                         },
                         ticks: { 
                             autoSkip: true,
