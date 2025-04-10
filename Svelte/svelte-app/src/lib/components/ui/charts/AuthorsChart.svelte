@@ -1,0 +1,211 @@
+<script>
+    import { onMount, onDestroy, afterUpdate } from 'svelte';
+    import { Chart, ArcElement, Title, Tooltip, Legend } from 'chart.js';
+    import { auth, firestore } from "/src/firebase";
+    import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+    import { writable, get } from "svelte/store";
+
+    // Register the components we need
+    Chart.register(ArcElement, Title, Tooltip, Legend);
+
+    export let chartKey; // Used to force refresh
+
+    let chart;
+    let ctx;
+    let loaded = false;
+    let authorsData = writable({});
+
+    // Predefined colors for the authors (we'll cycle through these)
+    const authorColors = [
+        "#4361EE", // Primary blue
+        "#3A0CA3", // Dark purple
+        "#7209B7", // Purple
+        "#F72585", // Pink
+        "#4CC9F0", // Light blue
+        "#4895EF", // Blue
+        "#560BAD", // Deep purple
+        "#F3722C", // Orange
+        "#F8961E", // Light orange
+        "#F9C74F", // Yellow
+        "#90BE6D", // Green
+        "#43AA8B"  // Teal
+    ];
+
+    // Function to generate consistent colors for authors
+    function getAuthorColor(index) {
+        return authorColors[index % authorColors.length];
+    }
+
+    async function fetchAuthorsData() {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found for authors chart.");
+            return;
+        }
+
+        try {
+            // First, try to get data from the charts/authors document
+            const userDocRef = doc(firestore, "users", user.uid);
+            const authorsDocRef = doc(userDocRef, "charts", "authors");
+            const authorsSnapshot = await getDoc(authorsDocRef);
+
+            let authorCounts = {};
+
+            if (authorsSnapshot.exists()) {
+                // If the authors summary document exists, use that data
+                authorCounts = authorsSnapshot.data();
+                console.log("Found authors data in charts collection:", authorCounts);
+            } else {
+                // If no authors summary exists, scan through the library to count authors
+                console.log("No authors summary found, scanning library...");
+                const libraryRef = collection(userDocRef, "library");
+                const libraryDocs = await getDocs(libraryRef);
+                
+                libraryDocs.forEach(doc => {
+                    const pub = doc.data();
+                    if (pub.author) {
+                        authorCounts[pub.author] = (authorCounts[pub.author] || 0) + 1;
+                    }
+                });
+                
+                console.log("Calculated author counts from library:", authorCounts);
+            }
+
+            // Filter out any empty authors and sort by count (descending)
+            const filteredAuthors = Object.entries(authorCounts)
+                .filter(([author, _]) => author && author.trim().length > 0)
+                .sort((a, b) => b[1] - a[1]);
+            
+            // Convert to object
+            const finalAuthorsData = Object.fromEntries(filteredAuthors);
+            authorsData.set(finalAuthorsData);
+            
+            return finalAuthorsData;
+        } catch (error) {
+            console.error("Error fetching authors data:", error);
+            return {};
+        }
+    }
+
+    function createChart() {
+        const data = get(authorsData);
+        if (!data || Object.keys(data).length === 0) {
+            console.log("No authors data to display");
+            return;
+        }
+
+        if (!ctx) {
+            console.warn("Canvas context not available for authors chart");
+            return;
+        }
+
+        if (chart) {
+            chart.destroy();
+        }
+
+        // Get authors and counts, limiting to top 10 for readability
+        const entries = Object.entries(data).slice(0, 10);
+        const labels = entries.map(([author]) => author);
+        const counts = entries.map(([_, count]) => count);
+        const backgroundColor = entries.map((_, i) => getAuthorColor(i));
+
+        chart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: counts,
+                    backgroundColor: backgroundColor,
+                    hoverBackgroundColor: backgroundColor,
+                    borderWidth: 1,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            font: { size: 12 },
+                            padding: 10,
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    return data.labels.map(function(label, i) {
+                                        const meta = chart.getDatasetMeta(0);
+                                        const style = meta.controller.getStyle(i);
+                                        const value = data.datasets[0].data[i] || 0;
+                                        
+                                        return {
+                                            text: `${label} (${value})`,
+                                            fillStyle: style.backgroundColor,
+                                            strokeStyle: style.borderColor,
+                                            lineWidth: style.borderWidth,
+                                            hidden: isNaN(data.datasets[0].data[i]) || meta.data[i].hidden,
+                                            index: i
+                                        };
+                                    });
+                                }
+                                return [];
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                return `${label}: ${value} publication(s)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        loaded = true;
+        console.log("Authors pie chart created with data:", Object.keys(data).length, "authors");
+    }
+
+    onMount(async () => {
+        ctx = document.getElementById('authorsChart').getContext('2d');
+        await fetchAuthorsData();
+        createChart();
+    });
+
+    // Force chart refresh when chartKey changes
+    $: if (chartKey && loaded) {
+        console.log("Refreshing authors chart due to chartKey update");
+        fetchAuthorsData().then(() => createChart());
+    }
+
+    afterUpdate(() => {
+        if (loaded && Object.keys(get(authorsData)).length > 0) {
+            createChart();
+        }
+    });
+
+    onDestroy(() => {
+        if (chart) chart.destroy();
+    });
+</script>
+
+<style>
+    .authors-chart-container {
+        height: 100%;
+        width: 100%;
+        min-height: 200px;
+        position: relative;
+    }
+    
+    canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+</style>
+
+<div class="authors-chart-container">
+    <canvas id="authorsChart"></canvas>
+</div>

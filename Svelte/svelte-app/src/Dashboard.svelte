@@ -352,13 +352,13 @@
   }
 
   // Stores for selected chart options
-  let selectedPieChart = writable("Tags");
+  let selectedPieChart = writable("Tags"); // Options: "Tags", "Authors", "Ratings"
   let selectedTimeline = writable("30 Days");
   let selectedProgress = writable("All Publications");
   let progressPercentage = writable(0); // Initially 0, will update dynamically
-  let visualizationMode = writable("timeline"); // New store for the visualization mode toggle (options: "timeline", "tags")
+  let visualizationMode = writable("timeline"); // Options: "timeline", "pie"
 
-  const pieChartOptions = ["Tags", "Ratings", "Authors"];
+  const pieChartOptions = ["Tags", "Authors", "Ratings"];
   const timelineOptions = ["30 Days", "60 Days", "90 Days"];
   const progressOptions = ["All Publications", "Reading Status"];
   
@@ -366,8 +366,19 @@
   function toggleVisualizationMode(mode) {
     if ($visualizationMode !== mode) {
       visualizationMode.set(mode);
-      // You could also save this preference to localStorage like the viewMode
+      // Save preference to localStorage
       localStorage.setItem("reading-visualization-mode", mode);
+      // Refresh charts
+      chartRefreshKey.update(n => n + 1);
+    }
+  }
+  
+  // Function to change pie chart data category
+  function changePieChartCategory(category) {
+    if ($selectedPieChart !== category) {
+      selectedPieChart.set(category);
+      // Save preference to localStorage
+      localStorage.setItem("pie-chart-category", category);
       // Refresh charts
       chartRefreshKey.update(n => n + 1);
     }
@@ -375,9 +386,16 @@
   
   // Initialize from localStorage if available
   onMount(() => {
+    // Load visualization mode preference
     const savedMode = localStorage.getItem("reading-visualization-mode");
-    if (savedMode && (savedMode === "timeline" || savedMode === "tags")) {
+    if (savedMode && (savedMode === "timeline" || savedMode === "pie")) {
       visualizationMode.set(savedMode);
+    }
+    
+    // Load pie chart category preference
+    const savedCategory = localStorage.getItem("pie-chart-category");
+    if (savedCategory && pieChartOptions.includes(savedCategory)) {
+      selectedPieChart.set(savedCategory);
     }
   });
 
@@ -1758,10 +1776,10 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
                 <TrendingUp class="h-3 w-3 mr-1" /> Timeline
               </button>
               <button 
-                class={`flex items-center justify-center px-3 py-1.5 text-xs font-medium ${$visualizationMode === 'tags' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                on:click={() => toggleVisualizationMode('tags')}
+                class={`flex items-center justify-center px-3 py-1.5 text-xs font-medium ${$visualizationMode === 'pie' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                on:click={() => toggleVisualizationMode('pie')}
               >
-                <Tag class="h-3 w-3 mr-1" /> Tags
+                <PieChartIcon class="h-3 w-3 mr-1" /> Distribution
               </button>
             </div>
           </div>
@@ -1775,11 +1793,52 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
               </div>
             </div>
           {:else}
-            <!-- Reading by Tags -->
+            <!-- Reading Distribution with category dropdown -->
             <div class="mb-12">
-              <h3 class="text-base font-medium text-gray-700 mb-4">Reading by Tags</h3>
+              <div class="flex justify-between items-center mb-4">
+                <h3 class="text-base font-medium text-gray-700">
+                  Reading by {$selectedPieChart}
+                </h3>
+                
+                <!-- Dropdown for different data categories -->
+                <div class="relative">
+                  <DropdownMenu.Root>
+                    <DropdownMenu.Trigger>
+                      <button class="flex items-center justify-center px-3 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
+                        {$selectedPieChart} <ChevronDown class="w-3 h-3 ml-1" />
+                      </button>
+                    </DropdownMenu.Trigger>
+                    <DropdownMenu.Content>
+                      <DropdownMenu.Group>
+                        {#each pieChartOptions as option}
+                          <DropdownMenu.Item 
+                            class="text-sm {$selectedPieChart === option ? 'text-blue-600 font-medium' : ''}"
+                            on:click={() => changePieChartCategory(option)}
+                          >
+                            {#if option === 'Tags'}
+                              <Tag class="h-4 w-4 mr-2" />
+                            {:else if option === 'Authors'}
+                              <Edit class="h-4 w-4 mr-2" /> 
+                            {:else}
+                              <Flame class="h-4 w-4 mr-2" /> 
+                            {/if}
+                            {option}
+                          </DropdownMenu.Item>
+                        {/each}
+                      </DropdownMenu.Group>
+                    </DropdownMenu.Content>
+                  </DropdownMenu.Root>
+                </div>
+              </div>
+              
               <div class="h-60 flex items-center justify-center">
-                <TagsChart chartKey={$chartRefreshKey} />
+                {#if $selectedPieChart === 'Tags'}
+                  <TagsChart chartKey={$chartRefreshKey} />
+                {:else if $selectedPieChart === 'Authors'}
+                  <AuthorsChart chartKey={$chartRefreshKey} />
+                {:else if $selectedPieChart === 'Ratings'}
+                  <RatingsChart chartKey={$chartRefreshKey} />
+                {/if}
               </div>
             </div>
           {/if}

@@ -1,150 +1,193 @@
 <script>
-    import { onMount, onDestroy } from 'svelte';
-    import { Chart, LinearScale, CategoryScale, BarElement, BarController, Title, Tooltip, Legend } from 'chart.js'; // Import necessary components
-  
-    // Register the components manually
-    Chart.register(LinearScale, CategoryScale, BarElement, BarController, Title, Tooltip, Legend);
-  
+    import { onMount, onDestroy, afterUpdate } from 'svelte';
+    import { Chart, ArcElement, Title, Tooltip, Legend } from 'chart.js';
+    import { auth, firestore } from "/src/firebase";
+    import { doc, getDoc } from "firebase/firestore";
+    
+    // Register the components we need
+    Chart.register(ArcElement, Title, Tooltip, Legend);
+    
+    export let chartKey; // Used to force refresh
+    
     let chart;
-  
-    onMount(() => {
-        const chartData = {
-        labels: ['Red', 'Blue', 'Yellow', 'Green', 'Purple'],
-        datasets: [{
-            data: [300, 50, 100, 150, 200],
-            backgroundColor: generateRandomColors(5), // Function to generate random colors
-            hoverBackgroundColor: generateRandomColors(5), // Random hover colors
-        }],
-        };
-
-        function generateRandomColors(num) {
-        const colors = [];
-        for (let i = 0; i < num; i++) {
-            const randomColor = `#${Math.floor(Math.random() * 16777215).toString(16)}`;
-            colors.push(randomColor);
+    let ctx;
+    let loaded = false;
+    
+    // Rating star colors
+    const ratingColors = [
+        "#FF5252", // 1 star - red
+        "#FFA726", // 2 stars - orange
+        "#FFEB3B", // 3 stars - yellow
+        "#66BB6A", // 4 stars - green
+        "#26A69A"  // 5 stars - teal
+    ];
+    
+    // Rating labels
+    const ratingLabels = [
+        "1 ★",
+        "2 ★★",
+        "3 ★★★",
+        "4 ★★★★",
+        "5 ★★★★★"
+    ];
+    
+    // Data structure for the chart
+    let chartData = {
+        labels: ratingLabels,
+        data: [0, 0, 0, 0, 0], // Default data, one for each rating
+    };
+    
+    async function fetchRatingsData() {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found for ratings chart.");
+            return;
         }
-        return colors;
-        }
-
-  
-        const ctx = document.getElementById('myChart').getContext('2d');
-        chart = new Chart(ctx, {
-        type: 'pie', // Specify the chart type as 'pie'
-        data: chartData, // Use the same data for the pie chart
-        options: {
-            responsive: true,
-            plugins: {
-            legend: {
-                position: 'top', // You can change the legend position if needed
-            },
-            tooltip: {
-                enabled: true, // Enable tooltips on hover
-            }
-            }
-        }
-        });
-
-        const ctx2 = document.getElementById('myProgressBar').getContext('2d');
-        const progressBar = new Chart(ctx2, {
-        type: 'doughnut',
-        data: {
-            labels: ['Progress', 'Remaining'],
-            datasets: [{
-            data: [70, 30], // Progress is 70%, Remaining is 30%
-            backgroundColor: ['#36A2EB', '#CCCCCC'], // Progress color and remaining color
-            hoverBackgroundColor: ['#36A2EB', '#CCCCCC'],
-            }]
-        },
-        options: {
-            responsive: true,
-            cutout: '80%', // Creates a 'donut' effect by cutting out the center
-            plugins: {
-            legend: {
-                display: false, // Hide legend if not needed
-            },
-            tooltip: {
-                enabled: false, // Disable tooltips
-            }
-            }
-        }
-        });
-
-        const ctx3 = document.getElementById('lineChart').getContext('2d');
-        chart = new Chart(ctx3, {
-        type: 'line', // Specify the chart type
-        data: {
-            labels: Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`), // Last 30 days (Day 1 to Day 30)
-            datasets: [{
-            label: 'Pages Read',
-            data: generateDummyData(), // Generate dummy data
-            borderColor: '#36A2EB', // Line color
-            fill: false, // Don't fill the area under the line
-            tension: 0.1, // Smooth the line
-            }]
-        },
-        options: {
-            responsive: true,
-            scales: {
-            x: {
-                title: {
-                display: true,
-                text: 'Days'
+        
+        try {
+            const userDocRef = doc(firestore, "users", user.uid);
+            const ratingsDocRef = doc(userDocRef, "charts", "ratings");
+            const docSnap = await getDoc(ratingsDocRef);
+            
+            // Default data structure (all zeros)
+            let ratingsData = [0, 0, 0, 0, 0];
+            
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                console.log("Raw ratings data from Firestore:", data);
+                
+                // Process the data from Firestore
+                for (let i = 1; i <= 5; i++) {
+                    // Firestore stores keys as strings
+                    const count = data[i.toString()] || 0;
+                    ratingsData[i-1] = count;
                 }
-            },
-            y: {
-                beginAtZero: true,
-                title: {
-                display: true,
-                text: 'Pages Read'
-                }
+            } else {
+                console.log("No ratings data found in Firestore.");
             }
-            }
+            
+            // Update the chart data
+            chartData.data = ratingsData;
+            console.log("Processed ratings data:", ratingsData);
+            
+            return ratingsData;
+        } catch (error) {
+            console.error("Error fetching ratings data:", error);
+            return [0, 0, 0, 0, 0];
         }
-        });
-
-
-    });
-
-    // Function to generate dummy data for pages read over 30 days
-    function generateDummyData() {
-        return Array.from({ length: 30 }, () => Math.floor(Math.random() * 100)); // Random pages between 0 and 100
     }
     
-    function updateChart(newPagesRead) {
-        chart.data.datasets[0].data.push(newPagesRead); // Add new pages read data
-        chart.data.labels.push(`Day ${chart.data.labels.length + 1}`); // Add label for the new day
-        chart.update(); // Update the chart with the new data
+    async function createChart() {
+        await fetchRatingsData();
+        
+        if (!ctx) {
+            console.warn("Canvas context not available for ratings chart");
+            return;
+        }
+        
+        if (chart) {
+            chart.destroy();
+        }
+        
+        chart = new Chart(ctx, {
+            type: 'pie',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    data: chartData.data,
+                    backgroundColor: ratingColors,
+                    hoverBackgroundColor: ratingColors,
+                    borderWidth: 1,
+                    borderColor: '#fff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            font: { size: 12 },
+                            padding: 10,
+                            usePointStyle: true,
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    return data.labels.map(function(label, i) {
+                                        const meta = chart.getDatasetMeta(0);
+                                        const style = meta.controller.getStyle(i);
+                                        const value = data.datasets[0].data[i] || 0;
+                                        
+                                        return {
+                                            text: `${label} (${value})`,
+                                            fillStyle: style.backgroundColor,
+                                            strokeStyle: style.borderColor,
+                                            lineWidth: style.borderWidth,
+                                            hidden: isNaN(data.datasets[0].data[i]) || meta.data[i].hidden,
+                                            index: i
+                                        };
+                                    });
+                                }
+                                return [];
+                            }
+                        }
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                return `${label}: ${value} publication(s)`;
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        
+        loaded = true;
+        console.log("Ratings chart created with data:", chartData.data);
     }
-
-    function updateProgressBar(progress) {
-        progressBar.data.datasets[0].data = [progress, 100 - progress]; // Update the data
-        progressBar.update(); // Update the chart
-    }
-
-
-    onDestroy(() => {
-      if (chart) {
-        chart.destroy();
-      }
+    
+    onMount(() => {
+        ctx = document.getElementById('ratingsChart').getContext('2d');
+        createChart();
     });
-  </script>
-  
-  <style>
-    .chart-container {
-      width: 80%;
-      margin: 0 auto;
-      padding: 20px;
-      background-color: white;
-      border-radius: 10px;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    
+    // Force chart refresh when chartKey changes
+    $: if (chartKey && loaded) {
+        console.log("Refreshing ratings chart due to chartKey update");
+        createChart();
     }
-  
+    
+    afterUpdate(() => {
+        if (loaded) {
+            createChart();
+        }
+    });
+    
+    onDestroy(() => {
+        if (chart) chart.destroy();
+    });
+</script>
+
+<style>
+    .ratings-chart-container {
+        height: 100%;
+        width: 100%;
+        min-height: 200px;
+        position: relative;
+    }
+    
     canvas {
-      width: 100% !important;
+        width: 100% !important;
+        height: 100% !important;
     }
-  </style>
-  
-<h1>Ratings</h1>
-<canvas id="myChart"></canvas>
+</style>
+
+<div class="ratings-chart-container">
+    <canvas id="ratingsChart"></canvas>
+</div>
 
   
