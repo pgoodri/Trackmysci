@@ -54,6 +54,8 @@
     Flame,
     Tag,
     Star,
+    Home,
+    BookText,
     PieChart as PieChartIcon
   } from "lucide-svelte";
   import { Chart } from "chart.js/auto";
