@@ -15,20 +15,20 @@
     let loaded = false;
     let tagsData = writable({});
 
-    // Rainbow color palette as shown in piecolors.png
+    // Warm color palette (reds, oranges, browns)
     const tagColors = [
-        "#FF4136", // Red
-        "#FF6E4A", // Red-orange
-        "#FF851B", // Orange
-        "#FFC300", // Yellow-orange
-        "#FFDC00", // Yellow
-        "#B6E82B", // Yellow-green
-        "#4CAF50", // Green
-        "#36BFA3", // Teal
-        "#4ECDC4", // Light blue-green
-        "#3498DB", // Sky blue
-        "#5D5CFA", // Blue
-        "#8F44AA"  // Purple
+        "#E53E3E", // Red
+        "#DD6B20", // Orange
+        "#ED8936", // Light orange
+        "#D69E2E", // Yellow-orange
+        "#B7791F", // Amber
+        "#975A16", // Dark amber
+        "#744210", // Brown
+        "#C05621", // Burnt orange
+        "#9B2C2C", // Dark red
+        "#822727", // Brick red
+        "#C53030", // Bright red
+        "#E2B1AB"  // Light pink-brown
     ];
 
     // Function to generate consistent colors for tags

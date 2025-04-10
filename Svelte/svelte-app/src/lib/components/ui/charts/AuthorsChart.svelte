@@ -15,20 +15,20 @@
     let loaded = false;
     let authorsData = writable({});
 
-    // Cool palette as shown in piecolors.png
+    // Purple and blue palette
     const authorColors = [
-        "#5E4FA2", // Deep purple
-        "#3F51B5", // Indigo
-        "#5D5CFA", // Blue-purple
-        "#4A76B8", // Blue purple
-        "#4A8FC6", // Blue
-        "#4AB6C6", // Light blue
-        "#4AC6B9", // Aqua 
-        "#4AC69D", // Light teal
-        "#4AB986", // Teal
-        "#4AC66F", // Blue green
-        "#56D394", // Green
-        "#78E6A8"  // Light green
+        "#6B46C1", // Purple
+        "#805AD5", // Medium purple
+        "#9F7AEA", // Light purple
+        "#B794F4", // Lavender
+        "#553C9A", // Dark purple
+        "#5A67D8", // Indigo
+        "#667EEA", // Blue-indigo
+        "#4C51BF", // Dark indigo
+        "#7F9CF5", // Light blue
+        "#4299E1", // Blue
+        "#2C5282", // Dark blue
+        "#2B6CB0"  // Royal blue
     ];
 
     // Function to generate consistent colors for authors
