@@ -1,139 +1,215 @@
 <script>
-    import { onMount, onDestroy } from 'svelte';
-    import { Chart, LinearScale, CategoryScale, BarElement, BarController, Title, Tooltip, Legend } from 'chart.js'; // Import necessary components
-  
-    // Register the components manually
-    Chart.register(LinearScale, CategoryScale, BarElement, BarController, Title, Tooltip, Legend);
-  
+    import { onMount, onDestroy, afterUpdate } from 'svelte';
+    import { Chart, ArcElement, Title, Tooltip, Legend } from 'chart.js';
+    import { auth, firestore } from "/src/firebase";
+    import { doc, getDoc, collection, getDocs } from "firebase/firestore";
+    import { writable, get } from "svelte/store";
+
+    // Register the components we need
+    Chart.register(ArcElement, Title, Tooltip, Legend);
+
+    export let chartKey; // Used to force refresh
+
     let chart;
-  
-    onMount(() => {
-        const chartData = {
-        labels: ['Red', 'Blue', 'Yellow', 'Green', 'Purple'],
-        datasets: [{
-            data: [300, 50, 100, 150, 200],
-            backgroundColor: generateRandomColors(5), // Function to generate random colors
-            hoverBackgroundColor: generateRandomColors(5), // Random hover colors
-        }],
-        };
+    let ctx;
+    let loaded = false;
+    let tagsData = writable({});
 
-        function generateRandomColors(num) {
-        const colors = [];
-        for (let i = 0; i < num; i++) {
-            const randomColor = `#${Math.floor(Math.random() * 16777215).toString(16)}`;
-            colors.push(randomColor);
-        }
-        return colors;
+    // Predefined colors for the tags (we'll cycle through these)
+    const tagColors = [
+        "#4361EE", // Primary blue
+        "#3A0CA3", // Dark purple
+        "#7209B7", // Purple
+        "#F72585", // Pink
+        "#4CC9F0", // Light blue
+        "#4895EF", // Blue
+        "#560BAD", // Deep purple
+        "#F3722C", // Orange
+        "#F8961E", // Light orange
+        "#F9C74F", // Yellow
+        "#90BE6D", // Green
+        "#43AA8B"  // Teal
+    ];
+
+    // Function to generate consistent colors for tags
+    function getTagColor(index) {
+        return tagColors[index % tagColors.length];
+    }
+
+    async function fetchTagsData() {
+        const user = auth.currentUser;
+        if (!user) {
+            console.error("No authenticated user found for tags chart.");
+            return;
         }
 
-  
-        const ctx = document.getElementById('myChart').getContext('2d');
+        try {
+            // First, try to get data from the charts/tags document
+            const userDocRef = doc(firestore, "users", user.uid);
+            const tagsDocRef = doc(userDocRef, "charts", "tags");
+            const tagsSnapshot = await getDoc(tagsDocRef);
+
+            let tagCounts = {};
+
+            if (tagsSnapshot.exists()) {
+                // If the tags summary document exists, use that data
+                tagCounts = tagsSnapshot.data();
+                console.log("Found tags data in charts collection:", tagCounts);
+            } else {
+                // If no tags summary exists, scan through the library to count tags
+                console.log("No tags summary found, scanning library...");
+                const libraryRef = collection(userDocRef, "library");
+                const libraryDocs = await getDocs(libraryRef);
+                
+                libraryDocs.forEach(doc => {
+                    const pub = doc.data();
+                    if (pub.tags && Array.isArray(pub.tags)) {
+                        pub.tags.forEach(tag => {
+                            if (tag) {
+                                tagCounts[tag] = (tagCounts[tag] || 0) + 1;
+                            }
+                        });
+                    }
+                });
+                
+                console.log("Calculated tag counts from library:", tagCounts);
+            }
+
+            // Filter out any empty tags and sort by count (descending)
+            const filteredTags = Object.entries(tagCounts)
+                .filter(([tag, _]) => tag && tag.trim().length > 0)
+                .sort((a, b) => b[1] - a[1]);
+            
+            // Convert to object
+            const finalTagsData = Object.fromEntries(filteredTags);
+            tagsData.set(finalTagsData);
+            
+            return finalTagsData;
+        } catch (error) {
+            console.error("Error fetching tags data:", error);
+            return {};
+        }
+    }
+
+    function createChart() {
+        const data = get(tagsData);
+        if (!data || Object.keys(data).length === 0) {
+            console.log("No tags data to display");
+            return;
+        }
+
+        if (!ctx) {
+            console.warn("Canvas context not available for tags chart");
+            return;
+        }
+
+        if (chart) {
+            chart.destroy();
+        }
+
+        // Get tags and counts, limiting to top 10 for readability
+        const entries = Object.entries(data).slice(0, 10);
+        const labels = entries.map(([tag]) => tag);
+        const counts = entries.map(([_, count]) => count);
+        const backgroundColor = entries.map((_, i) => getTagColor(i));
+
         chart = new Chart(ctx, {
-        type: 'pie', // Specify the chart type as 'pie'
-        data: chartData, // Use the same data for the pie chart
-        options: {
-            responsive: true,
-            plugins: {
-            legend: {
-                position: 'top', // You can change the legend position if needed
+            type: 'pie',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: counts,
+                    backgroundColor: backgroundColor,
+                    hoverBackgroundColor: backgroundColor,
+                    borderWidth: 1,
+                    borderColor: '#fff'
+                }]
             },
-            tooltip: {
-                enabled: true, // Enable tooltips on hover
-            }
-            }
-        }
-        });
-
-        const ctx2 = document.getElementById('myProgressBar').getContext('2d');
-        const progressBar = new Chart(ctx2, {
-        type: 'doughnut',
-        data: {
-            labels: ['Progress', 'Remaining'],
-            datasets: [{
-            data: [70, 30], // Progress is 70%, Remaining is 30%
-            backgroundColor: ['#36A2EB', '#CCCCCC'], // Progress color and remaining color
-            hoverBackgroundColor: ['#36A2EB', '#CCCCCC'],
-            }]
-        },
-        options: {
-            responsive: true,
-            cutout: '80%', // Creates a 'donut' effect by cutting out the center
-            plugins: {
-            legend: {
-                display: false, // Hide legend if not needed
-            },
-            tooltip: {
-                enabled: false, // Disable tooltips
-            }
-            }
-        }
-        });
-
-        const ctx3 = document.getElementById('lineChart').getContext('2d');
-        chart = new Chart(ctx3, {
-        type: 'line', // Specify the chart type
-        data: {
-            labels: Array.from({ length: 30 }, (_, i) => `Day ${i + 1}`), // Last 30 days (Day 1 to Day 30)
-            datasets: [{
-            label: 'Pages Read',
-            data: generateDummyData(), // Generate dummy data
-            borderColor: '#36A2EB', // Line color
-            fill: false, // Don't fill the area under the line
-            tension: 0.1, // Smooth the line
-            }]
-        },
-        options: {
-            plugins: {
-                    legend: {  
-                        display: false, 
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'right',
+                        labels: {
+                            font: { size: 12 },
+                            padding: 10,
+                            generateLabels: function(chart) {
+                                const data = chart.data;
+                                if (data.labels.length && data.datasets.length) {
+                                    return data.labels.map(function(label, i) {
+                                        const meta = chart.getDatasetMeta(0);
+                                        const style = meta.controller.getStyle(i);
+                                        const value = data.datasets[0].data[i] || 0;
+                                        
+                                        return {
+                                            text: `${label} (${value})`,
+                                            fillStyle: style.backgroundColor,
+                                            strokeStyle: style.borderColor,
+                                            lineWidth: style.borderWidth,
+                                            hidden: isNaN(data.datasets[0].data[i]) || meta.data[i].hidden,
+                                            index: i
+                                        };
+                                    });
+                                }
+                                return [];
+                            }
+                        }
                     },
-                },
-            responsive: true,
-            scales: {
-            x: {
-                title: {
-                display: true,
-                text: 'Days'
-                }
-            },
-            y: {
-                beginAtZero: true,
-                title: {
-                display: true,
-                text: 'Pages Read'
+                    tooltip: {
+                        callbacks: {
+                            label: function(context) {
+                                const label = context.label || '';
+                                const value = context.raw || 0;
+                                return `${label}: ${value} publication(s)`;
+                            }
+                        }
+                    }
                 }
             }
-            }
-        }
         });
 
+        loaded = true;
+        console.log("Tags pie chart created with data:", Object.keys(data).length, "tags");
+    }
 
+    onMount(async () => {
+        ctx = document.getElementById('tagsChart').getContext('2d');
+        await fetchTagsData();
+        createChart();
     });
 
-    // Function to generate dummy data for pages read over 30 days
-    function generateDummyData() {
-        return Array.from({ length: 30 }, () => Math.floor(Math.random() * 100)); // Random pages between 0 and 100
-    }
-    
-    function updateChart(newPagesRead) {
-        chart.data.datasets[0].data.push(newPagesRead); // Add new pages read data
-        chart.data.labels.push(`Day ${chart.data.labels.length + 1}`); // Add label for the new day
-        chart.update(); // Update the chart with the new data
+    // Force chart refresh when chartKey changes
+    $: if (chartKey && loaded) {
+        console.log("Refreshing tags chart due to chartKey update");
+        fetchTagsData().then(() => createChart());
     }
 
-    function updateProgressBar(progress) {
-        progressBar.data.datasets[0].data = [progress, 100 - progress]; // Update the data
-        progressBar.update(); // Update the chart
-    }
-
+    afterUpdate(() => {
+        if (loaded && Object.keys(get(tagsData)).length > 0) {
+            createChart();
+        }
+    });
 
     onDestroy(() => {
-      if (chart) {
-        chart.destroy();
-      }
+        if (chart) chart.destroy();
     });
-
 </script>
 
-<canvas id="myChart"></canvas>
-  
+<style>
+    .tags-chart-container {
+        height: 100%;
+        width: 100%;
+        min-height: 200px;
+        position: relative;
+    }
+    
+    canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+</style>
+
+<div class="tags-chart-container">
+    <canvas id="tagsChart"></canvas>
+</div>
