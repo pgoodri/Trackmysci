@@ -1619,8 +1619,15 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
         <h1 class="text-xl font-bold text-blue-600">TrackMySci</h1>
         
         <div class="hidden md:flex items-center space-x-6">
-          <button class="text-gray-800 font-medium hover:text-blue-600">Dashboard</button>
-          <button on:click={() => window.location.href='/library'} class="text-gray-600 hover:text-blue-600">Library</button>
+          <button class="text-gray-800 font-medium hover:text-blue-600">
+            <Home class="w-4 h-4 inline mr-1" /> Dashboard
+          </button>
+          <button on:click={() => window.location.href='/library'} class="text-gray-600 hover:text-blue-600">
+            <BookText class="w-4 h-4 inline mr-1" /> Library
+          </button>
+          <button on:click={() => window.location.href='/analytics'} class="text-gray-600 hover:text-blue-600">
+            <BarChart class="w-4 h-4 inline mr-1" /> Analytics
+          </button>
         </div>
       </div>
       

@@ -3,6 +3,7 @@
     import { Router, Route, navigate } from 'svelte-routing';
     import Dashboard from './Dashboard.svelte';
     import Library from './Library.svelte';
+    import Analytics from './Analytics.svelte';
     import Login from './Login.svelte';
     import Signup from './Signup.svelte';
     import { initializeApp } from 'firebase/app';
@@ -19,5 +20,6 @@
         <Route path="/login" component={Login} />
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/library" component={Library} />
+        <Route path="/analytics" component={Analytics} />
     </div>
 </Router>
