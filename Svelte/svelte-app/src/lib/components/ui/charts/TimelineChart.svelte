@@ -53,10 +53,15 @@
             datasets: [{
                 label: "Pages Read",
                 data: fullDateRange.map(date => dataMap[date] || 0),
-                borderColor: "#36A2EB",
-                backgroundColor: "rgba(54, 162, 235, 0.2)",
+                borderColor: "#4361EE",
+                backgroundColor: "rgba(67, 97, 238, 0.15)",
+                borderWidth: 2,
+                pointBackgroundColor: "#4361EE",
+                pointBorderColor: "white",
+                pointRadius: 3,
+                pointHoverRadius: 5,
                 fill: true,
-                tension: 0.3
+                tension: 0.4
             }]
         };
     }
@@ -71,13 +76,81 @@
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { display: false }, tooltip: { enabled: true } },
+                animation: {
+                    duration: 1000,
+                    easing: 'easeOutQuart'
+                },
+                plugins: { 
+                    legend: { 
+                        display: false 
+                    }, 
+                    tooltip: { 
+                        enabled: true,
+                        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+                        titleColor: '#333',
+                        bodyColor: '#333',
+                        bodyFont: {
+                            size: 13
+                        },
+                        titleFont: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        padding: 10,
+                        borderColor: 'rgba(0, 0, 0, 0.1)',
+                        borderWidth: 1,
+                        displayColors: false,
+                        cornerRadius: 6
+                    } 
+                },
                 scales: {
                     x: {
-                        title: { display: true, text: "Date" },
-                        ticks: { autoSkip: true }
+                        title: { 
+                            display: true, 
+                            text: "Date",
+                            font: {
+                                size: 12,
+                                weight: 'normal'
+                            },
+                            padding: {top: 8, bottom: 0}
+                        },
+                        grid: {
+                            display: false,
+                            drawBorder: false
+                        },
+                        ticks: { 
+                            autoSkip: true,
+                            maxRotation: 0,
+                            font: {
+                                size: 11
+                            },
+                            color: '#666'
+                        }
                     },
-                    y: { title: { display: true, text: "Pages Read" }, beginAtZero: true }
+                    y: { 
+                        title: { 
+                            display: true, 
+                            text: "Pages Read",
+                            font: {
+                                size: 12,
+                                weight: 'normal'
+                            },
+                            padding: {top: 0, bottom: 8}
+                        }, 
+                        beginAtZero: true,
+                        grid: {
+                            color: 'rgba(0, 0, 0, 0.05)',
+                            lineWidth: 1,
+                            drawBorder: false
+                        },
+                        ticks: {
+                            font: {
+                                size: 11
+                            },
+                            color: '#666',
+                            padding: 8
+                        }
+                    }
                 }
             }
         });
@@ -117,6 +190,23 @@
 <style>
     .timeline-container {
         width: 100%;
-        height: 200px;
+        height: 100%;
+        min-height: 220px;
+        padding: 4px;
+        border-radius: 8px;
+        overflow: hidden;
+        position: relative;
+        transition: all 0.3s ease;
+    }
+    
+    canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+    
+    @media (max-width: 768px) {
+        .timeline-container {
+            min-height: 180px;
+        }
     }
 </style>

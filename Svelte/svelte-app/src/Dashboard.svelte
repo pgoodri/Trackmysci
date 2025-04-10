@@ -53,6 +53,7 @@
     ClipboardList,
     Flame,
     Tag,
+    Star,
     PieChart as PieChartIcon
   } from "lucide-svelte";
   import { Chart } from "chart.js/auto";
@@ -1769,18 +1770,20 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
             </h2>
             
             <!-- Visualization Mode Toggle -->
-            <div class="flex rounded-md overflow-hidden border border-gray-200">
+            <div class="flex rounded-lg overflow-hidden shadow-sm border border-gray-200">
               <button 
-                class={`flex items-center justify-center px-3 py-1.5 text-xs font-medium ${$visualizationMode === 'timeline' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                class={`flex items-center justify-center px-4 py-1.5 text-xs font-medium transition-all duration-200 ${$visualizationMode === 'timeline' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                 on:click={() => toggleVisualizationMode('timeline')}
               >
-                <TrendingUp class="h-3 w-3 mr-1" /> Timeline
+                <TrendingUp class={`h-3.5 w-3.5 mr-1.5 ${$visualizationMode === 'timeline' ? 'text-white' : 'text-gray-500'}`} /> 
+                Timeline
               </button>
               <button 
-                class={`flex items-center justify-center px-3 py-1.5 text-xs font-medium ${$visualizationMode === 'pie' ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                class={`flex items-center justify-center px-4 py-1.5 text-xs font-medium transition-all duration-200 ${$visualizationMode === 'pie' ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
                 on:click={() => toggleVisualizationMode('pie')}
               >
-                <PieChartIcon class="h-3 w-3 mr-1" /> Distribution
+                <PieChartIcon class={`h-3.5 w-3.5 mr-1.5 ${$visualizationMode === 'pie' ? 'text-white' : 'text-gray-500'}`} /> 
+                Distribution
               </button>
             </div>
           </div>
@@ -1797,7 +1800,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
             <!-- Reading Distribution with category dropdown -->
             <div class="mb-12">
               <div class="flex justify-between items-center mb-4">
-                <h3 class="text-base font-medium text-gray-700">
+                <h3 class="text-base font-semibold text-gray-800">
                   Reading by {$selectedPieChart}
                 </h3>
                 
@@ -1805,8 +1808,8 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
                 <div class="relative">
                   <DropdownMenu.Root>
                     <DropdownMenu.Trigger>
-                      <button class="flex items-center justify-center px-3 py-1 text-xs font-medium text-gray-600 bg-gray-100 rounded hover:bg-gray-200">
-                        {$selectedPieChart} <ChevronDown class="w-3 h-3 ml-1" />
+                      <button class="flex items-center justify-center px-4 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-200 rounded-md shadow-sm hover:bg-gray-50 transition-all duration-200">
+                        {$selectedPieChart} <ChevronDown class="w-3 h-3 ml-2 text-gray-500" />
                       </button>
                     </DropdownMenu.Trigger>
                     <DropdownMenu.Content>
@@ -1821,7 +1824,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
                             {:else if option === 'Authors'}
                               <Edit class="h-4 w-4 mr-2" /> 
                             {:else}
-                              <Flame class="h-4 w-4 mr-2" /> 
+                              <Star class="h-4 w-4 mr-2" /> 
                             {/if}
                             {option}
                           </DropdownMenu.Item>

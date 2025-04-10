@@ -13,13 +13,13 @@
     let ctx;
     let loaded = false;
     
-    // Rating star colors
+    // Rating star colors - slightly more vibrant and modern
     const ratingColors = [
         "#FF5252", // 1 star - red
-        "#FFA726", // 2 stars - orange
-        "#FFEB3B", // 3 stars - yellow
-        "#66BB6A", // 4 stars - green
-        "#26A69A"  // 5 stars - teal
+        "#FF9800", // 2 stars - orange
+        "#FFC107", // 3 stars - yellow
+        "#4CAF50", // 4 stars - green
+        "#009688"  // 5 stars - teal
     ];
     
     // Rating labels
@@ -90,27 +90,52 @@
         }
         
         chart = new Chart(ctx, {
-            type: 'pie',
+            type: 'doughnut', // Changed from pie to doughnut for a more modern look
             data: {
                 labels: chartData.labels,
                 datasets: [{
                     data: chartData.data,
                     backgroundColor: ratingColors,
-                    hoverBackgroundColor: ratingColors,
-                    borderWidth: 1,
-                    borderColor: '#fff'
+                    hoverBackgroundColor: ratingColors.map(color => {
+                        // Slightly lighten the colors on hover
+                        return color + '99'; // Add transparency for hover effect
+                    }),
+                    borderWidth: 2,
+                    borderColor: '#ffffff',
+                    hoverBorderWidth: 3,
+                    spacing: 2, // Add spacing between segments
+                    borderRadius: 4, // Rounded corners on segments
+                    offset: 2 // Slight offset for 3D-like effect
                 }]
             },
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
+                cutout: '60%', // Doughnut hole size
+                layout: {
+                    padding: 8 // Padding around the chart
+                },
+                animation: {
+                    animateRotate: true,
+                    animateScale: true,
+                    duration: 800,
+                    easing: 'easeOutBack'
+                },
                 plugins: {
                     legend: {
                         position: 'right',
+                        align: 'center',
                         labels: {
-                            font: { size: 12 },
-                            padding: 10,
+                            font: { 
+                                size: 11,
+                                family: "'Inter', sans-serif"
+                            },
+                            padding: 14,
                             usePointStyle: true,
+                            pointStyle: 'circle', // Use circle instead of rectangle for legend
+                            boxWidth: 8, // Smaller legend markers
+                            boxHeight: 8,
+                            color: '#333',
                             generateLabels: function(chart) {
                                 const data = chart.data;
                                 if (data.labels.length && data.datasets.length) {
@@ -122,8 +147,8 @@
                                         return {
                                             text: `${label} (${value})`,
                                             fillStyle: style.backgroundColor,
-                                            strokeStyle: style.borderColor,
-                                            lineWidth: style.borderWidth,
+                                            strokeStyle: '#ffffff',
+                                            lineWidth: 1,
                                             hidden: isNaN(data.datasets[0].data[i]) || meta.data[i].hidden,
                                             index: i
                                         };
@@ -134,11 +159,28 @@
                         }
                     },
                     tooltip: {
+                        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                        titleColor: '#333',
+                        bodyColor: '#333',
+                        bodyFont: {
+                            size: 13
+                        },
+                        titleFont: {
+                            size: 14,
+                            weight: 'bold'
+                        },
+                        padding: 10,
+                        borderColor: 'rgba(0, 0, 0, 0.1)',
+                        borderWidth: 1,
+                        displayColors: true,
+                        cornerRadius: 6,
                         callbacks: {
                             label: function(context) {
                                 const label = context.label || '';
                                 const value = context.raw || 0;
-                                return `${label}: ${value} publication(s)`;
+                                const total = context.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                const percentage = Math.round((value / total) * 100);
+                                return `${label}: ${value} publication(s) · ${percentage}%`;
                             }
                         }
                     }
@@ -174,15 +216,25 @@
 
 <style>
     .ratings-chart-container {
-        height: 100%;
         width: 100%;
-        min-height: 200px;
+        height: 100%;
+        min-height: 220px;
+        padding: 4px;
+        border-radius: 8px;
+        overflow: hidden;
         position: relative;
+        transition: all 0.3s ease;
     }
     
     canvas {
         width: 100% !important;
         height: 100% !important;
+    }
+    
+    @media (max-width: 768px) {
+        .ratings-chart-container {
+            min-height: 180px;
+        }
     }
 </style>
 
