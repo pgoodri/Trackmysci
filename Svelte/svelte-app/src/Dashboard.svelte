@@ -59,6 +59,7 @@
   import { onMount } from "svelte";
   import TagsChart from "./lib/components/ui/charts/TagsChart.svelte";
   import RatingsChart from "./lib/components/ui/charts/RatingsChart.svelte";
+  import AuthorsChart from "./lib/components/ui/charts/AuthorsChart.svelte";
   import ProgressChart from "./lib/components/ui/charts/ProgressChart.svelte";
   import TimelineChart from "./lib/components/ui/charts/TimelineChart.svelte";
   import PieChart from "./lib/components/ui/charts/PieChart.svelte";
