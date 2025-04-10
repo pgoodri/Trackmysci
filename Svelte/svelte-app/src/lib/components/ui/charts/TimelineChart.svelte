@@ -53,10 +53,10 @@
             datasets: [{
                 label: "Pages Read",
                 data: fullDateRange.map(date => dataMap[date] || 0),
-                borderColor: "#0891B2", // Cyan color for timeline
-                backgroundColor: "rgba(8, 145, 178, 0.1)", // Very light cyan fill
+                borderColor: "#3F51B5", // Indigo color for timeline
+                backgroundColor: "rgba(63, 81, 181, 0.1)", // Very light indigo fill
                 borderWidth: 2,
-                pointBackgroundColor: "#0891B2", // Match the line color
+                pointBackgroundColor: "#3F51B5", // Match the line color
                 pointBorderColor: "white",
                 pointRadius: 2.5, // Slightly smaller points
                 pointHoverRadius: 4,

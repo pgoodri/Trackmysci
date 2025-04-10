@@ -15,20 +15,20 @@
     let loaded = false;
     let tagsData = writable({});
 
-    // Predefined colors for the tags - blues and purples palette
+    // Rainbow color palette as shown in piecolors.png
     const tagColors = [
-        "#2563EB", // Royal blue
-        "#3B82F6", // Blue
-        "#1D4ED8", // Darker blue
-        "#60A5FA", // Lighter blue
-        "#7C3AED", // Vibrant purple
-        "#8B5CF6", // Purple
-        "#6D28D9", // Dark purple
-        "#A78BFA", // Light purple
-        "#4F46E5", // Indigo
-        "#6366F1", // Lighter indigo
-        "#4338CA", // Dark indigo
-        "#818CF8"  // Light indigo
+        "#FF4136", // Red
+        "#FF6E4A", // Red-orange
+        "#FF851B", // Orange
+        "#FFC300", // Yellow-orange
+        "#FFDC00", // Yellow
+        "#B6E82B", // Yellow-green
+        "#4CAF50", // Green
+        "#36BFA3", // Teal
+        "#4ECDC4", // Light blue-green
+        "#3498DB", // Sky blue
+        "#5D5CFA", // Blue
+        "#8F44AA"  // Purple
     ];
 
     // Function to generate consistent colors for tags

@@ -15,20 +15,20 @@
     let loaded = false;
     let authorsData = writable({});
 
-    // Predefined colors for the authors - greens and teals palette
+    // Cool palette as shown in piecolors.png
     const authorColors = [
-        "#059669", // Emerald
-        "#10B981", // Green
-        "#047857", // Dark green
-        "#34D399", // Light green
-        "#0D9488", // Teal
-        "#14B8A6", // Teal blue
-        "#0F766E", // Dark teal
-        "#5EEAD4", // Light teal
-        "#0891B2", // Cyan
-        "#06B6D4", // Sky cyan
-        "#0E7490", // Dark cyan
-        "#67E8F9"  // Light cyan
+        "#5E4FA2", // Deep purple
+        "#3F51B5", // Indigo
+        "#5D5CFA", // Blue-purple
+        "#4A76B8", // Blue purple
+        "#4A8FC6", // Blue
+        "#4AB6C6", // Light blue
+        "#4AC6B9", // Aqua 
+        "#4AC69D", // Light teal
+        "#4AB986", // Teal
+        "#4AC66F", // Blue green
+        "#56D394", // Green
+        "#78E6A8"  // Light green
     ];
 
     // Function to generate consistent colors for authors
