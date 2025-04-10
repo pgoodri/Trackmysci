@@ -90,17 +90,18 @@
         }
         
         chart = new Chart(ctx, {
-            type: 'pie', // Regular pie chart, not doughnut
+            type: 'doughnut', // Using doughnut for cleaner look without gaps
             data: {
                 labels: chartData.labels,
                 datasets: [{
                     data: chartData.data,
                     backgroundColor: ratingColors,
                     hoverBackgroundColor: ratingColors,
-                    borderWidth: 1.5,
+                    borderWidth: 1,
                     borderColor: '#ffffff',
-                    hoverBorderWidth: 2,
-                    spacing: 1 // Minimal spacing between segments
+                    hoverBorderWidth: 1.5,
+                    spacing: 0, // No spacing to avoid triangular gaps
+                    borderRadius: 0 // No border radius to ensure clean edges
                 }]
             },
             options: {
@@ -109,6 +110,7 @@
                 layout: {
                     padding: 5 // Padding around the chart
                 },
+                cutout: '50%', // Moderate doughnut hole size
                 animation: {
                     duration: 300, // Quick animation
                     easing: 'easeOutQuad' // Simple easing
