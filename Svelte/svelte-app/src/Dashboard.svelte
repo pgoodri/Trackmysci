@@ -175,7 +175,8 @@
 
     console.log("Search query:", searchQuery);
 
-    if (/^10\.\d{4,9}\/[-._;()\/:A-Za-z0-9]+$/.test(searchQuery)) {
+    // More flexible DOI pattern
+    if (/^10\.\d{2,}\/.*$/.test(searchQuery.trim())) {
       console.log("Query looks like a DOI. Calling fetchDOI...");
       await fetchDOI();
     } else if (/^(97(8|9))?\d{9}(\d|X)$/.test(searchQuery)) {
@@ -200,27 +201,61 @@
 
   async function fetchDOI() {
     try {
-      const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(searchQuery)}`);
+      // Use HTTPS for all requests and clean the DOI first
+      const cleanDOI = searchQuery.trim();
+      console.log("Fetching DOI with cleaned value:", cleanDOI);
+      
+      // Use CrossRef API with proper error handling
+      const response = await fetch(`https://api.crossref.org/works/${encodeURIComponent(cleanDOI)}`);
+      
+      // Check if the response is ok before parsing JSON
+      if (!response.ok) {
+        console.error("CrossRef API error:", response.status, response.statusText);
+        throw new Error(`CrossRef API returned ${response.status}: ${response.statusText}`);
+      }
+      
       const data = await response.json();
       console.log("CrossRef response:", data);
-      if (data.status === "ok") {
+      
+      if (data.status === "ok" && data.message) {
         const fetchedData = data.message;
+        
+        // Format authors properly
+        let authorString = "Unknown Author";
+        if (fetchedData.author && Array.isArray(fetchedData.author) && fetchedData.author.length > 0) {
+          authorString = fetchedData.author
+            .map(a => {
+              // Handle different author formats
+              if (a.given && a.family) {
+                return `${a.given} ${a.family}`;
+              } else if (a.name) {
+                return a.name;
+              } else {
+                return a.family || a.given || "";
+              }
+            })
+            .filter(name => name) // Remove any empty names
+            .join(", ");
+        }
+        
         searchResults = [
           {
             title: fetchedData.title ? fetchedData.title[0] : "Unknown Title",
-            author: fetchedData.author
-              ? fetchedData.author.map((a) => `${a.given} ${a.family}`).join(", ")
-              : "Unknown Author",
+            author: authorString,
             isbn: fetchedData.ISBN ? fetchedData.ISBN[0] : null,
-            doi: fetchedData.DOI || null
+            doi: fetchedData.DOI || cleanDOI // Use the DOI from the response or fall back to the query
           }
         ];
+        
+        console.log("Formatted DOI search result:", searchResults);
       } else {
+        console.warn("No valid data found in CrossRef response");
         searchResults = [];
       }
     } catch (error) {
       console.error("Error fetching DOI data:", error);
-      alert("Failed to retrieve DOI information.");
+      // More user-friendly error message
+      alert(`DOI lookup failed: ${error.message || "Unknown error"}. Please verify your DOI is correct.`);
     }
   }
 
@@ -542,6 +577,9 @@ async function loadUserLibrary() {
       const entryDocSnap = await getDoc(entryDocRef);
       const summaryDocSnap = await getDoc(summaryDocRef);
 
+      // Create a batch for atomic operations
+      const batch = writeBatch(firestore);
+
       let readingSessions = [];
       let streak = 0;
       let streakDate = null;
@@ -550,10 +588,13 @@ async function loadUserLibrary() {
       let todayString = today.toISOString().split('T')[0]; // Get current date (YYYY-MM-DD)
       let readingLog = [];
 
-      if (entryDocSnap.exists()) {
-          const entryData = entryDocSnap.data();
-          readingSessions = entryData.readingSessions || [];
+      if (!entryDocSnap.exists()) {
+          console.error("Publication not found for progress update.");
+          return;
       }
+
+      const entryData = entryDocSnap.data();
+      readingSessions = entryData.readingSessions || [];
 
       if (summaryDocSnap.exists()) {
           const summaryData = summaryDocSnap.data();
@@ -562,13 +603,14 @@ async function loadUserLibrary() {
           readingLog = summaryData.readingLog || [];
       }
 
-      // Create reading session entry
+      // Create reading session entry with timestamp
+      const timestamp = new Date();
       const sessionEntry = {
-          dateTitle: new Date().toLocaleDateString(),
+          dateTitle: timestamp.toLocaleDateString(),
           pagesRead: pagesRead,
           notes: comment || "",
           duration: duration,
-          date: new Date().toISOString()
+          date: timestamp.toISOString()
       };
 
       readingSessions.push(sessionEntry);
@@ -599,49 +641,79 @@ async function loadUserLibrary() {
       let updatedLog = readingLog.map(log => ({ ...log })); // Clone array to avoid mutation
 
       // Check if today already exists in log, update instead of adding duplicate
-      let todayLogIndex = updatedLog.findIndex(log => log.date === today);
+      let todayLogIndex = updatedLog.findIndex(log => {
+          if (typeof log.date === 'string') {
+              return log.date === todayString;
+          } else if (log.date instanceof Date) {
+              // Handle if date is a Date object
+              return log.date.toISOString().split('T')[0] === todayString;
+          } else {
+              // For any other format (like Firestore Timestamp)
+              try {
+                  const logDate = new Date(log.date.toDate ? log.date.toDate() : log.date);
+                  return logDate.toISOString().split('T')[0] === todayString;
+              } catch (e) {
+                  console.warn("Invalid date format in reading log:", log.date);
+                  return false;
+              }
+          }
+      });
+      
       if (todayLogIndex !== -1) {
           updatedLog[todayLogIndex].pagesRead += pagesRead; // Aggregate pages read for today
       } else {
-          updatedLog.unshift({ date: today, pagesRead }); // Add new entry for today
+          updatedLog.unshift({ date: todayString, pagesRead }); // Add new entry for today
       }
 
       // 🔥 **Ensure we only keep logs within 90 days**
       const cutoffDate = new Date();
       cutoffDate.setDate(cutoffDate.getDate() - 90);
+      cutoffDate.setHours(0, 0, 0, 0);
 
-      // ✅ Remove outdated logs from Firestore
-      updatedLog = updatedLog.filter(log => new Date(log.date) >= cutoffDate);
+      // ✅ Remove outdated logs
+      updatedLog = updatedLog.filter(log => {
+          try {
+              const logDate = typeof log.date === 'string' ? new Date(log.date) : 
+                              log.date instanceof Date ? log.date :
+                              log.date.toDate ? log.date.toDate() : new Date(log.date);
+              return logDate >= cutoffDate;
+          } catch (e) {
+              console.warn("Error filtering log date:", e);
+              return false;
+          }
+      });
       
-      // Keep reading sessions for all time
-      console.log(`🔥 Deleted logs older than 90 days from Firestore. Remaining logs:`, updatedLog);
+      console.log(`🔥 Deleted logs older than 90 days. Remaining logs:`, updatedLog.length);
 
       // Update publication status if not already marked as complete
-      const entryData = entryDocSnap.data();
       let status = entryData.status || "unread";
       if (status === "unread" && !entryData.completed) {
           status = "in progress";
       }
 
-      // 🔄 Update Firestore
-      await updateDoc(entryDocRef, {
+      // 🔄 Update publication with batch
+      batch.update(entryDocRef, {
           readingSessions: readingSessions,
-          updatedAt: new Date(),
-          lastAccessed: new Date(),
+          updatedAt: timestamp,
+          lastAccessed: timestamp,
           totalPagesRead: (entryData.totalPagesRead || 0) + pagesRead,
           status: status
       });
 
-      await setDoc(summaryDocRef, {
-          mostRecent: entryDocSnap.data().title,
-          updatedAt: new Date(),
+      // 🔄 Update summary with batch
+      batch.set(summaryDocRef, {
+          mostRecent: entryData.title,
+          updatedAt: timestamp,
           streak: streak,
           streakDate: streakDate,
           readingLog: updatedLog
       }, { merge: true });
 
+      // Commit both updates atomically
+      await batch.commit();
+
       console.log(`✅ Updated streak to ${streak} days, streakDate: ${streakDate}`);
-      console.log("📊 Updated reading log for timeline chart:", updatedLog);
+      console.log("📊 Updated reading log for timeline chart:", updatedLog.length, "entries");
 
       // ✅ Ensure UI updates properly
       if (viewingPublication && viewingPublication.id === entryId) {
@@ -662,6 +734,7 @@ async function loadUserLibrary() {
 
   } catch (error) {
       console.error("❌ Error updating progress:", error.message);
+      alert("Failed to update reading progress. Please try again.");
   }
 }
 
@@ -679,6 +752,92 @@ function showRatingDialog(pubId, pubTitle) {
   publicationTitleToRate = pubTitle;
   currentRating = 0;
   ratingDialogOpen = true;
+}
+
+// Save rating to Firestore
+async function saveRating() {
+  if (!publicationToRate || currentRating === 0) return;
+
+  const user = auth.currentUser;
+  if (!user) {
+      console.error("No authenticated user found.");
+      return;
+  }
+
+  try {
+      const userDocRef = doc(firestore, "users", user.uid);
+      const libraryRef = doc(userDocRef, "library", publicationToRate);
+      const ratingsDocRef = doc(userDocRef, "charts", "ratings");
+
+      // Fetch existing data
+      const librarySnap = await getDoc(libraryRef);
+      const ratingsSnap = await getDoc(ratingsDocRef);
+      let ratingsData = ratingsSnap.exists() ? ratingsSnap.data() : {};
+
+      // Remove previous rating (if exists)
+      if (librarySnap.exists()) {
+          const prevRating = librarySnap.data().rating;
+          if (prevRating && ratingsData[prevRating]) {
+              ratingsData[prevRating] = Math.max(0, ratingsData[prevRating] - 1);
+              if (ratingsData[prevRating] === 0) {
+                  delete ratingsData[prevRating];
+              }
+          }
+      }
+
+      // Update Firestore with batch for atomicity
+      const batch = writeBatch(firestore);
+      
+      // Update publication rating
+      batch.update(libraryRef, { 
+          rating: currentRating,
+          updatedAt: new Date()
+      });
+      
+      // Update overall ratings count in the charts/ratings document
+      // Increment the count for the new rating
+      ratingsData[currentRating.toString()] = (ratingsData[currentRating.toString()] || 0) + 1;
+      
+      // Set the entire ratings data object
+      batch.set(ratingsDocRef, ratingsData, { merge: false });
+      
+      // If markCompletedWithRating is true, also update completion status
+      if (markCompletedWithRating) {
+          batch.update(libraryRef, { 
+              completed: true,
+              status: "completed",
+              updatedAt: new Date()
+          });
+      }
+      
+      // Commit all changes
+      await batch.commit();
+
+      console.log(`✅ Rating of ${currentRating} saved for publication ${publicationToRate}`);
+
+      // Update UI
+      if (markCompletedWithRating) {
+          libraryList = libraryList.map(entry => 
+              entry.id === publicationToRate ? 
+              { ...entry, rating: currentRating, completed: true, status: "completed" } : 
+              entry
+          );
+      } else {
+          libraryList = libraryList.map(entry => 
+              entry.id === publicationToRate ? 
+              { ...entry, rating: currentRating } : 
+              entry
+          );
+      }
+      
+      ratingDialogOpen = false;
+
+      // Refresh charts
+      chartKey.update(n => n + 1);
+  } catch (error) {
+      console.error("❌ Error saving rating:", error.message);
+      alert("Failed to save rating. Please try again.");
+  }
 }
 
 // Function to toggle publication completion status
@@ -1092,6 +1251,9 @@ async function deletePublication(publicationId) {
       const userDocRef = doc(firestore, "users", user.uid);
       const entryDocRef = doc(userDocRef, "library", publicationId);
       const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
+      const ratingsDocRef = doc(collection(userDocRef, "charts"), "ratings");
+      const tagsDocRef = doc(collection(userDocRef, "charts"), "tags");
+      const authorsDocRef = doc(collection(userDocRef, "charts"), "authors");
 
       // Fetch publication before deletion
       const entryDocSnap = await getDoc(entryDocRef);
@@ -1102,24 +1264,108 @@ async function deletePublication(publicationId) {
 
       const deletedPub = entryDocSnap.data();
       const deletedTitle = deletedPub.title;
+      const deletedAuthor = deletedPub.author;
+      const deletedTags = deletedPub.tags || [];
+      const deletedRating = deletedPub.rating;
+
+      // Create a batch for atomic operations
+      const batch = writeBatch(firestore);
 
       // Update UI first for better UX
       libraryList = libraryList.filter(lit => lit.id !== publicationId);
 
-      // Delete the publication
-      await deleteDoc(entryDocRef);
-      console.log(`✅ Deleted publication: ${deletedTitle}`);
+      // 1. Delete the publication
+      batch.delete(entryDocRef);
+
+      // 2. Update ratings counts if publication had a rating
+      if (deletedRating) {
+          const ratingsSnap = await getDoc(ratingsDocRef);
+          if (ratingsSnap.exists()) {
+              const ratingsData = ratingsSnap.data();
+              if (ratingsData[deletedRating]) {
+                  ratingsData[deletedRating] = Math.max(0, ratingsData[deletedRating] - 1);
+                  if (ratingsData[deletedRating] === 0) {
+                      delete ratingsData[deletedRating];
+                  }
+                  batch.set(ratingsDocRef, ratingsData, { merge: false });
+              }
+          }
+      }
+
+      // 3. Update author counts
+      if (deletedAuthor) {
+          const authorsSnap = await getDoc(authorsDocRef);
+          if (authorsSnap.exists()) {
+              const authorsData = authorsSnap.data();
+              if (authorsData[deletedAuthor]) {
+                  authorsData[deletedAuthor] = Math.max(0, authorsData[deletedAuthor] - 1);
+                  if (authorsData[deletedAuthor] === 0) {
+                      delete authorsData[deletedAuthor];
+                  }
+                  batch.set(authorsDocRef, authorsData, { merge: false });
+              }
+          }
+      }
+
+      // 4. Update tags counts
+      if (deletedTags.length > 0) {
+          const tagsSnap = await getDoc(tagsDocRef);
+          if (tagsSnap.exists()) {
+              const tagsData = tagsSnap.data();
+              deletedTags.forEach(tag => {
+                  if (tagsData[tag]) {
+                      tagsData[tag] = Math.max(0, tagsData[tag] - 1);
+                      if (tagsData[tag] === 0) {
+                          delete tagsData[tag];
+                      }
+                  }
+              });
+              batch.set(tagsDocRef, tagsData, { merge: false });
+          }
+      }
+
+      // 5. Check if it was the most recent book and update summary
+      const summarySnap = await getDoc(summaryDocRef);
+      if (summarySnap.exists()) {
+          const summaryData = summarySnap.data();
+          
+          if (summaryData.mostRecent === deletedTitle) {
+              // Find new most recent book
+              const libraryRef = collection(userDocRef, "library");
+              const q = query(libraryRef, orderBy("updatedAt", "desc"), limit(1));
+              const querySnapshot = await getDocs(q);
+              
+              if (!querySnapshot.empty) {
+                  const newMostRecent = querySnapshot.docs[0].data().title;
+                  batch.update(summaryDocRef, { 
+                      mostRecent: newMostRecent,
+                      updatedAt: new Date()
+                  });
+              } else {
+                  batch.update(summaryDocRef, { 
+                      mostRecent: null,
+                      updatedAt: new Date()
+                  });
+              }
+          }
+      }
+
+      // Commit all changes atomically
+      await batch.commit();
+      console.log(`✅ Deleted publication: ${deletedTitle} and updated all related data`);
 
       // Close modal if open
       if (viewingPublication && viewingPublication.id === publicationId) {
           closeViewModal();
       }
 
-      // Update charts and recent literature data
-      await updateChartsAfterDeletion(user.uid, deletedPub);
+      // Refresh charts and UI
+      chartKey.update(n => n + 1);
+      chartRefreshKey.update(n => n + 1);
 
   } catch (error) {
       console.error("❌ Error deleting publication:", error.message);
+      alert("Failed to delete publication. Please try again.");
   }
 }
 
@@ -1304,7 +1550,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
 {:else}
   <div class="min-h-screen flex flex-col bg-gray-50">
     <!-- Top Navigation Bar -->
-    <nav class="bg-white border-b border-gray-200 shadow-sm h-16 flex items-center justify-between px-6 md:px-12 sticky top-0 z-50">
+    <nav class="bg-white border-b border-gray-200 shadow-sm h-16 flex items-center justify-between px-6 md:px-12 sticky top-0 z-50 w-full">
       <div class="flex items-center gap-8">
         <h1 class="text-xl font-bold text-blue-600">TrackMySci</h1>
         
@@ -1345,7 +1591,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
               <p class="text-sm font-medium text-gray-500">Pages Read Today</p>
               <p class="text-3xl font-bold mt-1">{todayStats.pagesRead}</p>
             </div>
-            <BookMarked class="w-6 h-6 text-blue-600" />
+            <BookMarked class="w-6 h-6 text-neutral-600" />
           </div>
         </div>
         
@@ -1356,7 +1602,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
               <p class="text-sm font-medium text-gray-500">Reading Time Today</p>
               <p class="text-3xl font-bold mt-1">{todayStats.readingTime} hrs</p>
             </div>
-            <Timer class="w-6 h-6 text-purple-600" />
+            <Timer class="w-6 h-6 text-neutral-600" />
           </div>
         </div>
         
@@ -1367,7 +1613,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
               <p class="text-sm font-medium text-gray-500">Weekly Pages</p>
               <p class="text-3xl font-bold mt-1">{todayStats.weeklyPages}</p>
             </div>
-            <TrendingUp class="w-6 h-6 text-green-600" />
+            <TrendingUp class="w-6 h-6 text-neutral-600" />
           </div>
         </div>
       </div>
@@ -1474,7 +1720,6 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
             <div class="flex justify-between items-center mb-4">
               <h3 class="text-base font-medium text-gray-700">Reading Streak</h3>
               <div class="flex items-center gap-1 text-orange-500 font-medium text-sm">
-                <Flame class="w-4 h-4" />
                 <span>{$currentStreak} days</span>
               </div>
             </div>
@@ -1794,7 +2039,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
 
 <!-- New Publication Dialog -->
 <Dialog.Root bind:open={modalOpen}>
-  <Dialog.Content class="w-[90%] max-w-4xl">
+  <Dialog.Content class="w-[90%] max-w-4xl mx-auto">
     <Dialog.Header>
       <Dialog.Title class="text-xl mb-1">
         {editMode ? "Edit Publication" : "Add Literature"}
