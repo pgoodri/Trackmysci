@@ -228,6 +228,7 @@
                 return (book.title && book.title.toLowerCase().includes(searchTerm)) || 
                        (book.author && book.author.toLowerCase().includes(searchTerm));
             });
+            console.log(`Filtered to ${result.length} books using search term: "${searchTerm}"`);
         }
         
         // Apply status filter if not "all"
@@ -254,8 +255,14 @@
         // Apply sorting
         result = sortBooks(result, sortOrder);
         
+        // Reset to first page when filtering changes results
+        currentPage = 1;
+        
         // Update filtered books store
         filteredBooks.set(result);
+        
+        // Force cache update
+        filteredBooksCache = result;
     }
     
     // Sort books by different criteria
@@ -289,21 +296,35 @@
     
     // Make sure we update filters whenever any filter parameter changes
     $: {
+        searchLibraryQuery;
+        selectedStatusFilter;
+        selectedTagFilter;
+        sortOrder;
         console.log("Filter changed: ", { searchLibraryQuery, selectedStatusFilter, selectedTagFilter, sortOrder });
         updateFilteredBooks();
     }
     
-    // Update cache when filtered books change
-    $: filteredBooksCache = get(filteredBooks);
+    // Update cache when filtered books change, ensuring reactivity
+    $: {
+        const filtered = get(filteredBooks);
+        filteredBooksCache = filtered;
+        console.log(`Updated filteredBooksCache with ${filteredBooksCache.length} books`);
+    }
     
     // Get current page items for pagination
     function getPaginatedBooks() {
-        const filtered = filteredBooksCache.length > 0 ? filteredBooksCache : get(books);
+        // Always get fresh data from the store
+        const filtered = get(filteredBooks);
+        console.log(`Getting paginated books: ${filtered.length} books available`);
+        
         // Adjust items per page based on view mode
         const effectiveItemsPerPage = viewMode === 'list' ? 12 : 9;
         const startIndex = (currentPage - 1) * effectiveItemsPerPage;
         const endIndex = startIndex + effectiveItemsPerPage;
-        return filtered.slice(startIndex, endIndex);
+        
+        const result = filtered.slice(startIndex, endIndex);
+        console.log(`Displaying ${result.length} books for page ${currentPage}`);
+        return result;
     }
     
     // Get total pages for pagination
@@ -316,6 +337,7 @@
     
     // Modal functions
     function openViewModal(book) {
+        console.log("Opening view modal for book:", book.title);
         viewingPublication = book;
         viewModalOpen = true;
     }
@@ -1376,6 +1398,37 @@
             unsubscribe.forEach(unsub => unsub());
         };
     });
+
+    // Function to handle card click properly
+    function handleCardClick(event, book) {
+        // Check if we're clicking on a button, dropdown, or other interactive element
+        const clickTarget = event.target;
+        const isInteractiveElement = 
+            clickTarget.tagName === 'BUTTON' || 
+            clickTarget.closest('button:not(.publication-card)') || 
+            clickTarget.closest('[role="button"]') ||
+            clickTarget.closest('.dropdown-menu-content') ||
+            clickTarget.closest('.dropdown-menu-trigger') ||
+            clickTarget.closest('.dropdown-menu-item');
+        
+        console.log("Card clicked:", {
+            isInteractiveElement,
+            targetElement: clickTarget.tagName,
+            bookTitle: book.title
+        });
+        
+        // Only open the modal if we're not clicking on an interactive element
+        if (!isInteractiveElement) {
+            console.log("Opening modal for:", book.title);
+            viewingPublication = book;
+            viewModalOpen = true;
+        }
+    }
+
+    // Stop event propagation for dropdown buttons
+    function handleDropdownClick(event) {
+        event.stopPropagation();
+    }
 </script>
 
 {#if isLoading}
@@ -1430,12 +1483,16 @@
                         <!-- Search Bar -->
                         <div class="relative w-full">
                             <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                            <Input 
+                            <input 
                                 type="text" 
                                 placeholder="Search by title or author..." 
-                                class="pl-10 w-full"
-                                bind:value={searchLibraryQuery}
-                                on:input={updateFilteredBooks}
+                                class="w-full h-10 pl-10 pr-4 rounded-md border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                                bind:value={searchLibraryQuery} 
+                                on:input={() => {
+                                    console.log("Search input:", searchLibraryQuery);
+                                    updateFilteredBooks();
+                                    forceRefresh();
+                                }}
                             />
                         </div>
                         
@@ -1465,36 +1522,28 @@
                                 <!-- Display as Grid of Cards -->
                                 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                     {#each getPaginatedBooks() as book}
-                                        <div 
-                                            class="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden h-64 flex flex-col relative cursor-pointer hover:shadow-md transition-shadow focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
-                                            on:click={(event) => {
-                                                // Check if the click originated from a button or dropdown/popover trigger
-                                                const isButtonClick = event.target.closest('button') || event.target.closest('[role="button"]');
-                                                if (!isButtonClick) {
-                                                    openViewModal(book);
-                                                }
-                                            }}
-                                            on:keydown={e => e.key === 'Enter' && openViewModal(book)}
-                                            tabindex="0"
-                                            role="button"
+                                        <!-- Card container - using button for better accessibility -->
+                                        <button 
+                                            class="publication-card block text-left w-full bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden h-64 flex flex-col relative cursor-pointer hover:shadow-md hover:bg-blue-50 transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
+                                            on:click={(event) => handleCardClick(event, book)}
                                             aria-label={`View details for ${book.title}`}>
                                             <!-- Card Header with Menu -->
-                                            <div class="absolute top-2 right-2 z-30">
+                                            <div class="absolute top-2 right-2 z-30" on:click={handleDropdownClick}>
                                                 <DropdownMenu.Root>
-                                                    <DropdownMenu.Trigger>
+                                                    <DropdownMenu.Trigger class="dropdown-menu-trigger">
                                                         <button class="text-gray-400 hover:text-gray-700 bg-white rounded-full p-1.5">
                                                             <Ellipsis class="h-4 w-4" />
                                                         </button>
                                                     </DropdownMenu.Trigger>
-                                                    <DropdownMenu.Content>
+                                                    <DropdownMenu.Content class="dropdown-menu-content">
                                                         <DropdownMenu.Group>
-                                                            <DropdownMenu.Item on:click={() => openViewModal(book)} class="text-sm">
+                                                            <DropdownMenu.Item on:click={() => openViewModal(book)} class="text-sm dropdown-menu-item">
                                                                 <Book class="w-4 h-4 mr-2" /> View Details
                                                             </DropdownMenu.Item>
-                                                            <DropdownMenu.Item on:click={() => openEditModal(book)} class="text-sm">
+                                                            <DropdownMenu.Item on:click={() => openEditModal(book)} class="text-sm dropdown-menu-item">
                                                                 <Edit class="w-4 h-4 mr-2" /> Edit
                                                             </DropdownMenu.Item>
-                                                            <DropdownMenu.Item on:click={() => deletePublication(book.id)} class="text-sm text-red-600">
+                                                            <DropdownMenu.Item on:click={() => deletePublication(book.id)} class="text-sm text-red-600 dropdown-menu-item">
                                                                 <Trash2 class="w-4 h-4 mr-2" /> Delete
                                                             </DropdownMenu.Item>
                                                         </DropdownMenu.Group>
@@ -1548,25 +1597,17 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        </button>
                                     {/each}
                                 </div>
                             {:else}
                                 <!-- Display as List -->
                                 <div class="border border-gray-200 rounded-lg overflow-hidden bg-white">
                                     {#each getPaginatedBooks() as book, index}
-                                        <div 
-                                            class="relative hover:bg-gray-50 transition-colors cursor-pointer focus:outline-none focus:bg-blue-50" 
-                                            on:click={(event) => {
-                                                // Check if the click originated from a button or dropdown/popover trigger
-                                                const isButtonClick = event.target.closest('button') || event.target.closest('[role="button"]');
-                                                if (!isButtonClick) {
-                                                    openViewModal(book);
-                                                }
-                                            }}
-                                            on:keydown={e => e.key === 'Enter' && openViewModal(book)}
-                                            tabindex="0"
-                                            role="button"
+                                        <!-- List item - using button for better accessibility -->
+                                        <button 
+                                            class="publication-card block text-left w-full relative hover:bg-blue-50 transition-all duration-200 cursor-pointer focus:outline-none focus:bg-blue-50" 
+                                            on:click={(event) => handleCardClick(event, book)}
                                             aria-label={`View details for ${book.title}`}>
                                             {#if index > 0}
                                                 <div class="absolute left-0 right-0 top-0 h-px bg-gray-100"></div>
@@ -1612,22 +1653,22 @@
                                                         </div>
                                                         
                                                         <!-- Menu -->
-                                                        <div class="flex-shrink-0">
+                                                        <div class="flex-shrink-0" on:click={handleDropdownClick}>
                                                             <DropdownMenu.Root>
-                                                                <DropdownMenu.Trigger>
+                                                                <DropdownMenu.Trigger class="dropdown-menu-trigger">
                                                                     <button class="text-gray-400 hover:text-gray-700 bg-white rounded-full p-1.5">
                                                                         <Ellipsis class="h-4 w-4" />
                                                                     </button>
                                                                 </DropdownMenu.Trigger>
-                                                                <DropdownMenu.Content>
+                                                                <DropdownMenu.Content class="dropdown-menu-content">
                                                                     <DropdownMenu.Group>
-                                                                        <DropdownMenu.Item on:click={() => openViewModal(book)} class="text-sm">
+                                                                        <DropdownMenu.Item on:click={() => openViewModal(book)} class="text-sm dropdown-menu-item">
                                                                             <Book class="w-4 h-4 mr-2" /> View Details
                                                                         </DropdownMenu.Item>
-                                                                        <DropdownMenu.Item on:click={() => openEditModal(book)} class="text-sm">
+                                                                        <DropdownMenu.Item on:click={() => openEditModal(book)} class="text-sm dropdown-menu-item">
                                                                             <Edit class="w-4 h-4 mr-2" /> Edit
                                                                         </DropdownMenu.Item>
-                                                                        <DropdownMenu.Item on:click={() => deletePublication(book.id)} class="text-sm text-red-600">
+                                                                        <DropdownMenu.Item on:click={() => deletePublication(book.id)} class="text-sm text-red-600 dropdown-menu-item">
                                                                             <Trash2 class="w-4 h-4 mr-2" /> Delete
                                                                         </DropdownMenu.Item>
                                                                     </DropdownMenu.Group>
@@ -1637,7 +1678,7 @@
                                                     </div>
                                                 </div>
                                             </div>
-                                        </div>
+                                        </button>
                                     {/each}
                                 </div>
                             {/if}
