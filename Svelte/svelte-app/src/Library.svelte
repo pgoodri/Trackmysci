@@ -25,7 +25,8 @@
         List,
         Home,
         BookText,
-        BarChart
+        BarChart,
+        Star
     } from "lucide-svelte";
     import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
     import * as Dialog from "$lib/components/ui/dialog";
@@ -45,12 +46,15 @@
     // Initialize writable stores
     const books = writable([]);
     const uniqueTags = writable([]);
+    const uniqueAuthors = writable([]);
     const filteredBooks = writable([]);
     
     // Search and filter states
     let searchLibraryQuery = "";
     let selectedStatusFilter = "all";
     let selectedTagFilter = "all";
+    let selectedAuthorFilter = "all";
+    let selectedRatingFilter = "all"; // Options: all, 1, 2, 3, 4, 5
     let sortOrder = "newest"; // Options: newest, oldest, title-asc, title-desc
     
     // View mode state
@@ -146,12 +150,18 @@
             
             // Extract tags
             const allTags = new Set();
+            // Extract authors
+            const allAuthors = new Set();
             loadedBooks.forEach(book => {
                 if (book.tags && Array.isArray(book.tags)) {
                     book.tags.forEach(tag => allTags.add(tag));
                 }
+                if (book.author) {
+                    allAuthors.add(book.author);
+                }
             });
             uniqueTags.set([...allTags]);
+            uniqueAuthors.set([...allAuthors]);
             
             // Initialize filtered books
             updateFilteredBooks();
@@ -217,10 +227,21 @@
             return;
         }
         
+        // Log book data to inspect structure
+        console.log("Books data sample:", allBooks.slice(0, 2).map(book => ({
+            id: book.id,
+            title: book.title,
+            author: book.author,
+            rating: book.rating,
+            tags: book.tags
+        })));
+        
         console.log(`Filtering ${allBooks.length} books with criteria:`, {
             searchQuery: searchLibraryQuery,
             status: selectedStatusFilter,
             tag: selectedTagFilter,
+            author: selectedAuthorFilter,
+            rating: selectedRatingFilter,
             sort: sortOrder
         });
         
@@ -258,6 +279,27 @@
             result = result.filter(book => {
                 return book.tags && book.tags.includes(selectedTagFilter);
             });
+        }
+        
+        // Apply author filter if not "all"
+        if (selectedAuthorFilter !== "all") {
+            const authorCount = result.length;
+            result = result.filter(book => {
+                return book.author && book.author.toLowerCase() === selectedAuthorFilter.toLowerCase();
+            });
+            console.log(`Author filter applied (${selectedAuthorFilter}): ${authorCount} → ${result.length} books`);
+        }
+        
+        // Apply rating filter if not "all"
+        if (selectedRatingFilter !== "all") {
+            const ratingCount = result.length;
+            const ratingValue = parseInt(selectedRatingFilter);
+            result = result.filter(book => {
+                // Handle cases where rating might be stored as string or number
+                const bookRating = typeof book.rating === 'string' ? parseInt(book.rating) : book.rating;
+                return bookRating === ratingValue;
+            });
+            console.log(`Rating filter applied (${ratingValue}): ${ratingCount} → ${result.length} books`);
         }
         
         // Apply sorting
@@ -308,8 +350,17 @@
         searchLibraryQuery;
         selectedStatusFilter;
         selectedTagFilter;
+        selectedAuthorFilter;
+        selectedRatingFilter;
         sortOrder;
-        console.log("Filter changed: ", { searchLibraryQuery, selectedStatusFilter, selectedTagFilter, sortOrder });
+        console.log("Filter changed: ", { 
+            searchLibraryQuery, 
+            selectedStatusFilter, 
+            selectedTagFilter,
+            selectedAuthorFilter,
+            selectedRatingFilter, 
+            sortOrder 
+        });
         updateFilteredBooks();
     }
     
@@ -332,7 +383,7 @@
         // or there was an error in filtering
         if (filtered.length === 0 && allBooks.length > 0) {
             // Only show no results if filters are actually applied
-            if (searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all") {
+            if (searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all" || selectedAuthorFilter !== "all" || selectedRatingFilter !== "all") {
                 console.log("Filters applied but no books match, showing empty results");
                 return [];
             }
@@ -1385,19 +1436,26 @@
     // Reset filters
     function resetFilters() {
         console.log("Resetting all filters");
+        // Clear all filter values
         searchLibraryQuery = "";
         selectedStatusFilter = "all";
         selectedTagFilter = "all";
+        selectedAuthorFilter = "all";
+        selectedRatingFilter = "all";
         sortOrder = "newest"; // Reset to default sort as well
         currentPage = 1; // Reset to first page
         
-        // Force update filtered books with new criteria
-        updateFilteredBooks();
-        
-        // Force UI refresh 
-        forceRefresh();
-        
-        console.log("Filters reset, books count:", get(books).length);
+        // Manually ensure the UI reflects the state changes
+        setTimeout(() => {
+            // Force update filtered books with new criteria
+            updateFilteredBooks();
+            
+            // Force multiple UI refreshes to ensure all components update
+            forceRefresh();
+            setTimeout(forceRefresh, 100);
+            
+            console.log("Filters reset, books count:", get(books).length);
+        }, 0);
     }
     
     // Toggle view mode between grid and list
@@ -1529,12 +1587,31 @@
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <!-- Header Section -->
                 <div class="p-6 border-b border-gray-100">
-                    <h2 class="text-2xl font-bold text-gray-800 mb-6">My Publications</h2>
+                    <!-- Title and View Toggle Header -->
+                    <div class="flex items-center justify-between mb-6">
+                        <h2 class="text-2xl font-bold text-gray-800">My Publications</h2>
+                        
+                        <!-- View Toggle (moved here from below) -->
+                        <div class="flex rounded-md overflow-hidden border border-gray-200">
+                            <button 
+                                class={`flex items-center justify-center w-10 h-10 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                on:click={() => toggleViewMode('grid')}
+                            >
+                                <LayoutGrid class="h-4 w-4" />
+                            </button>
+                            <button 
+                                class={`flex items-center justify-center w-10 h-10 ${viewMode === 'list' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                on:click={() => toggleViewMode('list')}
+                            >
+                                <List class="h-4 w-4" />
+                            </button>
+                        </div>
+                    </div>
                     
                     <!-- Search and Filter Controls -->
                     <div class="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between">
                         <!-- Search Bar -->
-                        <div class="relative w-full">
+                        <div class="relative w-full md:w-2/3">
                             <Search class="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
                             <input 
                                 type="text" 
@@ -1549,20 +1626,232 @@
                             />
                         </div>
                         
-                        <!-- View Toggle -->
-                        <div class="flex rounded-md overflow-hidden border border-gray-200">
-                            <button 
-                                class={`flex items-center justify-center w-10 h-10 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                                on:click={() => toggleViewMode('grid')}
-                            >
-                                <LayoutGrid class="h-4 w-4" />
-                            </button>
-                            <button 
-                                class={`flex items-center justify-center w-10 h-10 ${viewMode === 'list' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                                on:click={() => toggleViewMode('list')}
-                            >
-                                <List class="h-4 w-4" />
-                            </button>
+                        <!-- Combined Filter Dropdown -->
+                        <div class="flex gap-2 items-center">
+                            <Popover.Root>
+                                <Popover.Trigger class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white hover:bg-gray-50">
+                                    <Filter class="h-4 w-4 mr-2 text-gray-500" />
+                                    Filters
+                                    {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all" || selectedAuthorFilter !== "all" || selectedRatingFilter !== "all"}
+                                        <span class="ml-2 flex items-center justify-center size-5 bg-blue-100 text-blue-600 text-xs font-medium rounded-full">
+                                            {(selectedTagFilter !== "all" ? 1 : 0) + 
+                                             (selectedAuthorFilter !== "all" ? 1 : 0) + 
+                                             (selectedRatingFilter !== "all" ? 1 : 0) + 
+                                             (selectedStatusFilter !== "all" ? 1 : 0)}
+                                        </span>
+                                    {/if}
+                                    <ChevronDown class="h-4 w-4 ml-2 text-gray-500" />
+                                </Popover.Trigger>
+                                <Popover.Content side="bottom" class="w-72 p-4 rounded-md shadow-xl bg-white border border-gray-200">
+                                    <div class="space-y-4">
+                                        <!-- Tag Filter Section -->
+                                        <div>
+                                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Tag</h3>
+                                            <div class="space-y-1 max-h-40 overflow-y-auto">
+                                                <button 
+                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedTagFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                    on:click={() => {
+                                                        selectedTagFilter = "all";
+                                                        updateFilteredBooks();
+                                                        forceRefresh();
+                                                    }}
+                                                >
+                                                    All Tags
+                                                </button>
+                                                {#each $uniqueTags as tag}
+                                                    <button 
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedTagFilter === tag ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        on:click={() => {
+                                                            selectedTagFilter = tag;
+                                                            updateFilteredBooks();
+                                                            forceRefresh();
+                                                        }}
+                                                    >
+                                                        {tag}
+                                                    </button>
+                                                {/each}
+                                            </div>
+                                        </div>
+                                        
+                                        <Separator />
+                                        
+                                        <!-- Author Filter Section -->
+                                        <div>
+                                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Author</h3>
+                                            <div class="space-y-1 max-h-40 overflow-y-auto">
+                                                <button 
+                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedAuthorFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                    on:click={() => {
+                                                        selectedAuthorFilter = "all";
+                                                        console.log("Author filter reset to 'all'");
+                                                        updateFilteredBooks();
+                                                        forceRefresh();
+                                                    }}
+                                                >
+                                                    All Authors
+                                                </button>
+                                                {#each $uniqueAuthors as author}
+                                                    <button 
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedAuthorFilter === author ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        on:click={() => {
+                                                            selectedAuthorFilter = author;
+                                                            console.log(`Author filter set to: "${author}"`);
+                                                            updateFilteredBooks();
+                                                            forceRefresh();
+                                                        }}
+                                                    >
+                                                        {author}
+                                                    </button>
+                                                {/each}
+                                            </div>
+                                        </div>
+                                        
+                                        <Separator />
+                                        
+                                        <!-- Rating Filter Section -->
+                                        <div>
+                                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Rating</h3>
+                                            <div class="space-y-1">
+                                                <button 
+                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedRatingFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                    on:click={() => {
+                                                        selectedRatingFilter = "all";
+                                                        console.log("Rating filter reset to 'all'");
+                                                        updateFilteredBooks();
+                                                        forceRefresh();
+                                                    }}
+                                                >
+                                                    Any Rating
+                                                </button>
+                                                {#each [5, 4, 3, 2, 1] as rating}
+                                                    <button 
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedRatingFilter === rating.toString() ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        on:click={() => {
+                                                            selectedRatingFilter = rating.toString();
+                                                            console.log(`Rating filter set to: ${rating} stars`);
+                                                            updateFilteredBooks();
+                                                            forceRefresh();
+                                                        }}
+                                                    >
+                                                        <div class="flex items-center">
+                                                            {#each Array(5) as _, i}
+                                                                <span class="text-yellow-400">
+                                                                    {#if i < rating}
+                                                                        ★
+                                                                    {:else}
+                                                                        ☆
+                                                                    {/if}
+                                                                </span>
+                                                            {/each}
+                                                            <span class="ml-1">{rating} Star{rating !== 1 ? 's' : ''}</span>
+                                                        </div>
+                                                    </button>
+                                                {/each}
+                                            </div>
+                                        </div>
+                                        
+                                        <Separator />
+                                        
+                                        <!-- Status Filter Section -->
+                                        <div>
+                                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Status</h3>
+                                            <div class="space-y-1">
+                                                <button 
+                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                    on:click={() => {
+                                                        selectedStatusFilter = "all";
+                                                        updateFilteredBooks();
+                                                        forceRefresh();
+                                                    }}
+                                                >
+                                                    All Statuses
+                                                </button>
+                                                <button 
+                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "completed" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                    on:click={() => {
+                                                        selectedStatusFilter = "completed";
+                                                        updateFilteredBooks();
+                                                        forceRefresh();
+                                                    }}
+                                                >
+                                                    <div class="flex items-center">
+                                                        <span class="inline-block w-3 h-3 rounded-full bg-green-400 mr-2"></span>
+                                                        Completed
+                                                    </div>
+                                                </button>
+                                                <button 
+                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "in-progress" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                    on:click={() => {
+                                                        selectedStatusFilter = "in-progress";
+                                                        updateFilteredBooks();
+                                                        forceRefresh();
+                                                    }}
+                                                >
+                                                    <div class="flex items-center">
+                                                        <span class="inline-block w-3 h-3 rounded-full bg-blue-400 mr-2"></span>
+                                                        In Progress
+                                                    </div>
+                                                </button>
+                                                <button 
+                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "unread" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                    on:click={() => {
+                                                        selectedStatusFilter = "unread";
+                                                        updateFilteredBooks();
+                                                        forceRefresh();
+                                                    }}
+                                                >
+                                                    <div class="flex items-center">
+                                                        <span class="inline-block w-3 h-3 rounded-full bg-gray-400 mr-2"></span>
+                                                        Unread
+                                                    </div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Reset Filters Button -->
+                                        {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all" || selectedAuthorFilter !== "all" || selectedRatingFilter !== "all"}
+                                            <div class="pt-2">
+                                                <button 
+                                                    class="w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md bg-red-50 text-red-600 hover:bg-red-100"
+                                                    on:click={() => {
+                                                        console.log("Clear filters button clicked");
+                                                        searchLibraryQuery = "";
+                                                        selectedStatusFilter = "all";
+                                                        selectedTagFilter = "all";
+                                                        selectedAuthorFilter = "all";
+                                                        selectedRatingFilter = "all";
+                                                        // Force immediate update
+                                                        updateFilteredBooks();
+                                                        forceRefresh();
+                                                    }}
+                                                >
+                                                    <X class="h-4 w-4 mr-1" /> Reset All Filters
+                                                </button>
+                                            </div>
+                                        {/if}
+                                    </div>
+                                </Popover.Content>
+                            </Popover.Root>
+                            
+                            <!-- Clear Filters Button - only shown if filters are active -->
+                            {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all" || selectedAuthorFilter !== "all" || selectedRatingFilter !== "all"}
+                                <button 
+                                    class="inline-flex items-center px-3 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white hover:bg-gray-50 text-red-600 hover:text-red-700"
+                                    on:click={() => {
+                                        console.log("Clear filters button clicked");
+                                        searchLibraryQuery = "";
+                                        selectedStatusFilter = "all";
+                                        selectedTagFilter = "all";
+                                        selectedAuthorFilter = "all";
+                                        selectedRatingFilter = "all";
+                                        // Force immediate update
+                                        updateFilteredBooks();
+                                        forceRefresh();
+                                    }}
+                                >
+                                    <X class="h-4 w-4 mr-1" /> Clear
+                                </button>
+                            {/if}
                         </div>
                     </div>
                 </div>
@@ -1764,11 +2053,28 @@
                                 </div>
                                 <h3 class="text-lg font-medium text-gray-800">No publications found</h3>
                                 
-                                {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all"}
+                                {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all" || selectedAuthorFilter !== "all" || selectedRatingFilter !== "all"}
                                     <p class="text-sm text-gray-500 mt-2 max-w-md">
                                         No publications match your current filters. Try adjusting your search criteria or reset filters.
                                     </p>
-                                    <Button class="mt-4" variant="outline" on:click={resetFilters}>
+                                    <Button class="mt-4" variant="outline" on:click={() => {
+                                        console.log("Empty state Reset Filters button clicked");
+                                        console.log("Before reset - Filter state:", { 
+                                            searchLibraryQuery, 
+                                            selectedStatusFilter, 
+                                            selectedTagFilter, 
+                                            selectedAuthorFilter, 
+                                            selectedRatingFilter 
+                                        });
+                                        resetFilters();
+                                        console.log("After reset - Filter state:", { 
+                                            searchLibraryQuery, 
+                                            selectedStatusFilter, 
+                                            selectedTagFilter, 
+                                            selectedAuthorFilter, 
+                                            selectedRatingFilter 
+                                        });
+                                    }}>
                                         <X class="h-4 w-4 mr-2" /> Reset Filters
                                     </Button>
                                 {:else}
