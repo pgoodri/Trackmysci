@@ -7,6 +7,7 @@
   import { Progress } from "$lib/components/ui/progress";
   import * as Popover from "$lib/components/ui/popover";
   import * as Dialog from "$lib/components/ui/dialog";
+  import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { onAuthStateChanged } from "firebase/auth";
   import { auth, firestore } from "./firebase";
   import { signOut } from "firebase/auth";
@@ -75,6 +76,32 @@
   const batch = writeBatch(firestore);
 
   let isSearching = false; // Add this for spinner state
+  
+  // Alert dialog state
+  let alertDialogOpen = false;
+  let confirmDialogOpen = false;
+  let alertTitle = "";
+  let alertMessage = "";
+  let alertAction = () => {};
+  let confirmAction = () => {};
+  let confirmButtonText = "Delete";
+  
+  // Helper function to show simple alerts (just OK button)
+  function showAlert(title, message, action = () => {}) {
+    alertTitle = title;
+    alertMessage = message;
+    alertAction = action;
+    alertDialogOpen = true;
+  }
+  
+  // Helper function for confirmation dialogs (Cancel + Action buttons)
+  function showConfirmDialog(title, message, action, buttonText = "Delete") {
+    alertTitle = title;
+    alertMessage = message;
+    confirmAction = action;
+    confirmButtonText = buttonText;
+    confirmDialogOpen = true;
+  }
   
   // Constant for primary color
   const PRIMARY_COLOR = "#4361ee";
@@ -198,7 +225,7 @@
     if (searchResults.length > 0) {
       showResults = true;
     } else {
-      alert("No results found.");
+      showAlert("Search Results", "No results found.");
     }
     
     isSearching = false; // Set searching state back to false
@@ -260,7 +287,7 @@
     } catch (error) {
       console.error("Error fetching DOI data:", error);
       // More user-friendly error message
-      alert(`DOI lookup failed: ${error.message || "Unknown error"}. Please verify your DOI is correct.`);
+      showAlert("DOI Lookup Failed", `${error.message || "Unknown error"}. Please verify your DOI is correct.`);
     }
   }
 
@@ -292,7 +319,7 @@
       console.log("Final Search Result (ISBN):", searchResults);
     } catch (error) {
       console.error("Error fetching ISBN data:", error);
-      alert("Failed to retrieve ISBN information.");
+      showAlert("ISBN Lookup Failed", "Failed to retrieve ISBN information.");
     }
   }
 
@@ -329,7 +356,7 @@
       console.log("Final Search Results (Title):", searchResults);
     } catch (error) {
       console.error("Error fetching title data:", error);
-      alert("Failed to retrieve title information.");
+      showAlert("Title Lookup Failed", "Failed to retrieve title information.");
     }
   }
 
@@ -812,10 +839,11 @@ async function loadUserLibrary() {
       
       // Recalculate reading metrics after updating session data
       calculateReadingMetrics();
+      
 
   } catch (error) {
       console.error("❌ Error updating progress:", error.message);
-      alert("Failed to update reading progress. Please try again.");
+      showAlert("Update Failed", "Failed to update reading progress. Please try again.");
   }
 }
 
@@ -915,9 +943,10 @@ async function saveRating() {
 
       // Refresh charts
       chartKey.update(n => n + 1);
+      
   } catch (error) {
       console.error("❌ Error saving rating:", error.message);
-      alert("Failed to save rating. Please try again.");
+      showAlert("Rating Error", "Failed to save rating. Please try again.");
   }
 }
 
@@ -1137,7 +1166,7 @@ async function markAsCompleted(publicationId) {
       const titleQuery = query(libraryRef, where("title", "==", newEntry.title), where("author", "==", newEntry.author));
       const titleQuerySnapshot = await getDocs(titleQuery);
       if (!titleQuerySnapshot.empty) {
-        alert("This publication is already in your library!");
+        showAlert("Duplicate Entry", "This publication is already in your library!");
         resetFields();
         return;
       }
@@ -1147,7 +1176,7 @@ async function markAsCompleted(publicationId) {
         const isbnQuery = query(libraryRef, where("isbn", "==", newEntry.isbn));
         const isbnQuerySnapshot = await getDocs(isbnQuery);
         if (!isbnQuerySnapshot.empty) {
-          alert("This ISBN is already in your library!");
+          showAlert("Duplicate ISBN", "This ISBN is already in your library!");
           resetFields();
           return;
         }
@@ -1197,7 +1226,7 @@ async function markAsCompleted(publicationId) {
         await loadUserLibrary();
         await updateCharts();  // ✅ Refresh charts
     } else {
-        alert("Please fill in all required fields before adding.");
+        showAlert("Validation Error", "Please fill in all required fields before adding.");
     }
   }
 
@@ -1325,10 +1354,16 @@ async function deletePublication(publicationId) {
   // This ensures the publication shows up at the top of recently accessed
   await updateLastAccessed(publicationId);
 
-  const confirmDelete = confirm("Are you sure you want to delete this publication?");
-  if (!confirmDelete) return;
-
-  try {
+  // Find the publication title for the confirmation message
+  const publication = libraryList.find(pub => pub.id === publicationId);
+  const pubTitle = publication ? publication.title : "this publication";
+  // Use confirmation dialog instead of browser confirm
+  return new Promise(resolve => {
+    showConfirmDialog(
+      "Confirm Deletion", 
+      `Are you sure you want to delete "${pubTitle}"? This will remove all associated data.`,
+      async () => {
+        try {
       const userDocRef = doc(firestore, "users", user.uid);
       const entryDocRef = doc(userDocRef, "library", publicationId);
       const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
@@ -1444,10 +1479,14 @@ async function deletePublication(publicationId) {
       chartKey.update(n => n + 1);
       chartRefreshKey.update(n => n + 1);
 
-  } catch (error) {
-      console.error("❌ Error deleting publication:", error.message);
-      alert("Failed to delete publication. Please try again.");
-  }
+        } catch (error) {
+          console.error("❌ Error deleting publication:", error.message);
+          showAlert("Delete Error", "Failed to delete publication. Please try again.");
+        }
+        resolve();
+      }
+    );
+  });
 }
 
 async function updateChartsAfterDeletion(userId, deletedPub) {
@@ -2329,3 +2368,51 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
     </Dialog.Header>
   </Dialog.Content>
 </Dialog.Root>
+
+<!-- Simple Alert Dialog Component (OK button only) -->
+<AlertDialog.Root bind:open={alertDialogOpen}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>{alertTitle}</AlertDialog.Title>
+      <AlertDialog.Description>{alertMessage}</AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer class="flex justify-end">
+      <AlertDialog.Action 
+        class="bg-blue-600 hover:bg-blue-700 px-4 py-2 text-white rounded-md"
+        on:click={() => {
+          alertAction();
+          alertDialogOpen = false;
+        }}>
+        OK
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
+
+<!-- Confirmation Dialog Component (Cancel + Action buttons) -->
+<AlertDialog.Root bind:open={confirmDialogOpen}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>{alertTitle}</AlertDialog.Title>
+      <AlertDialog.Description>
+        {alertMessage}
+        {#if confirmButtonText === "Delete"}
+          <p class="mt-2 text-red-600">This action cannot be undone.</p>
+        {/if}
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer class="flex justify-end gap-3">
+      <AlertDialog.Cancel class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100">
+        Cancel
+      </AlertDialog.Cancel>
+      <AlertDialog.Action 
+        class="{confirmButtonText === 'Delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} px-4 py-2 text-white rounded-md"
+        on:click={() => {
+          confirmAction();
+          confirmDialogOpen = false;
+        }}>
+        {confirmButtonText}
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>

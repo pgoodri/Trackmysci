@@ -569,21 +569,6 @@
           </div>
         </div>
       </div>
-      
-      <!-- Fourth Row: Reading Progress -->
-      <div class="mb-6">
-        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
-          <div class="flex justify-between items-center mb-6">
-            <h2 class="text-xl font-semibold text-gray-800 flex items-center gap-2">
-              <Percent class="w-5 h-5" /> Reading Progress
-            </h2>
-          </div>
-          
-          <div class="h-64">
-            <ProgressChart chartKey={$chartRefreshKey} />
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 {/if}
