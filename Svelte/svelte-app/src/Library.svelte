@@ -36,7 +36,7 @@
     import { Progress } from "$lib/components/ui/progress";
     import { Input } from "$lib/components/ui/input";
     import { navigate } from "svelte-routing";
-    import { toast } from "$lib/components/ui/sonner";
+    import { toast } from "svelte-sonner";
 
     // State
     let isLoading = true;
