@@ -52,6 +52,7 @@
   import ProgressChart from "./lib/components/ui/charts/ProgressChart.svelte";
   import TimelineChart from "./lib/components/ui/charts/TimelineChart.svelte";
   import StreakChart from "./lib/components/ui/charts/StreakChart.svelte";
+  import { toast } from "$lib/components/ui/sonner";
 
   // Stores for data and UI
   let chartKey = writable(0); // Used to force chart re-render

@@ -36,6 +36,7 @@
     import { Progress } from "$lib/components/ui/progress";
     import { Input } from "$lib/components/ui/input";
     import { navigate } from "svelte-routing";
+    import { toast } from "$lib/components/ui/sonner";
 
     // State
     let isLoading = true;
@@ -961,9 +962,12 @@
                 // Still do a full reload to ensure everything is synced properly
                 // but this happens in the background
                 loadUserLibrary(auth.currentUser.uid);
+                
+                // Add success toast
+                toast.success(`Added "${title}" to your library`);
             } catch (error) {
-                console.error("Error adding publication:", error);
-                alert("Failed to add publication. Please try again.");
+                console.error("Error adding publication:", error.message);
+                toast.error(`Failed to add publication: ${error.message}`);
             }
         } else {
             alert("Please fill in all required fields before adding.");
@@ -1020,9 +1024,12 @@
             
             closeModal();
             
+            // Add success toast
+            toast.success(`Updated "${title}" successfully`);
+            
         } catch (error) {
             console.error("Error updating publication:", error.message);
-            alert("Failed to update publication. Please try again.");
+            toast.error(`Failed to update publication: ${error.message}`);
         }
     }
     
@@ -1260,9 +1267,14 @@
             if (viewingPublication && viewingPublication.id === publicationId) {
                 viewModalOpen = false;
             }
+            
+            // Add success toast
+            toast.success(`Deleted "${deletedTitle}" successfully`);
+            
         } catch (error) {
             console.error("❌ Error deleting publication:", error.message);
             alert("Failed to delete publication. Please try again.");
+            toast.error(`Failed to delete publication: ${error.message}`);
         }
     }
     

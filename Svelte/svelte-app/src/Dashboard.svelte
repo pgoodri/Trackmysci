@@ -68,6 +68,7 @@
   import TimelineChart from "./lib/components/ui/charts/TimelineChart.svelte";
   import PieChart from "./lib/components/ui/charts/PieChart.svelte";
   import StreakChart from "./lib/components/ui/charts/StreakChart.svelte";
+  import { toast } from "$lib/components/ui/sonner";
 
   // Stores for data and UI
   let chartKey = writable(0); // Used to force chart re-render
@@ -1222,9 +1223,15 @@ async function markAsCompleted(publicationId) {
 
         console.log("📌 Saving entry with tags:", newEntry.tags);
 
-        await saveEntryToFirestore(newEntry);
-        await loadUserLibrary();
-        await updateCharts();  // ✅ Refresh charts
+        try {
+            await saveEntryToFirestore(newEntry);
+            await loadUserLibrary();
+            await updateCharts();  // ✅ Refresh charts
+            toast.success(`Added "${title}" to your library`);
+        } catch (error) {
+            console.error("Error saving entry:", error.message);
+            toast.error(`Failed to add publication: ${error.message}`);
+        }
     } else {
         showAlert("Validation Error", "Please fill in all required fields before adding.");
     }
@@ -1246,6 +1253,7 @@ async function updateEditedPublication() {
       const entryDocSnap = await getDoc(entryDocRef);
       if (!entryDocSnap.exists()) {
           console.warn("Publication not found for editing.");
+          toast.error("Publication not found");
           return;
       }
 
@@ -1263,6 +1271,7 @@ async function updateEditedPublication() {
       // ✅ Save updated publication data
       await updateDoc(entryDocRef, updatedData);
       console.log(`✅ Updated publication: ${editingPublication.id}`);
+      toast.success(`Updated "${title}" successfully`);
 
       // Update charts after editing
       await updateChartsAfterEdit(user.uid, oldData, updatedData);
@@ -1282,6 +1291,7 @@ async function updateEditedPublication() {
 
   } catch (error) {
       console.error("❌ Error updating publication:", error.message);
+      toast.error(`Failed to update publication: ${error.message}`);
   }
 }
 
@@ -1364,124 +1374,127 @@ async function deletePublication(publicationId) {
       `Are you sure you want to delete "${pubTitle}"? This will remove all associated data.`,
       async () => {
         try {
-      const userDocRef = doc(firestore, "users", user.uid);
-      const entryDocRef = doc(userDocRef, "library", publicationId);
-      const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
-      const ratingsDocRef = doc(collection(userDocRef, "charts"), "ratings");
-      const tagsDocRef = doc(collection(userDocRef, "charts"), "tags");
-      const authorsDocRef = doc(collection(userDocRef, "charts"), "authors");
+          const userDocRef = doc(firestore, "users", user.uid);
+          const entryDocRef = doc(userDocRef, "library", publicationId);
+          const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
+          const ratingsDocRef = doc(collection(userDocRef, "charts"), "ratings");
+          const tagsDocRef = doc(collection(userDocRef, "charts"), "tags");
+          const authorsDocRef = doc(collection(userDocRef, "charts"), "authors");
 
-      // Fetch publication before deletion
-      const entryDocSnap = await getDoc(entryDocRef);
-      if (!entryDocSnap.exists()) {
-          console.warn("Publication not found.");
-          return;
-      }
-
-      const deletedPub = entryDocSnap.data();
-      const deletedTitle = deletedPub.title;
-      const deletedAuthor = deletedPub.author;
-      const deletedTags = deletedPub.tags || [];
-      const deletedRating = deletedPub.rating;
-
-      // Create a batch for atomic operations
-      const batch = writeBatch(firestore);
-
-      // Update UI first for better UX
-      libraryList = libraryList.filter(lit => lit.id !== publicationId);
-
-      // 1. Delete the publication
-      batch.delete(entryDocRef);
-
-      // 2. Update ratings counts if publication had a rating
-      if (deletedRating) {
-          const ratingsSnap = await getDoc(ratingsDocRef);
-          if (ratingsSnap.exists()) {
-              const ratingsData = ratingsSnap.data();
-              if (ratingsData[deletedRating]) {
-                  ratingsData[deletedRating] = Math.max(0, ratingsData[deletedRating] - 1);
-                  if (ratingsData[deletedRating] === 0) {
-                      delete ratingsData[deletedRating];
-                  }
-                  batch.set(ratingsDocRef, ratingsData, { merge: false });
-              }
+          // Fetch publication before deletion
+          const entryDocSnap = await getDoc(entryDocRef);
+          if (!entryDocSnap.exists()) {
+              console.warn("Publication not found.");
+              toast.error("Publication not found");
+              return;
           }
-      }
 
-      // 3. Update author counts
-      if (deletedAuthor) {
-          const authorsSnap = await getDoc(authorsDocRef);
-          if (authorsSnap.exists()) {
-              const authorsData = authorsSnap.data();
-              if (authorsData[deletedAuthor]) {
-                  authorsData[deletedAuthor] = Math.max(0, authorsData[deletedAuthor] - 1);
-                  if (authorsData[deletedAuthor] === 0) {
-                      delete authorsData[deletedAuthor];
-                  }
-                  batch.set(authorsDocRef, authorsData, { merge: false });
-              }
-          }
-      }
+          const deletedPub = entryDocSnap.data();
+          const deletedTitle = deletedPub.title;
+          const deletedAuthor = deletedPub.author;
+          const deletedTags = deletedPub.tags || [];
+          const deletedRating = deletedPub.rating;
 
-      // 4. Update tags counts
-      if (deletedTags.length > 0) {
-          const tagsSnap = await getDoc(tagsDocRef);
-          if (tagsSnap.exists()) {
-              const tagsData = tagsSnap.data();
-              deletedTags.forEach(tag => {
-                  if (tagsData[tag]) {
-                      tagsData[tag] = Math.max(0, tagsData[tag] - 1);
-                      if (tagsData[tag] === 0) {
-                          delete tagsData[tag];
+          // Create a batch for atomic operations
+          const batch = writeBatch(firestore);
+
+          // Update UI first for better UX
+          libraryList = libraryList.filter(lit => lit.id !== publicationId);
+
+          // 1. Delete the publication
+          batch.delete(entryDocRef);
+
+          // 2. Update ratings counts if publication had a rating
+          if (deletedRating) {
+              const ratingsSnap = await getDoc(ratingsDocRef);
+              if (ratingsSnap.exists()) {
+                  const ratingsData = ratingsSnap.data();
+                  if (ratingsData[deletedRating]) {
+                      ratingsData[deletedRating] = Math.max(0, ratingsData[deletedRating] - 1);
+                      if (ratingsData[deletedRating] === 0) {
+                          delete ratingsData[deletedRating];
                       }
+                      batch.set(ratingsDocRef, ratingsData, { merge: false });
                   }
-              });
-              batch.set(tagsDocRef, tagsData, { merge: false });
-          }
-      }
-
-      // 5. Check if it was the most recent book and update summary
-      const summarySnap = await getDoc(summaryDocRef);
-      if (summarySnap.exists()) {
-          const summaryData = summarySnap.data();
-          
-          if (summaryData.mostRecent === deletedTitle) {
-              // Find new most recent book
-              const libraryRef = collection(userDocRef, "library");
-              const q = query(libraryRef, orderBy("updatedAt", "desc"), limit(1));
-              const querySnapshot = await getDocs(q);
-              
-              if (!querySnapshot.empty) {
-                  const newMostRecent = querySnapshot.docs[0].data().title;
-                  batch.update(summaryDocRef, { 
-                      mostRecent: newMostRecent,
-                      updatedAt: new Date()
-                  });
-              } else {
-                  batch.update(summaryDocRef, { 
-                      mostRecent: null,
-                      updatedAt: new Date()
-                  });
               }
           }
-      }
 
-      // Commit all changes atomically
-      await batch.commit();
-      console.log(`✅ Deleted publication: ${deletedTitle} and updated all related data`);
+          // 3. Update author counts
+          if (deletedAuthor) {
+              const authorsSnap = await getDoc(authorsDocRef);
+              if (authorsSnap.exists()) {
+                  const authorsData = authorsSnap.data();
+                  if (authorsData[deletedAuthor]) {
+                      authorsData[deletedAuthor] = Math.max(0, authorsData[deletedAuthor] - 1);
+                      if (authorsData[deletedAuthor] === 0) {
+                          delete authorsData[deletedAuthor];
+                      }
+                      batch.set(authorsDocRef, authorsData, { merge: false });
+                  }
+              }
+          }
 
-      // Close modal if open
-      if (viewingPublication && viewingPublication.id === publicationId) {
-          closeViewModal();
-      }
+          // 4. Update tags counts
+          if (deletedTags.length > 0) {
+              const tagsSnap = await getDoc(tagsDocRef);
+              if (tagsSnap.exists()) {
+                  const tagsData = tagsSnap.data();
+                  deletedTags.forEach(tag => {
+                      if (tagsData[tag]) {
+                          tagsData[tag] = Math.max(0, tagsData[tag] - 1);
+                          if (tagsData[tag] === 0) {
+                              delete tagsData[tag];
+                          }
+                      }
+                  });
+                  batch.set(tagsDocRef, tagsData, { merge: false });
+              }
+          }
 
-      // Refresh charts and UI
-      chartKey.update(n => n + 1);
-      chartRefreshKey.update(n => n + 1);
+          // 5. Check if it was the most recent book and update summary
+          const summarySnap = await getDoc(summaryDocRef);
+          if (summarySnap.exists()) {
+              const summaryData = summarySnap.data();
+              
+              if (summaryData.mostRecent === deletedTitle) {
+                  // Find new most recent book
+                  const libraryRef = collection(userDocRef, "library");
+                  const q = query(libraryRef, orderBy("updatedAt", "desc"), firebaseLimit(1));
+                  const querySnapshot = await getDocs(q);
+                  
+                  if (!querySnapshot.empty) {
+                      const newMostRecent = querySnapshot.docs[0].data().title;
+                      batch.update(summaryDocRef, { 
+                          mostRecent: newMostRecent,
+                          updatedAt: new Date()
+                      });
+                  } else {
+                      batch.update(summaryDocRef, { 
+                          mostRecent: null,
+                          updatedAt: new Date()
+                      });
+                  }
+              }
+          }
+          
+          // Commit all changes atomically
+          await batch.commit();
+          console.log(`✅ Deleted publication: ${deletedTitle} and updated all related data`);
+          toast.success(`Deleted "${deletedTitle}" successfully`);
+
+          // Close modal if open
+          if (viewingPublication && viewingPublication.id === publicationId) {
+              closeViewModal();
+          }
+
+          // Refresh charts and UI
+          chartKey.update(n => n + 1);
+          chartRefreshKey.update(n => n + 1);
 
         } catch (error) {
           console.error("❌ Error deleting publication:", error.message);
           showAlert("Delete Error", "Failed to delete publication. Please try again.");
+          toast.error(`Failed to delete publication: ${error.message}`);
         }
         resolve();
       }
