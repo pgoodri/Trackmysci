@@ -534,10 +534,15 @@
   // ----- Modal Helper Functions -----
   // Open modal in "add" mode (for new publication)
   function openAddModal() {
-    editMode = false;
-    editingPublication = null;
-    resetFields();
-    modalOpen = true;
+    try {
+      toast("Opening add publication form...");
+      resetFields();
+      editMode = false;
+      editingPublication = null;
+      modalOpen = true;
+    } catch (error) {
+      console.error("Error in openAddModal:", error);
+    }
   }
 
   // Open modal in "edit" mode (for editing an existing publication)
