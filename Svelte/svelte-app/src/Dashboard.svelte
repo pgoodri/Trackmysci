@@ -61,6 +61,7 @@
   } from "lucide-svelte";
   import { Chart } from "chart.js/auto";
   import { onMount } from "svelte";
+  import { toast } from "svelte-sonner";
   import TagsChart from "./lib/components/ui/charts/TagsChart.svelte";
   import RatingsChart from "./lib/components/ui/charts/RatingsChart.svelte";
   import AuthorsChart from "./lib/components/ui/charts/AuthorsChart.svelte";
@@ -68,7 +69,6 @@
   import TimelineChart from "./lib/components/ui/charts/TimelineChart.svelte";
   import PieChart from "./lib/components/ui/charts/PieChart.svelte";
   import StreakChart from "./lib/components/ui/charts/StreakChart.svelte";
-  import { toast } from "$lib/components/ui/sonner";
 
   // Stores for data and UI
   let chartKey = writable(0); // Used to force chart re-render
