@@ -1642,175 +1642,178 @@
                                     {/if}
                                     <ChevronDown class="h-4 w-4 ml-2 text-gray-500" />
                                 </Popover.Trigger>
-                                <Popover.Content side="bottom" class="w-72 p-4 rounded-md shadow-xl bg-white border border-gray-200">
+                                <Popover.Content side="bottom" class="w-[40rem] p-4 rounded-md shadow-xl bg-white border border-gray-200">
+                                    <!-- Horizontal Layout for Filter Sections -->
                                     <div class="space-y-4">
-                                        <!-- Tag Filter Section -->
-                                        <div>
-                                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Tag</h3>
-                                            <div class="space-y-1 max-h-40 overflow-y-auto">
-                                                <button 
-                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedTagFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
-                                                    on:click={() => {
-                                                        selectedTagFilter = "all";
-                                                        updateFilteredBooks();
-                                                        forceRefresh();
-                                                    }}
-                                                >
-                                                    All Tags
-                                                </button>
-                                                {#each $uniqueTags as tag}
+                                        <!-- Top Row - Tags & Author Filters -->
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <!-- Tag Filter Section -->
+                                            <div>
+                                                <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Tag</h3>
+                                                <div class="space-y-1 max-h-40 overflow-y-auto pr-2">
                                                     <button 
-                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedTagFilter === tag ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedTagFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
                                                         on:click={() => {
-                                                            selectedTagFilter = tag;
+                                                            selectedTagFilter = "all";
                                                             updateFilteredBooks();
                                                             forceRefresh();
                                                         }}
                                                     >
-                                                        {tag}
+                                                        All Tags
                                                     </button>
-                                                {/each}
+                                                    {#each $uniqueTags as tag}
+                                                        <button 
+                                                            class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedTagFilter === tag ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                            on:click={() => {
+                                                                selectedTagFilter = tag;
+                                                                updateFilteredBooks();
+                                                                forceRefresh();
+                                                            }}
+                                                        >
+                                                            {tag}
+                                                        </button>
+                                                    {/each}
+                                                </div>
+                                            </div>
+                                            
+                                            <!-- Author Filter Section -->
+                                            <div>
+                                                <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Author</h3>
+                                                <div class="space-y-1 max-h-40 overflow-y-auto pr-2">
+                                                    <button 
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedAuthorFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        on:click={() => {
+                                                            selectedAuthorFilter = "all";
+                                                            console.log("Author filter reset to 'all'");
+                                                            updateFilteredBooks();
+                                                            forceRefresh();
+                                                        }}
+                                                    >
+                                                        All Authors
+                                                    </button>
+                                                    {#each $uniqueAuthors as author}
+                                                        <button 
+                                                            class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedAuthorFilter === author ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                            on:click={() => {
+                                                                selectedAuthorFilter = author;
+                                                                console.log(`Author filter set to: "${author}"`);
+                                                                updateFilteredBooks();
+                                                                forceRefresh();
+                                                            }}
+                                                        >
+                                                            {author}
+                                                        </button>
+                                                    {/each}
+                                                </div>
                                             </div>
                                         </div>
                                         
                                         <Separator />
                                         
-                                        <!-- Author Filter Section -->
-                                        <div>
-                                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Author</h3>
-                                            <div class="space-y-1 max-h-40 overflow-y-auto">
-                                                <button 
-                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedAuthorFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
-                                                    on:click={() => {
-                                                        selectedAuthorFilter = "all";
-                                                        console.log("Author filter reset to 'all'");
-                                                        updateFilteredBooks();
-                                                        forceRefresh();
-                                                    }}
-                                                >
-                                                    All Authors
-                                                </button>
-                                                {#each $uniqueAuthors as author}
+                                        <!-- Bottom Row - Rating & Status Filters -->
+                                        <div class="grid grid-cols-2 gap-4">
+                                            <!-- Rating Filter Section -->
+                                            <div>
+                                                <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Rating</h3>
+                                                <div class="space-y-1">
                                                     <button 
-                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedAuthorFilter === author ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedRatingFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
                                                         on:click={() => {
-                                                            selectedAuthorFilter = author;
-                                                            console.log(`Author filter set to: "${author}"`);
+                                                            selectedRatingFilter = "all";
+                                                            console.log("Rating filter reset to 'all'");
                                                             updateFilteredBooks();
                                                             forceRefresh();
                                                         }}
                                                     >
-                                                        {author}
+                                                        Any Rating
                                                     </button>
-                                                {/each}
+                                                    {#each [5, 4, 3, 2, 1] as rating}
+                                                        <button 
+                                                            class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedRatingFilter === rating.toString() ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                            on:click={() => {
+                                                                selectedRatingFilter = rating.toString();
+                                                                console.log(`Rating filter set to: ${rating} stars`);
+                                                                updateFilteredBooks();
+                                                                forceRefresh();
+                                                            }}
+                                                        >
+                                                            <div class="flex items-center">
+                                                                {#each Array(5) as _, i}
+                                                                    <span class="text-yellow-400">
+                                                                        {#if i < rating}
+                                                                            ★
+                                                                        {:else}
+                                                                            ☆
+                                                                        {/if}
+                                                                    </span>
+                                                                {/each}
+                                                                <span class="ml-1">{rating} Star{rating !== 1 ? 's' : ''}</span>
+                                                            </div>
+                                                        </button>
+                                                    {/each}
+                                                </div>
                                             </div>
-                                        </div>
-                                        
-                                        <Separator />
-                                        
-                                        <!-- Rating Filter Section -->
-                                        <div>
-                                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Rating</h3>
-                                            <div class="space-y-1">
-                                                <button 
-                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedRatingFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
-                                                    on:click={() => {
-                                                        selectedRatingFilter = "all";
-                                                        console.log("Rating filter reset to 'all'");
-                                                        updateFilteredBooks();
-                                                        forceRefresh();
-                                                    }}
-                                                >
-                                                    Any Rating
-                                                </button>
-                                                {#each [5, 4, 3, 2, 1] as rating}
+                                            
+                                            <!-- Status Filter Section -->
+                                            <div>
+                                                <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Status</h3>
+                                                <div class="space-y-1">
                                                     <button 
-                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedRatingFilter === rating.toString() ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
                                                         on:click={() => {
-                                                            selectedRatingFilter = rating.toString();
-                                                            console.log(`Rating filter set to: ${rating} stars`);
+                                                            selectedStatusFilter = "all";
+                                                            updateFilteredBooks();
+                                                            forceRefresh();
+                                                        }}
+                                                    >
+                                                        All Statuses
+                                                    </button>
+                                                    <button 
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "completed" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        on:click={() => {
+                                                            selectedStatusFilter = "completed";
                                                             updateFilteredBooks();
                                                             forceRefresh();
                                                         }}
                                                     >
                                                         <div class="flex items-center">
-                                                            {#each Array(5) as _, i}
-                                                                <span class="text-yellow-400">
-                                                                    {#if i < rating}
-                                                                        ★
-                                                                    {:else}
-                                                                        ☆
-                                                                    {/if}
-                                                                </span>
-                                                            {/each}
-                                                            <span class="ml-1">{rating} Star{rating !== 1 ? 's' : ''}</span>
+                                                            <span class="inline-block w-3 h-3 rounded-full bg-green-400 mr-2"></span>
+                                                            Completed
                                                         </div>
                                                     </button>
-                                                {/each}
-                                            </div>
-                                        </div>
-                                        
-                                        <Separator />
-                                        
-                                        <!-- Status Filter Section -->
-                                        <div>
-                                            <h3 class="text-sm font-medium text-gray-700 mb-2">Filter by Status</h3>
-                                            <div class="space-y-1">
-                                                <button 
-                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "all" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
-                                                    on:click={() => {
-                                                        selectedStatusFilter = "all";
-                                                        updateFilteredBooks();
-                                                        forceRefresh();
-                                                    }}
-                                                >
-                                                    All Statuses
-                                                </button>
-                                                <button 
-                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "completed" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
-                                                    on:click={() => {
-                                                        selectedStatusFilter = "completed";
-                                                        updateFilteredBooks();
-                                                        forceRefresh();
-                                                    }}
-                                                >
-                                                    <div class="flex items-center">
-                                                        <span class="inline-block w-3 h-3 rounded-full bg-green-400 mr-2"></span>
-                                                        Completed
-                                                    </div>
-                                                </button>
-                                                <button 
-                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "in-progress" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
-                                                    on:click={() => {
-                                                        selectedStatusFilter = "in-progress";
-                                                        updateFilteredBooks();
-                                                        forceRefresh();
-                                                    }}
-                                                >
-                                                    <div class="flex items-center">
-                                                        <span class="inline-block w-3 h-3 rounded-full bg-blue-400 mr-2"></span>
-                                                        In Progress
-                                                    </div>
-                                                </button>
-                                                <button 
-                                                    class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "unread" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
-                                                    on:click={() => {
-                                                        selectedStatusFilter = "unread";
-                                                        updateFilteredBooks();
-                                                        forceRefresh();
-                                                    }}
-                                                >
-                                                    <div class="flex items-center">
-                                                        <span class="inline-block w-3 h-3 rounded-full bg-gray-400 mr-2"></span>
-                                                        Unread
-                                                    </div>
-                                                </button>
+                                                    <button 
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "in-progress" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        on:click={() => {
+                                                            selectedStatusFilter = "in-progress";
+                                                            updateFilteredBooks();
+                                                            forceRefresh();
+                                                        }}
+                                                    >
+                                                        <div class="flex items-center">
+                                                            <span class="inline-block w-3 h-3 rounded-full bg-blue-400 mr-2"></span>
+                                                            In Progress
+                                                        </div>
+                                                    </button>
+                                                    <button 
+                                                        class={`w-full text-left px-2 py-1.5 rounded text-sm hover:bg-gray-100 ${selectedStatusFilter === "unread" ? "bg-blue-50 text-blue-600 font-medium" : ""}`}
+                                                        on:click={() => {
+                                                            selectedStatusFilter = "unread";
+                                                            updateFilteredBooks();
+                                                            forceRefresh();
+                                                        }}
+                                                    >
+                                                        <div class="flex items-center">
+                                                            <span class="inline-block w-3 h-3 rounded-full bg-gray-400 mr-2"></span>
+                                                            Unread
+                                                        </div>
+                                                    </button>
+                                                </div>
                                             </div>
                                         </div>
                                         
                                         <!-- Reset Filters Button -->
                                         {#if searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all" || selectedAuthorFilter !== "all" || selectedRatingFilter !== "all"}
-                                            <div class="pt-2">
+                                            <div class="pt-3 border-t border-gray-200 mt-3">
                                                 <button 
                                                     class="w-full flex items-center justify-center px-3 py-2 text-sm font-medium rounded-md bg-red-50 text-red-600 hover:bg-red-100"
                                                     on:click={() => {
