@@ -2098,55 +2098,47 @@
     </div>
 {/if}
 
-<!-- View Publication Modal -->
+<!-- View Publication Dialog -->
 <Dialog.Root bind:open={viewModalOpen}>
-    <Dialog.Content class="w-full max-w-2xl">
+    <Dialog.Content class="w-[75%] max-w-[75%]">
         <Dialog.Header>
             <Dialog.Title class="text-2xl font-bold">
                 {#if viewingPublication}
-                    {viewingPublication.title}
+                    <div class="flex items-center gap-2">
+                        <span>{viewingPublication.title}</span>
+                        <span class={`px-3 py-1 rounded-full text-sm font-normal ${
+                            viewingPublication.completed ? "bg-green-100 text-green-800" : 
+                            viewingPublication.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
+                            "bg-gray-100 text-gray-800"
+                        }`}>
+                            {#if viewingPublication.status}
+                                {viewingPublication.status.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}
+                            {:else}
+                                {(viewingPublication.completed ? "Completed" : viewingPublication.readingSessions?.length > 0 ? "In Progress" : "Unread")}
+                            {/if}
+                        </span>
+                    </div>
                 {/if}
             </Dialog.Title>
             <Dialog.Description>
                 {#if viewingPublication}
-                    <p class="text-lg text-neutral-600 mb-4">{viewingPublication.author}</p>
-                    
-                    {#if viewingPublication.isbn}
-                        <p class="text-sm text-neutral-600">ISBN/DOI: {viewingPublication.isbn}</p>
-                    {/if}
-                
-                    <div class="flex items-center gap-2 mt-4 mb-2">
-                        <Book class="w-5 h-5 text-neutral-600" />
-                        <span class="text-neutral-700">
-                            {viewingPublication.totalPagesRead || 0} pages read in {viewingPublication.readingSessions?.length || 0} sessions
-                        </span>
-                    </div>
-                    
-                    <!-- Status Bar -->
-                    <div class="mb-6">
-                        <div class="flex justify-between items-center mb-2">
-                            <span class="text-sm text-neutral-600">Status:</span>
-                            <span class={`px-3 py-1 rounded-full text-sm ${
-                                viewingPublication.completed ? "bg-green-100 text-green-800" : 
-                                viewingPublication.readingSessions?.length > 0 ? "bg-blue-100 text-blue-800" : 
-                                "bg-gray-100 text-gray-800"
-                            }`}>
-                                {viewingPublication.status || (viewingPublication.completed ? "Completed" : viewingPublication.readingSessions?.length > 0 ? "In Progress" : "Unread")}
-                            </span>
-                        </div>
-                    </div>
+                    <p class="text-lg text-neutral-600 mb-2">{viewingPublication.author}</p>
                     
                     <!-- Tags -->
                     {#if viewingPublication.tags?.length > 0}
-                        <div class="flex flex-wrap gap-2 mb-6">
+                        <div class="flex flex-wrap gap-2 mb-4">
                             {#each viewingPublication.tags as tag}
                                 <span class="bg-neutral-100 text-neutral-800 px-3 py-1 rounded-full text-sm">{tag}</span>
                             {/each}
                         </div>
                     {/if}
                     
+                    {#if viewingPublication.isbn}
+                        <p class="text-sm text-neutral-600 mt-2">ISBN/DOI: {viewingPublication.isbn}</p>
+                    {/if}
+                    
                     <!-- Divider -->
-                    <hr class="my-6 border-neutral-200" />
+                    <hr class="my-4 border-neutral-200" />
                     
                     <!-- Reading Logs Section -->
                     <div>
@@ -2186,13 +2178,6 @@
                         
                         {#if viewingPublication.readingSessions?.length > 0}
                             <div class="space-y-4">
-                                <div class="flex justify-between items-center mb-2">
-                                    <h3 class="text-lg font-semibold text-neutral-800">Reading Sessions</h3>
-                                    <div class="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm">
-                                        {viewingPublication.status || "Unknown"}
-                                    </div>
-                                </div>
-                            
                                 <div class="bg-neutral-50 p-3 rounded-md mb-4">
                                     <div class="flex items-center gap-3 text-neutral-700">
                                         <div>
@@ -2206,32 +2191,34 @@
                                         </div>
                                     </div>
                                 </div>
-                            
-                                {#each viewingPublication.readingSessions as session}
-                                    <div class="bg-white border border-neutral-200 rounded-lg p-4">
-                                        <div class="flex justify-between mb-2">
-                                            <div class="flex items-center gap-2 text-neutral-600">
-                                                <Calendar class="w-4 h-4" />
-                                                <span>{new Date(session.date).toLocaleDateString()}</span>
+                                
+                                <div class="max-h-[500px] overflow-y-auto pr-2">
+                                    {#each viewingPublication.readingSessions as session}
+                                        <div class="bg-white border border-neutral-200 rounded-lg p-4 mb-3">
+                                            <div class="flex justify-between mb-2">
+                                                <div class="flex items-center gap-2 text-neutral-600">
+                                                    <Calendar class="w-4 h-4" />
+                                                    <span>{new Date(session.date).toLocaleDateString()}</span>
+                                                </div>
+                                                {#if session.duration}
+                                                <div class="flex items-center gap-1 text-neutral-600 text-sm">
+                                                    <Clock class="w-3 h-3" />
+                                                    <span>{session.duration} min</span>
+                                                </div>
+                                                {/if}
                                             </div>
-                                            {#if session.duration}
-                                            <div class="flex items-center gap-1 text-neutral-600 text-sm">
-                                                <Clock class="w-3 h-3" />
-                                                <span>{session.duration} min</span>
+                                            
+                                            <div class="flex items-center gap-2 mb-2 text-neutral-600">
+                                                <Book class="w-4 h-4" />
+                                                <span>{session.pagesRead} pages read</span>
                                             </div>
+                                            
+                                            {#if session.notes}
+                                                <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md mt-2 whitespace-pre-wrap">{session.notes}</p>
                                             {/if}
                                         </div>
-                                        
-                                        <div class="flex items-center gap-2 mb-2 text-neutral-600">
-                                            <Book class="w-4 h-4" />
-                                            <span>{session.pagesRead} pages read</span>
-                                        </div>
-                                        
-                                        {#if session.notes}
-                                            <p class="text-neutral-700 bg-neutral-50 p-3 rounded-md mt-2">{session.notes}</p>
-                                        {/if}
-                                    </div>
-                                {/each}
+                                    {/each}
+                                </div>
                             </div>
                         {:else}
                             <div class="text-center p-6 bg-neutral-50 rounded-lg">
@@ -2241,7 +2228,7 @@
                         {/if}
 
                         <!-- Mark as Complete/Incomplete button -->
-                        <div class="mt-6">
+                        <div class="mt-4">
                             <Button 
                                 class="w-full {viewingPublication?.completed ? 'bg-yellow-600 hover:bg-yellow-700' : 'bg-green-600 hover:bg-green-700'}"
                                 on:click={() => toggleCompletionStatus(viewingPublication.id)}
