@@ -212,9 +212,17 @@
         const allBooks = get(books);
         
         if (allBooks.length === 0) {
+            console.log("No books in library, setting empty filtered books");
             filteredBooks.set([]);
             return;
         }
+        
+        console.log(`Filtering ${allBooks.length} books with criteria:`, {
+            searchQuery: searchLibraryQuery,
+            status: selectedStatusFilter,
+            tag: selectedTagFilter,
+            sort: sortOrder
+        });
         
         // Start with all books
         let result = [...allBooks];
@@ -259,6 +267,7 @@
         currentPage = 1;
         
         // Update filtered books store
+        console.log(`Setting filtered books to ${result.length} items`);
         filteredBooks.set(result);
         
         // Force cache update
@@ -315,7 +324,43 @@
     function getPaginatedBooks() {
         // Always get fresh data from the store
         const filtered = get(filteredBooks);
-        console.log(`Getting paginated books: ${filtered.length} books available`);
+        const allBooks = get(books);
+        
+        console.log(`Getting paginated books: ${filtered.length} filtered books, ${allBooks.length} total books available`);
+        
+        // If we have no filtered books but have books in the library, likely the filter is too restrictive
+        // or there was an error in filtering
+        if (filtered.length === 0 && allBooks.length > 0) {
+            // Only show no results if filters are actually applied
+            if (searchLibraryQuery || selectedStatusFilter !== "all" || selectedTagFilter !== "all") {
+                console.log("Filters applied but no books match, showing empty results");
+                return [];
+            }
+            
+            // If no filters are applied but we still have no filtered books, use all books
+            console.log("No filters applied, showing all books");
+            // Re-run update to be safe
+            updateFilteredBooks();
+            // Get the updated filtered books
+            const updatedFiltered = get(filteredBooks);
+            if (updatedFiltered.length > 0) {
+                // Pagination logic for updatedFiltered
+                const effectiveItemsPerPage = viewMode === 'list' ? 12 : 9;
+                const startIndex = (currentPage - 1) * effectiveItemsPerPage;
+                const endIndex = startIndex + effectiveItemsPerPage;
+                const result = updatedFiltered.slice(startIndex, endIndex);
+                console.log(`Displaying ${result.length} books from updated filter for page ${currentPage}`);
+                return result;
+            }
+            
+            // If still no filtered books, use all books directly
+            const effectiveItemsPerPage = viewMode === 'list' ? 12 : 9;
+            const startIndex = (currentPage - 1) * effectiveItemsPerPage;
+            const endIndex = startIndex + effectiveItemsPerPage;
+            const result = allBooks.slice(startIndex, endIndex);
+            console.log(`Displaying ${result.length} books directly from allBooks for page ${currentPage}`);
+            return result;
+        }
         
         // Adjust items per page based on view mode
         const effectiveItemsPerPage = viewMode === 'list' ? 12 : 9;
@@ -1339,12 +1384,20 @@
     
     // Reset filters
     function resetFilters() {
+        console.log("Resetting all filters");
         searchLibraryQuery = "";
         selectedStatusFilter = "all";
         selectedTagFilter = "all";
         sortOrder = "newest"; // Reset to default sort as well
         currentPage = 1; // Reset to first page
-        // The reactive statement will automatically trigger updateFilteredBooks
+        
+        // Force update filtered books with new criteria
+        updateFilteredBooks();
+        
+        // Force UI refresh 
+        forceRefresh();
+        
+        console.log("Filters reset, books count:", get(books).length);
     }
     
     // Toggle view mode between grid and list
