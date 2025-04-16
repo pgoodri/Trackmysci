@@ -1587,25 +1587,9 @@
             <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <!-- Header Section -->
                 <div class="p-6 border-b border-gray-100">
-                    <!-- Title and View Toggle Header -->
+                    <!-- Title Row -->
                     <div class="flex items-center justify-between mb-6">
                         <h2 class="text-2xl font-bold text-gray-800">My Publications</h2>
-                        
-                        <!-- View Toggle (moved here from below) -->
-                        <div class="flex rounded-md overflow-hidden border border-gray-200">
-                            <button 
-                                class={`flex items-center justify-center w-10 h-10 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                                on:click={() => toggleViewMode('grid')}
-                            >
-                                <LayoutGrid class="h-4 w-4" />
-                            </button>
-                            <button 
-                                class={`flex items-center justify-center w-10 h-10 ${viewMode === 'list' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
-                                on:click={() => toggleViewMode('list')}
-                            >
-                                <List class="h-4 w-4" />
-                            </button>
-                        </div>
                     </div>
                     
                     <!-- Search and Filter Controls -->
@@ -1626,8 +1610,9 @@
                             />
                         </div>
                         
-                        <!-- Combined Filter Dropdown -->
+                        <!-- Right Side Controls (Filter Dropdown and View Toggle) -->
                         <div class="flex gap-2 items-center">
+                            <!-- Combined Filter Dropdown -->
                             <Popover.Root>
                                 <Popover.Trigger class="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white hover:bg-gray-50">
                                     <Filter class="h-4 w-4 mr-2 text-gray-500" />
@@ -1855,6 +1840,22 @@
                                     <X class="h-4 w-4 mr-1" /> Clear
                                 </button>
                             {/if}
+                            
+                            <!-- View Toggle -->
+                            <div class="flex rounded-md overflow-hidden border border-gray-200">
+                                <button 
+                                    class={`flex items-center justify-center w-10 h-10 ${viewMode === 'grid' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                    on:click={() => toggleViewMode('grid')}
+                                >
+                                    <LayoutGrid class="h-4 w-4" />
+                                </button>
+                                <button 
+                                    class={`flex items-center justify-center w-10 h-10 ${viewMode === 'list' ? 'bg-blue-50 text-blue-700 font-medium' : 'bg-white text-gray-700 hover:bg-gray-50'}`}
+                                    on:click={() => toggleViewMode('list')}
+                                >
+                                    <List class="h-4 w-4" />
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
