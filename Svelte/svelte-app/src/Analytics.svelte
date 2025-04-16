@@ -367,24 +367,24 @@
         <h1 class="text-xl font-bold text-blue-600">TrackMySci</h1>
         
         <div class="hidden md:flex items-center space-x-6">
-          <button on:click={() => window.location.href='/dashboard'} class="text-gray-600 hover:text-blue-600">
+          <button on:click={() => navigate('/dashboard')} class="text-gray-600 hover:text-blue-600">
             <Home class="w-4 h-4 inline mr-1" /> Dashboard
           </button>
-          <button on:click={() => window.location.href='/library'} class="text-gray-600 hover:text-blue-600">
+          <button on:click={() => navigate('/library')} class="text-gray-600 hover:text-blue-600">
             <BookText class="w-4 h-4 inline mr-1" /> Library
           </button>
-          <button class="text-gray-800 font-medium hover:text-blue-600">
+          <button class="text-gray-800 font-medium text-blue-600 hover:text-blue-600">
             <BarChart class="w-4 h-4 inline mr-1" /> Analytics
           </button>
         </div>
       </div>
       
       <div class="flex items-center gap-3">
-        <button class="text-gray-600 hover:text-blue-600 flex items-center px-3 py-2" on:click={() => window.location.href='/dashboard'}>
+        <button class="text-gray-600 hover:text-blue-600 flex items-center px-3 py-2" on:click={() => navigate('/dashboard')}>
           <BookOpen class="w-4 h-4 mr-1" /> Log Session
         </button>
         
-        <Button class="bg-blue-600 hover:bg-blue-700" on:click={() => window.location.href='/dashboard'}>
+        <Button class="bg-blue-600 hover:bg-blue-700" on:click={() => navigate('/dashboard')}>
           <Plus class="w-4 h-4 mr-2" /> Add Publication
         </Button>
         

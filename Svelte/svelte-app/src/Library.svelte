@@ -35,6 +35,7 @@
     import { Separator } from "$lib/components/ui/separator";
     import { Progress } from "$lib/components/ui/progress";
     import { Input } from "$lib/components/ui/input";
+    import { navigate } from "svelte-routing";
 
     // State
     let isLoading = true;
@@ -673,7 +674,7 @@
     
     function logout() {
         signOut(auth).then(() => {
-            window.location.href = "/login";
+            navigate("/login");
         });
     }
     
@@ -1492,7 +1493,7 @@
                         loadUserLibrary(user.uid)
                     ]);
                 } else {
-                    window.location.href = "/login";
+                    navigate("/login");
                 }
             } catch (error) {
                 console.error("Error during initialization:", error);
@@ -1554,13 +1555,13 @@
                 <h1 class="text-xl font-bold text-blue-600">TrackMySci</h1>
                 
                 <div class="hidden md:flex items-center space-x-6">
-                    <button class="text-gray-600 hover:text-blue-600" on:click={() => window.location.href='/dashboard'}>
+                    <button class="text-gray-600 hover:text-blue-600" on:click={() => navigate('/dashboard')}>
                         <Home class="w-4 h-4 inline mr-1" /> Dashboard
                     </button>
-                    <button class="text-gray-800 font-medium hover:text-blue-600">
+                    <button class="text-gray-800 font-medium text-blue-600 hover:text-blue-600">
                         <BookText class="w-4 h-4 inline mr-1" /> Library
                     </button>
-                    <button class="text-gray-600 hover:text-blue-600" on:click={() => window.location.href='/analytics'}>
+                    <button class="text-gray-600 hover:text-blue-600" on:click={() => navigate('/analytics')}>
                         <BarChart class="w-4 h-4 inline mr-1" /> Analytics
                     </button>
                 </div>
