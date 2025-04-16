@@ -373,7 +373,7 @@
           <button on:click={() => navigate('/library')} class="text-gray-600 hover:text-blue-600">
             <BookText class="w-4 h-4 inline mr-1" /> Library
           </button>
-          <button class="text-gray-800 font-medium text-blue-600 hover:text-blue-600">
+          <button class="text-blue-600 font-medium hover:text-blue-600">
             <BarChart class="w-4 h-4 inline mr-1" /> Analytics
           </button>
         </div>
