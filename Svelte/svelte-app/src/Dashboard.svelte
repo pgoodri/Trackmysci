@@ -1277,6 +1277,9 @@ async function markAsCompleted(publicationId) {
         console.log("📌 Saving entry with tags:", newEntry.tags);
 
         try {
+            // Store title in a local variable before async operations
+            const titleToShow = title;
+            
             await saveEntryToFirestore(newEntry);
             await loadUserLibrary();
             await updateCharts();  // ✅ Refresh charts
@@ -1323,7 +1326,7 @@ async function updateEditedPublication() {
       // ✅ Save updated publication data
       await updateDoc(entryDocRef, updatedData);
       console.log(`✅ Updated publication: ${editingPublication.id}`);
-      toast.success(`Updated "${title}" successfully`);
+      toast.success(`Updated "${updatedData.title}" successfully`);
 
       // Update charts after editing
       await updateChartsAfterEdit(user.uid, oldData, updatedData);
