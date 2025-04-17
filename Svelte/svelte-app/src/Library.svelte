@@ -1,67 +1,43 @@
 <script>
-    import { navigate } from "svelte-routing";
-    import { onMount } from "svelte";
-    import { fade } from "svelte/transition";
-    import { writable, get } from "svelte/store";
-    import { Button } from "$lib/components/ui/button";
-    import * as Popover from "$lib/components/ui/popover";
-    import * as Tooltip from "$lib/components/ui/tooltip";
-    import * as Dialog from "$lib/components/ui/dialog";
-    import * as AlertDialog from "$lib/components/ui/alert-dialog";
-    import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-    import { Progress } from "$lib/components/ui/progress";
-    import { Input } from "$lib/components/ui/input";
-    import { Separator } from "$lib/components/ui/separator";
-    import { Tabs, TabsContent, TabsList, TabsTrigger } from "$lib/components/ui/tabs";
-    import * as Select from "$lib/components/ui/select";
-    import { Badge } from "$lib/components/ui/badge";
-    import { Checkbox } from "$lib/components/ui/checkbox";
-    import {
-        Pagination,
-        PaginationContent,
-        PaginationEllipsis,
-        PaginationItem,
-        PaginationLink,
-        PaginationNext,
-        PaginationPrevious,
-    } from "$lib/components/ui/pagination";
-    import { onAuthStateChanged } from "firebase/auth";
     import { auth, firestore } from "./firebase";
-    import { signOut } from "firebase/auth";
-    import { writeBatch } from "firebase/firestore";
-    import {
-        collection,
-        doc,
-        addDoc,
-        getDoc,
-        getDocs,
-        updateDoc,
-        deleteDoc,
-        query,
-        where,
-        orderBy,
-        limit
-    } from "firebase/firestore";
-    import {
-        Book,
-        CheckCircle,
+    import { doc, collection, getDocs, getDoc, addDoc, updateDoc, setDoc, deleteDoc, query, where, writeBatch } from "firebase/firestore";
+    import { onAuthStateChanged, signOut } from "firebase/auth";
+    import { onMount } from "svelte";
+    import { writable, get } from "svelte/store";
+    import { 
+        Plus, 
+        BookOpen, 
+        Edit, 
+        Trash2, 
+        Ellipsis, 
+        Book, 
         Filter,
         Search,
-        Plus,
-        Grid,
-        List,
         Clock,
         Calendar,
-        Edit,
-        Trash2,
-        BookOpen,
-        MoreHorizontal,
+        ArrowUpDown,
+        ChevronDown,
+        X,
+        CheckCircle2,
+        BookmarkIcon,
         Tag,
-        BookMarked,
-        Library as LibraryIcon,
+        LayoutGrid,
+        List,
+        Home,
+        BookText,
+        BarChart,
         Star
     } from "lucide-svelte";
-    import toast, { Toaster } from "svelte-french-toast";
+    import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+    import * as Dialog from "$lib/components/ui/dialog";
+    import * as AlertDialog from "$lib/components/ui/alert-dialog";
+    import * as Popover from "$lib/components/ui/popover";
+    import { Button } from "$lib/components/ui/button";
+    import { Separator } from "$lib/components/ui/separator";
+    import { Progress } from "$lib/components/ui/progress";
+    import { Input } from "$lib/components/ui/input";
+    import { navigate } from "svelte-routing";
+    import { toast } from "svelte-sonner";
 
     // State
     let isLoading = true;
@@ -1171,7 +1147,7 @@
             console.error("No authenticated user found.");
             return;
         }
-
+        
         // Find the publication title for the confirmation message
         const publication = get(books).find(book => book.id === publicationId);
         const pubTitle = publication ? publication.title : "this publication";
@@ -1194,7 +1170,6 @@
                         const entryDocSnap = await getDoc(entryDocRef);
                         if (!entryDocSnap.exists()) {
                             console.warn("Publication not found.");
-                            toast.error("Publication not found");
                             return;
                         }
                         
@@ -2610,6 +2585,3 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
-
-<!-- Toast notifications -->
-<Toaster />
