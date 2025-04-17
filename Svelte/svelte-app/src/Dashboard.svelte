@@ -540,13 +540,13 @@
         chartRefreshKey.set(updateValue);
         
         // Show feedback without page refresh
-        showAlert("Reading Logged", "Your reading session has been saved successfully!");
+        toast.success("Reading session saved successfully!");
         
         // Close the modal
         logReadingModalOpen = false;
       } catch (error) {
         console.error("❌ Error saving reading log:", error);
-        showAlert("Error", "Failed to save reading progress. Please try again.");
+        toast.error("Failed to save reading progress");
       }
     }
   }

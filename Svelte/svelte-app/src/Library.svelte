@@ -37,7 +37,7 @@
     import { Progress } from "$lib/components/ui/progress";
     import { Input } from "$lib/components/ui/input";
     import { navigate } from "svelte-routing";
-    import { toast } from "svelte-sonner";
+    import toast, { Toaster } from "svelte-french-toast";
 
     // State
     let isLoading = true;
@@ -462,19 +462,25 @@
     // Function to save reading log via modal
     async function saveReadingLog() {
         if (!logReadingPublication || !logReadingPagesRead) {
-            alert("Please select a publication and enter pages read");
+            toast.error("Please select a publication and enter pages read");
             return;
         }
         
         const publication = get(books).find(p => p.id === logReadingPublication);
         if (publication) {
-            await updateProgress(
-                logReadingPublication, 
-                logReadingPagesRead, 
-                logReadingComment,
-                logReadingDuration
-            );
-            logReadingModalOpen = false;
+            try {
+                await updateProgress(
+                    logReadingPublication, 
+                    logReadingPagesRead, 
+                    logReadingComment,
+                    logReadingDuration
+                );
+                toast.success("Reading session saved successfully!");
+                logReadingModalOpen = false;
+            } catch (error) {
+                console.error("Error updating reading progress:", error);
+                toast.error("Failed to save reading progress");
+            }
         }
     }
     
@@ -670,7 +676,7 @@
             
         } catch (error) {
             console.error("❌ Error updating progress:", error.message);
-            alert("Failed to update reading progress. Please try again.");
+            toast.error("Failed to update reading progress");
         }
     }
     
@@ -750,11 +756,11 @@
             if (searchResults.length > 0) {
                 showResults = true;
             } else {
-                alert("No results found.");
+                toast.error("No results found");
             }
         } catch (error) {
             console.error("Error during search:", error);
-            alert("An error occurred during search. Please try again.");
+            toast.error("Search failed. Please try again");
         } finally {
             isSearching = false; // Always reset searching state
         }
@@ -817,7 +823,7 @@
         } catch (error) {
             console.error("Error fetching DOI data:", error);
             // More user-friendly error message
-            alert(`DOI lookup failed: ${error.message || "Unknown error"}. Please verify your DOI is correct.`);
+            toast.error(`DOI lookup failed: ${error.message || "Unknown error"}`);
         }
     }
     
@@ -845,7 +851,7 @@
             ];
         } catch (error) {
             console.error("Error fetching ISBN data:", error);
-            alert("Failed to retrieve ISBN information.");
+            toast.error("Failed to retrieve ISBN information");
         }
     }
     
@@ -965,7 +971,7 @@
                 loadUserLibrary(auth.currentUser.uid);
                 
                 // Add success toast
-                toast.success(`Added "${title}" to your library`);
+                toast.success(`Added to your library`);
             } catch (error) {
                 console.error("Error adding publication:", error.message);
                 toast.error(`Failed to add publication: ${error.message}`);
