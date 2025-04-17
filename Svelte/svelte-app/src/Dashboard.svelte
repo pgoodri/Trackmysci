@@ -1283,7 +1283,7 @@ async function markAsCompleted(publicationId) {
             await saveEntryToFirestore(newEntry);
             await loadUserLibrary();
             await updateCharts();  // ✅ Refresh charts
-            toast.success(`Added "${title}" to your library`);
+            toast.success(`Added to your library`);
         } catch (error) {
             console.error("Error saving entry:", error.message);
             toast.error("Failed to add publication");
