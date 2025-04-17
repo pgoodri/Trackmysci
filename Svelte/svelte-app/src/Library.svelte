@@ -71,7 +71,7 @@
     
     // Subscribe to changes in books or filter criteria
     // and update filteredBooks whenever any of these change
-    const unsubscribe = [
+    const unsubscribeStores = [
         books.subscribe(() => updateFilteredBooks()),
         refreshCounter.subscribe(() => updateFilteredBooks())
     ];
@@ -1513,7 +1513,7 @@
         viewMode = localStorage.getItem("library-view-mode") || "grid";
         
         // Use Firebase's auth state listener instead of checking currentUser directly
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+        const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
             try {
                 if (user) {
                     await Promise.all([
@@ -1532,10 +1532,12 @@
         
         // Return cleanup function to unsubscribe from auth state changes and store subscriptions
         return () => {
-            unsubscribe();
+            unsubscribeAuth();
             
             // Unsubscribe from store subscriptions
-            unsubscribe.forEach(unsub => unsub());
+            if (unsubscribeStores && Array.isArray(unsubscribeStores)) {
+                unsubscribeStores.forEach(unsub => typeof unsub === 'function' && unsub());
+            }
         };
     });
 
