@@ -1,42 +1,67 @@
 <script>
-    import { auth, firestore } from "./firebase";
-    import { doc, collection, getDocs, getDoc, addDoc, updateDoc, setDoc, deleteDoc, query, where, writeBatch } from "firebase/firestore";
-    import { onAuthStateChanged, signOut } from "firebase/auth";
+    import { navigate } from "svelte-routing";
     import { onMount } from "svelte";
+    import { fade } from "svelte/transition";
     import { writable, get } from "svelte/store";
-    import { 
-        Plus, 
-        BookOpen, 
-        Edit, 
-        Trash2, 
-        Ellipsis, 
-        Book, 
-        Filter,
-        Search,
-        Clock,
-        Calendar,
-        ArrowUpDown,
-        ChevronDown,
-        X,
-        CheckCircle2,
-        BookmarkIcon,
-        Tag,
-        LayoutGrid,
-        List,
-        Home,
-        BookText,
-        BarChart,
-        Star
-    } from "lucide-svelte";
-    import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-    import * as Dialog from "$lib/components/ui/dialog";
-    import * as Popover from "$lib/components/ui/popover";
     import { Button } from "$lib/components/ui/button";
-    import { Separator } from "$lib/components/ui/separator";
+    import * as Popover from "$lib/components/ui/popover";
+    import * as Tooltip from "$lib/components/ui/tooltip";
+    import * as Dialog from "$lib/components/ui/dialog";
+    import * as AlertDialog from "$lib/components/ui/alert-dialog";
+    import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
     import { Progress } from "$lib/components/ui/progress";
     import { Input } from "$lib/components/ui/input";
-    import { navigate } from "svelte-routing";
-    import { toast } from "svelte-sonner";
+    import { Separator } from "$lib/components/ui/separator";
+    import { Tabs, TabsContent, TabsList, TabsTrigger } from "$lib/components/ui/tabs";
+    import * as Select from "$lib/components/ui/select";
+    import { Badge } from "$lib/components/ui/badge";
+    import { Checkbox } from "$lib/components/ui/checkbox";
+    import {
+        Pagination,
+        PaginationContent,
+        PaginationEllipsis,
+        PaginationItem,
+        PaginationLink,
+        PaginationNext,
+        PaginationPrevious,
+    } from "$lib/components/ui/pagination";
+    import { onAuthStateChanged } from "firebase/auth";
+    import { auth, firestore } from "./firebase";
+    import { signOut } from "firebase/auth";
+    import { writeBatch } from "firebase/firestore";
+    import {
+        collection,
+        doc,
+        addDoc,
+        getDoc,
+        getDocs,
+        updateDoc,
+        deleteDoc,
+        query,
+        where,
+        orderBy,
+        limit
+    } from "firebase/firestore";
+    import {
+        Book,
+        CheckCircle,
+        Filter,
+        Search,
+        Plus,
+        Grid,
+        List,
+        Clock,
+        Calendar,
+        Edit,
+        Trash2,
+        BookOpen,
+        MoreHorizontal,
+        Tag,
+        BookMarked,
+        Library as LibraryIcon,
+        Star
+    } from "lucide-svelte";
+    import toast, { Toaster } from "svelte-french-toast";
 
     // State
     let isLoading = true;
@@ -1141,141 +1166,151 @@
     async function deletePublication(publicationId) {
         if (!publicationId) return;
         
-        // Confirm deletion with user
-        if (!confirm("Are you sure you want to delete this publication? This action cannot be undone.")) {
-            return;
-        }
-        
         const user = auth.currentUser;
         if (!user) {
             console.error("No authenticated user found.");
             return;
         }
+
+        // Find the publication title for the confirmation message
+        const publication = get(books).find(book => book.id === publicationId);
+        const pubTitle = publication ? publication.title : "this publication";
         
-        try {
-            const userDocRef = doc(firestore, "users", user.uid);
-            const entryDocRef = doc(userDocRef, "library", publicationId);
-            const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
-            const ratingsDocRef = doc(collection(userDocRef, "charts"), "ratings");
-            const tagsDocRef = doc(collection(userDocRef, "charts"), "tags");
-            const authorsDocRef = doc(collection(userDocRef, "charts"), "authors");
-            
-            // Fetch publication before deletion
-            const entryDocSnap = await getDoc(entryDocRef);
-            if (!entryDocSnap.exists()) {
-                console.warn("Publication not found.");
-                return;
-            }
-            
-            const deletedPub = entryDocSnap.data();
-            const deletedTitle = deletedPub.title;
-            const deletedAuthor = deletedPub.author;
-            const deletedTags = deletedPub.tags || [];
-            const deletedRating = deletedPub.rating;
-            
-            // Create a batch for atomic operations
-            const batch = writeBatch(firestore);
-            
-            // Update UI first for better UX
-            books.update(currentBooks => currentBooks.filter(book => book.id !== publicationId));
-            filteredBooks.update(filtered => filtered.filter(book => book.id !== publicationId));
-            
-            // 1. Delete the publication
-            batch.delete(entryDocRef);
-            
-            // 2. Update ratings counts if publication had a rating
-            if (deletedRating) {
-                const ratingsSnap = await getDoc(ratingsDocRef);
-                if (ratingsSnap.exists()) {
-                    const ratingsData = ratingsSnap.data();
-                    if (ratingsData[deletedRating]) {
-                        ratingsData[deletedRating] = Math.max(0, ratingsData[deletedRating] - 1);
-                        if (ratingsData[deletedRating] === 0) {
-                            delete ratingsData[deletedRating];
+        // Use confirmation dialog instead of browser confirm
+        return new Promise(resolve => {
+            showConfirmDialog(
+                "Confirm Deletion", 
+                `Are you sure you want to delete "${pubTitle}"? This will remove all associated data.`,
+                async () => {
+                    try {
+                        const userDocRef = doc(firestore, "users", user.uid);
+                        const entryDocRef = doc(userDocRef, "library", publicationId);
+                        const summaryDocRef = doc(collection(userDocRef, "charts"), "summary");
+                        const ratingsDocRef = doc(collection(userDocRef, "charts"), "ratings");
+                        const tagsDocRef = doc(collection(userDocRef, "charts"), "tags");
+                        const authorsDocRef = doc(collection(userDocRef, "charts"), "authors");
+                        
+                        // Fetch publication before deletion
+                        const entryDocSnap = await getDoc(entryDocRef);
+                        if (!entryDocSnap.exists()) {
+                            console.warn("Publication not found.");
+                            toast.error("Publication not found");
+                            return;
                         }
-                        batch.set(ratingsDocRef, ratingsData, { merge: false });
-                    }
-                }
-            }
-            
-            // 3. Update author counts
-            if (deletedAuthor) {
-                const authorsSnap = await getDoc(authorsDocRef);
-                if (authorsSnap.exists()) {
-                    const authorsData = authorsSnap.data();
-                    if (authorsData[deletedAuthor]) {
-                        authorsData[deletedAuthor] = Math.max(0, authorsData[deletedAuthor] - 1);
-                        if (authorsData[deletedAuthor] === 0) {
-                            delete authorsData[deletedAuthor];
-                        }
-                        batch.set(authorsDocRef, authorsData, { merge: false });
-                    }
-                }
-            }
-            
-            // 4. Update tags counts
-            if (deletedTags.length > 0) {
-                const tagsSnap = await getDoc(tagsDocRef);
-                if (tagsSnap.exists()) {
-                    const tagsData = tagsSnap.data();
-                    deletedTags.forEach(tag => {
-                        if (tagsData[tag]) {
-                            tagsData[tag] = Math.max(0, tagsData[tag] - 1);
-                            if (tagsData[tag] === 0) {
-                                delete tagsData[tag];
+                        
+                        const deletedPub = entryDocSnap.data();
+                        const deletedTitle = deletedPub.title;
+                        const deletedAuthor = deletedPub.author;
+                        const deletedTags = deletedPub.tags || [];
+                        const deletedRating = deletedPub.rating;
+                        
+                        // Create a batch for atomic operations
+                        const batch = writeBatch(firestore);
+                        
+                        // Update UI first for better UX
+                        books.update(currentBooks => currentBooks.filter(book => book.id !== publicationId));
+                        filteredBooks.update(filtered => filtered.filter(book => book.id !== publicationId));
+                        
+                        // 1. Delete the publication
+                        batch.delete(entryDocRef);
+                        
+                        // 2. Update ratings counts if publication had a rating
+                        if (deletedRating) {
+                            const ratingsSnap = await getDoc(ratingsDocRef);
+                            if (ratingsSnap.exists()) {
+                                const ratingsData = ratingsSnap.data();
+                                if (ratingsData[deletedRating]) {
+                                    ratingsData[deletedRating] = Math.max(0, ratingsData[deletedRating] - 1);
+                                    if (ratingsData[deletedRating] === 0) {
+                                        delete ratingsData[deletedRating];
+                                    }
+                                    batch.set(ratingsDocRef, ratingsData, { merge: false });
+                                }
                             }
                         }
-                    });
-                    batch.set(tagsDocRef, tagsData, { merge: false });
-                }
-            }
-            
-            // 5. Check if it was the most recent book and update summary
-            const summarySnap = await getDoc(summaryDocRef);
-            if (summarySnap.exists()) {
-                const summaryData = summarySnap.data();
-                
-                if (summaryData.mostRecent === deletedTitle) {
-                    // Find new most recent book
-                    const libraryRef = collection(userDocRef, "library");
-                    const q = query(libraryRef, orderBy("updatedAt", "desc"), limit(1));
-                    const querySnapshot = await getDocs(q);
-                    
-                    if (!querySnapshot.empty) {
-                        const newMostRecent = querySnapshot.docs[0].data().title;
-                        batch.update(summaryDocRef, { 
-                            mostRecent: newMostRecent,
-                            updatedAt: new Date()
-                        });
-                    } else {
-                        batch.update(summaryDocRef, { 
-                            mostRecent: null,
-                            updatedAt: new Date()
-                        });
+                        
+                        // 3. Update author counts
+                        if (deletedAuthor) {
+                            const authorsSnap = await getDoc(authorsDocRef);
+                            if (authorsSnap.exists()) {
+                                const authorsData = authorsSnap.data();
+                                if (authorsData[deletedAuthor]) {
+                                    authorsData[deletedAuthor] = Math.max(0, authorsData[deletedAuthor] - 1);
+                                    if (authorsData[deletedAuthor] === 0) {
+                                        delete authorsData[deletedAuthor];
+                                    }
+                                    batch.set(authorsDocRef, authorsData, { merge: false });
+                                }
+                            }
+                        }
+                        
+                        // 4. Update tags counts
+                        if (deletedTags.length > 0) {
+                            const tagsSnap = await getDoc(tagsDocRef);
+                            if (tagsSnap.exists()) {
+                                const tagsData = tagsSnap.data();
+                                deletedTags.forEach(tag => {
+                                    if (tagsData[tag]) {
+                                        tagsData[tag] = Math.max(0, tagsData[tag] - 1);
+                                        if (tagsData[tag] === 0) {
+                                            delete tagsData[tag];
+                                        }
+                                    }
+                                });
+                                batch.set(tagsDocRef, tagsData, { merge: false });
+                            }
+                        }
+                        
+                        // 5. Check if it was the most recent book and update summary
+                        const summarySnap = await getDoc(summaryDocRef);
+                        if (summarySnap.exists()) {
+                            const summaryData = summarySnap.data();
+                            
+                            if (summaryData.mostRecent === deletedTitle) {
+                                // Find new most recent book
+                                const libraryRef = collection(userDocRef, "library");
+                                const q = query(libraryRef, orderBy("updatedAt", "desc"), limit(1));
+                                const querySnapshot = await getDocs(q);
+                                
+                                if (!querySnapshot.empty) {
+                                    const newMostRecent = querySnapshot.docs[0].data().title;
+                                    batch.update(summaryDocRef, { 
+                                        mostRecent: newMostRecent,
+                                        updatedAt: new Date()
+                                    });
+                                } else {
+                                    batch.update(summaryDocRef, { 
+                                        mostRecent: null,
+                                        updatedAt: new Date()
+                                    });
+                                }
+                            }
+                        }
+                        
+                        // Commit all changes atomically
+                        await batch.commit();
+                        console.log(`✅ Deleted publication: ${deletedTitle} and updated all related data`);
+                        
+                        // Force refresh the UI
+                        forceRefresh();
+                        
+                        // If viewing the deleted publication, close the modal
+                        if (viewingPublication && viewingPublication.id === publicationId) {
+                            viewModalOpen = false;
+                        }
+                        
+                        // Add success toast
+                        toast.success(`Deleted "${deletedTitle}" from your library`);
+                        
+                    } catch (error) {
+                        console.error("❌ Error deleting publication:", error.message);
+                        showAlert("Delete Error", "Failed to delete publication. Please try again.");
+                        toast.error("Failed to delete publication");
                     }
+                    resolve();
                 }
-            }
-            
-            // Commit all changes atomically
-            await batch.commit();
-            console.log(`✅ Deleted publication: ${deletedTitle} and updated all related data`);
-            
-            // Force refresh the UI
-            forceRefresh();
-            
-            // If viewing the deleted publication, close the modal
-            if (viewingPublication && viewingPublication.id === publicationId) {
-                viewModalOpen = false;
-            }
-            
-            // Add success toast
-            toast.success(`Deleted "${deletedTitle}" successfully`);
-            
-        } catch (error) {
-            console.error("❌ Error deleting publication:", error.message);
-            alert("Failed to delete publication. Please try again.");
-            toast.error(`Failed to delete publication: ${error.message}`);
-        }
+            );
+        });
     }
     
     // Function to show rating dialog
@@ -1552,6 +1587,32 @@
     // Stop event propagation for dropdown buttons
     function handleDropdownClick(event) {
         event.stopPropagation();
+    }
+
+    // Alert dialog state
+    let alertDialogOpen = false;
+    let confirmDialogOpen = false;
+    let alertTitle = "";
+    let alertMessage = "";
+    let alertAction = () => {};
+    let confirmAction = () => {};
+    let confirmButtonText = "Delete";
+    
+    // Helper function to show simple alerts (just OK button)
+    function showAlert(title, message, action = () => {}) {
+        alertTitle = title;
+        alertMessage = message;
+        alertAction = action;
+        alertDialogOpen = true;
+    }
+    
+    // Helper function for confirmation dialogs (Cancel + Action buttons)
+    function showConfirmDialog(title, message, action, buttonText = "Delete") {
+        alertTitle = title;
+        alertMessage = message;
+        confirmAction = action;
+        confirmButtonText = buttonText;
+        confirmDialogOpen = true;
     }
 </script>
 
@@ -2501,3 +2562,54 @@
     </Dialog.Header>
   </Dialog.Content>
 </Dialog.Root>
+
+<!-- Simple Alert Dialog Component (OK button only) -->
+<AlertDialog.Root bind:open={alertDialogOpen}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>{alertTitle}</AlertDialog.Title>
+      <AlertDialog.Description>{alertMessage}</AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer class="flex justify-end">
+      <AlertDialog.Action 
+        class="bg-blue-600 hover:bg-blue-700 px-4 py-2 text-white rounded-md"
+        on:click={() => {
+          alertAction();
+          alertDialogOpen = false;
+        }}>
+        OK
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
+
+<!-- Confirmation Dialog Component (Cancel + Action buttons) -->
+<AlertDialog.Root bind:open={confirmDialogOpen}>
+  <AlertDialog.Content>
+    <AlertDialog.Header>
+      <AlertDialog.Title>{alertTitle}</AlertDialog.Title>
+      <AlertDialog.Description>
+        {alertMessage}
+        {#if confirmButtonText === "Delete"}
+          <p class="mt-2 text-red-600">This action cannot be undone.</p>
+        {/if}
+      </AlertDialog.Description>
+    </AlertDialog.Header>
+    <AlertDialog.Footer class="flex justify-end gap-3">
+      <AlertDialog.Cancel class="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100">
+        Cancel
+      </AlertDialog.Cancel>
+      <AlertDialog.Action 
+        class="{confirmButtonText === 'Delete' ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'} px-4 py-2 text-white rounded-md"
+        on:click={() => {
+          confirmAction();
+          confirmDialogOpen = false;
+        }}>
+        {confirmButtonText}
+      </AlertDialog.Action>
+    </AlertDialog.Footer>
+  </AlertDialog.Content>
+</AlertDialog.Root>
+
+<!-- Toast notifications -->
+<Toaster />
