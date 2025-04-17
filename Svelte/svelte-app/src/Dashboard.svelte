@@ -11,7 +11,7 @@
   import { onAuthStateChanged } from "firebase/auth";
   import { auth, firestore } from "./firebase";
   import { signOut } from "firebase/auth";
-  import { writable } from "svelte/store";
+  import { writable, get } from "svelte/store";
   import { writeBatch } from "firebase/firestore";
   import {
     doc,
@@ -514,13 +514,40 @@
     
     const publication = libraryList.find(p => p.id === logReadingPublication);
     if (publication) {
-      await updateProgress(
-        logReadingPublication, 
-        logReadingPagesRead, 
-        logReadingComment,
-        logReadingDuration
-      );
-      logReadingModalOpen = false;
+      try {
+        console.log("📝 Saving reading log...");
+        
+        // Update progress in Firebase
+        await updateProgress(
+          logReadingPublication, 
+          logReadingPagesRead, 
+          logReadingComment,
+          logReadingDuration
+        );
+        
+        // Force a complete reload of library data
+        await loadUserLibrary();
+        
+        // Force a complete chart data update in Firebase
+        await updateCharts();
+        
+        // Create temporary new chart components by forcing a parent DOM update
+        libraryList = [...libraryList];  // Force Svelte to update the DOM
+        
+        // Explicitly force all chart stores to update with significant increments
+        const updateValue = Date.now();  // Use timestamp to ensure uniqueness
+        chartKey.set(updateValue);       // SET instead of update to force change
+        chartRefreshKey.set(updateValue);
+        
+        // Show feedback without page refresh
+        showAlert("Reading Logged", "Your reading session has been saved successfully!");
+        
+        // Close the modal
+        logReadingModalOpen = false;
+      } catch (error) {
+        console.error("❌ Error saving reading log:", error);
+        showAlert("Error", "Failed to save reading progress. Please try again.");
+      }
     }
   }
 
@@ -846,6 +873,7 @@ async function loadUserLibrary() {
       // Recalculate reading metrics after updating session data
       calculateReadingMetrics();
       
+      // No chart update here - let the calling function handle that
 
   } catch (error) {
       console.error("❌ Error updating progress:", error.message);
@@ -1064,6 +1092,7 @@ async function markAsCompleted(publicationId) {
       let authorsCount = {};
       let mostRecentTitle = null;
       let latestLogTime = null;
+      let ratingsData = {};
 
       // 🔍 Fetch all current publications from the library
       const libraryRef = collection(userDocRef, "library");
@@ -1073,16 +1102,21 @@ async function markAsCompleted(publicationId) {
           console.warn("⚠️ No publications found. Resetting charts.");
           batch.set(doc(chartsCollectionRef, "tags"), {}, { merge: false });
           batch.set(doc(chartsCollectionRef, "authors"), {}, { merge: false });
+          batch.set(doc(chartsCollectionRef, "ratings"), {}, { merge: false });
           batch.set(doc(chartsCollectionRef, "summary"), { mostRecent: null, updatedAt: new Date() }, { merge: true });
 
           await batch.commit();
+          
+          // Force chart updates after data reset
+          chartKey.update(n => n + 1000);
+          chartRefreshKey.update(n => n + 1000);
           return;
       }
 
-      // 🔄 Recalculate authors, tags, and find most recently logged book
+      // 🔄 Recalculate authors, tags, ratings and find most recently logged book
       librarySnapshot.forEach(docSnap => {
           const entry = docSnap.data();
-          const { tags, author, readingSessions, title } = entry;
+          const { tags, author, readingSessions, title, rating } = entry;
 
           // Count tags
           if (tags && Array.isArray(tags)) {
@@ -1099,6 +1133,11 @@ async function markAsCompleted(publicationId) {
           if (author) {
               authorsCount[author] = (authorsCount[author] || 0) + 1;
           }
+          
+          // Count ratings
+          if (rating) {
+              ratingsData[rating] = (ratingsData[rating] || 0) + 1;
+          }
 
           // Check if this book has reading sessions
           if (readingSessions && readingSessions.length > 0) {
@@ -1114,18 +1153,28 @@ async function markAsCompleted(publicationId) {
 
       console.log("📊 Final Tag Counts:", tagsCount);
       console.log("✍️ Final Author Counts:", authorsCount);
+      console.log("⭐ Final Rating Counts:", ratingsData);
       console.log("📌 Most Recent Book (with logs):", mostRecentTitle);
 
       // ✅ Save the recalculated data to Firestore
-      batch.set(doc(chartsCollectionRef, "tags"), tagsCount, { merge: true });
-      batch.set(doc(chartsCollectionRef, "authors"), authorsCount, { merge: true });
-      batch.set(doc(chartsCollectionRef, "summary"), { mostRecent: mostRecentTitle, updatedAt: new Date() }, { merge: true });
+      batch.set(doc(chartsCollectionRef, "tags"), tagsCount, { merge: false }); // Use merge: false to replace entirely
+      batch.set(doc(chartsCollectionRef, "authors"), authorsCount, { merge: false });
+      batch.set(doc(chartsCollectionRef, "ratings"), ratingsData, { merge: false });
+      batch.set(doc(chartsCollectionRef, "summary"), { 
+          mostRecent: mostRecentTitle, 
+          updatedAt: new Date(),
+          lastUpdate: Date.now() // Add timestamp for cache busting
+      }, { merge: true });
 
       await batch.commit();
-      console.log("✅ Charts updated successfully!");
+      console.log("✅ Charts data updated successfully in Firestore!");
 
-      // ✅ Trigger UI update
-      chartKey.update(n => n + 1);
+      // ✅ Force immediate update of both chart keys with timestamp values
+      // Using .set() instead of .update() forces a completely new value
+      const updateValue = Date.now();
+      chartKey.set(updateValue);
+      chartRefreshKey.set(updateValue);
+      console.log("📈 Chart update signals sent with timestamp:", updateValue);
 
   } catch (error) {
       console.error("❌ Error updating charts:", error.message);
@@ -1900,7 +1949,9 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
                 </div>
               </div>
               <div class="h-60 flex items-center justify-center">
-                <TimelineChart selectedRange={$selectedTimeline} chartKey={$chartRefreshKey} />
+                {#key $chartRefreshKey}
+                  <TimelineChart selectedRange={$selectedTimeline} chartKey={$chartKey} />
+                {/key}
               </div>
             </div>
           {:else}
@@ -1943,13 +1994,15 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
               </div>
               
               <div class="h-60 flex items-center justify-center">
-                {#if $selectedPieChart === 'Tags'}
-                  <TagsChart chartKey={$chartRefreshKey} />
-                {:else if $selectedPieChart === 'Authors'}
-                  <AuthorsChart chartKey={$chartRefreshKey} />
-                {:else if $selectedPieChart === 'Ratings'}
-                  <RatingsChart chartKey={$chartRefreshKey} />
-                {/if}
+                {#key $chartRefreshKey}
+                  {#if $selectedPieChart === 'Tags'}
+                    <TagsChart chartKey={$chartKey} />
+                  {:else if $selectedPieChart === 'Authors'}
+                    <AuthorsChart chartKey={$chartKey} />
+                  {:else if $selectedPieChart === 'Ratings'}
+                    <RatingsChart chartKey={$chartKey} />
+                  {/if}
+                {/key}
               </div>
             </div>
           {/if}
@@ -2286,6 +2339,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
                 class="w-full p-2.5 pl-10 border rounded-md border-neutral-300 shadow-sm text-neutral-700 disabled:bg-neutral-100" 
                 placeholder="Search for a book by title, ISBN, or DOI"
                 disabled={editMode}
+                on:keypress={(e) => { if (e.key === 'Enter' && !editMode && searchQuery.trim() && !isSearching) { e.preventDefault(); searchLiterature(); } }}
               />
               <Search class="absolute top-3 left-3 w-4 h-4 text-neutral-400" />
               <button 
