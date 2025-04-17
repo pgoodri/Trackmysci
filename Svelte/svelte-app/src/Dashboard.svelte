@@ -226,7 +226,7 @@
     if (searchResults.length > 0) {
       showResults = true;
     } else {
-      showAlert("Search Results", "No results found.");
+      toast.error("No results found");
     }
     
     isSearching = false; // Set searching state back to false
@@ -287,8 +287,7 @@
       }
     } catch (error) {
       console.error("Error fetching DOI data:", error);
-      // More user-friendly error message
-      showAlert("DOI Lookup Failed", `${error.message || "Unknown error"}. Please verify your DOI is correct.`);
+      toast.error(`DOI lookup failed: ${error.message || "Unknown error"}`);
     }
   }
 
@@ -320,7 +319,7 @@
       console.log("Final Search Result (ISBN):", searchResults);
     } catch (error) {
       console.error("Error fetching ISBN data:", error);
-      showAlert("ISBN Lookup Failed", "Failed to retrieve ISBN information.");
+      toast.error("Failed to retrieve ISBN information");
     }
   }
 
@@ -357,7 +356,7 @@
       console.log("Final Search Results (Title):", searchResults);
     } catch (error) {
       console.error("Error fetching title data:", error);
-      showAlert("Title Lookup Failed", "Failed to retrieve title information.");
+      toast.error("Failed to retrieve title information");
     }
   }
 
@@ -1220,7 +1219,8 @@ async function markAsCompleted(publicationId) {
       const titleQuery = query(libraryRef, where("title", "==", newEntry.title), where("author", "==", newEntry.author));
       const titleQuerySnapshot = await getDocs(titleQuery);
       if (!titleQuerySnapshot.empty) {
-        showAlert("Duplicate Entry", "This publication is already in your library!");
+        console.log("⚠️ Duplicate title detected");
+        toast.error("This publication is already in your library!");
         resetFields();
         return;
       }
@@ -1229,8 +1229,9 @@ async function markAsCompleted(publicationId) {
       if (newEntry.isbn) {
         const isbnQuery = query(libraryRef, where("isbn", "==", newEntry.isbn));
         const isbnQuerySnapshot = await getDocs(isbnQuery);
-        if (!isbnQuerySnapshot.empty) {
-          showAlert("Duplicate ISBN", "This ISBN is already in your library!");
+        if (isbn && !isbnQuerySnapshot.empty) {
+          console.log("⚠️ Duplicate ISBN detected");
+          toast.error("This ISBN is already in your library!");
           resetFields();
           return;
         }
@@ -1289,7 +1290,7 @@ async function markAsCompleted(publicationId) {
             toast.error("Failed to add publication");
         }
     } else {
-        showAlert("Validation Error", "Please fill in all required fields before adding.");
+      toast.error("Please fill in all required fields");
     }
   }
 async function updateEditedPublication() {
