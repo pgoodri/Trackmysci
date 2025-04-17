@@ -61,7 +61,7 @@
   } from "lucide-svelte";
   import { Chart } from "chart.js/auto";
   import { onMount } from "svelte";
-  import { toast } from "svelte-sonner";
+  import toast, { Toaster } from "svelte-french-toast";
   import TagsChart from "./lib/components/ui/charts/TagsChart.svelte";
   import RatingsChart from "./lib/components/ui/charts/RatingsChart.svelte";
   import AuthorsChart from "./lib/components/ui/charts/AuthorsChart.svelte";
@@ -562,7 +562,6 @@
   // Open modal in "add" mode (for new publication)
   function openAddModal() {
     try {
-      toast("Opening add publication form...");
       resetFields();
       editMode = false;
       editingPublication = null;
@@ -1284,13 +1283,12 @@ async function markAsCompleted(publicationId) {
             toast.success(`Added "${title}" to your library`);
         } catch (error) {
             console.error("Error saving entry:", error.message);
-            toast.error(`Failed to add publication: ${error.message}`);
+            toast.error("Failed to add publication");
         }
     } else {
         showAlert("Validation Error", "Please fill in all required fields before adding.");
     }
   }
-
 async function updateEditedPublication() {
   if (!editingPublication) return;
   const user = auth.currentUser;
@@ -1534,7 +1532,7 @@ async function deletePublication(publicationId) {
           // Commit all changes atomically
           await batch.commit();
           console.log(`✅ Deleted publication: ${deletedTitle} and updated all related data`);
-          toast.success(`Deleted "${deletedTitle}" successfully`);
+          toast.success(`Deleted "${deletedTitle}" from your library`);
 
           // Close modal if open
           if (viewingPublication && viewingPublication.id === publicationId) {
@@ -1548,7 +1546,7 @@ async function deletePublication(publicationId) {
         } catch (error) {
           console.error("❌ Error deleting publication:", error.message);
           showAlert("Delete Error", "Failed to delete publication. Please try again.");
-          toast.error(`Failed to delete publication: ${error.message}`);
+          toast.error("Failed to delete publication");
         }
         resolve();
       }
@@ -2488,3 +2486,7 @@ async function updateChartsAfterDeletion(userId, deletedPub) {
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
+
+<!-- Toast notifications -->
+<Toaster />
+

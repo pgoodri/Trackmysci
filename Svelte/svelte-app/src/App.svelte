@@ -9,6 +9,7 @@
     import { initializeApp } from 'firebase/app';
     import { onMount } from 'svelte';
     import { auth, firestore } from "./firebase";
+    import { Toaster } from 'svelte-french-toast';
     
 </script>
 
@@ -23,3 +24,6 @@
         <Route path="/analytics" component={Analytics} />
     </div>
 </Router>
+
+<!-- Global toast notifications -->
+<Toaster />
